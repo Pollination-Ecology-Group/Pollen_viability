@@ -32,8 +32,9 @@ An automated computer vision pipeline for detecting and counting viable vs. non-
 Follow these steps to process raw images and generate count data.
 
 1.  **Upload**: Place your raw images (`.jpg`, `.png`, `.tif`) in the `detect_images/` folder on Google Drive.
-2.  **Run**: [Open pollen_viability.ipynb in Google Colab][https://colab.research.google.com/drive/1fo5vSY2gq35_XyJZwm0M4DC9EyFXCXvo#scrollTo=s3wVXGWCYmkd&uniqifier=4].
+2.  **Run**:  Open pollen_viability.ipynb in Google Colab  [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1fo5vSY2gq35_XyJZwm0M4DC9EyFXCXvo#scrollTo=s3wVXGWCYmkd&uniqifier=4).
 3.  **Execute**: Run the section labeled **"7. Detect, compute..."**.
+
 
 ### Results
 * **Visuals**: Check the `detected/` folder to view images with generated bounding boxes.
