@@ -1,4 +1,5 @@
 # Pollen Viability Detector (YOLOv8)
+<img width="1332" height="1007" alt="image" src="https://github.com/user-attachments/assets/3410b492-e5e1-4c50-bd0d-1ddecb7e4805" />
 
 An automated computer vision pipeline for detecting and counting viable vs. non-viable pollen grains in microscope imagery. This tool handles challenges specific to pollen analysis, including variable lighting, staining differences, and high-resolution full-slide scans.
 
@@ -24,53 +25,45 @@ An automated computer vision pipeline for detecting and counting viable vs. non-
 ├── pollen_viability.ipynb      # MAIN SCRIPT: All-in-one pipeline (Maintenance, Training, Detection)
 └── README.md
 ```
-<img width="1332" height="1007" alt="image" src="https://github.com/user-attachments/assets/3410b492-e5e1-4c50-bd0d-1ddecb7e4805" />
 
-## 🚀 How to Use
-- 1. Routine Detection (Counting Pollen)
+# 🚀 How to Use
 
+## 1. Routine Detection (Counting Pollen)
 Follow these steps to process raw images and generate count data.
 
-    Upload: Place your raw images (.jpg, .png, .tif) in the detect_images/ folder on Google Drive.
+1.  **Upload**: Place your raw images (`.jpg`, `.png`, `.tif`) in the `detect_images/` folder on Google Drive.
+2.  **Run**: Open `pollen_viability.ipynb` in Google Colab.
+3.  **Execute**: Run the section labeled **"7. Detect, compute..."**.
 
-    Run: Open pollen_viability.ipynb in Google Colab.
+### Results
+* **Visuals**: Check the `detected/` folder to view images with generated bounding boxes.
+* **Data**: Download `pollen_counts_universal.csv` for the final count summary.
 
-    Execute: Run the section labeled "7. Detect, compute...".
+---
 
-Results
-
-    Visuals: Check the detected/ folder to view images with generated bounding boxes.
-
-    Data: Download pollen_counts_universal.csv for the final count summary.
-
-2. Updating the Model (Adding New Data)
-
+## 2. Updating the Model (Adding New Data)
 Follow these steps to improve the model using new annotations.
 
-    Export: Get your new data from Roboflow as a YOLOv8 Zip file.
+1.  **Export**: Get your new data from Roboflow as a **YOLOv8 Zip** file.
+2.  **Upload**: Place the zip file in `staged_area/` (or `staged_area/labels/`).
+3.  **Run**: Execute the **"## Dataset updates"** section in `pollen_viability.ipynb`.
+    > *Note: The script automatically detects the zip, checks for duplicates, and splits data (85% Train / 15% Val).*
+4.  **Train**: Run the **"3. Model Training"** section to retrain and save a new `.pt` model file.
 
-    Upload: Place the zip file in staged_area/ (or staged_area/labels/).
+---
 
-    Run: Execute the "## Dataset updates" section in pollen_viability.ipynb.
+# 🧬 Technical Details
 
-        Note: The script automatically detects the zip, checks for duplicates, and splits data (85% Train / 15% Val).
+### Class Logic
+| Class | Type | Characteristics | Threshold |
+| :--- | :--- | :--- | :--- |
+| **0** | **Viable** | Stained dark | Conf > **0.40** |
+| **1** | **Non-Viable** | Pale / Transparent | Conf > **0.25*** |
 
-    Train: Run the "3. Model Training" section to retrain and save a new .pt model file.
+> *\*Threshold lowered for Class 1 to capture faint grains.*
 
-🧬 Technical Details
-Class Logic
-Class	Type	Characteristics	Threshold
-0	Viable	Stained dark	Conf > 0.40
-1	Non-Viable	Pale / Transparent	Conf > 0.25*
-
-    *Threshold lowered for Class 1 to capture faint grains.
-
-Augmentations
-
+### Augmentations
 The model training is optimized for biological imagery using the following augmentations:
-
-    Heavy Rotation
-
-    Vertical Flips
-
-    Low Saturation Noise
+* **Heavy Rotation**
+* **Vertical Flips**
+* **Low Saturation Noise**
