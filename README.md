@@ -32,7 +32,7 @@ An automated computer vision pipeline for detecting and counting viable vs. non-
 Follow these steps to process raw images and generate count data.
 
 1.  **Upload**: Place your raw images (`.jpg`, `.png`, `.tif`) in the `detect_images/` folder on Google Drive.
-2.  **Run**:  Open Pollen_viability_Routine_detection.ipynb in Google Colab  [![Open In Colab](https://colab.research.google.com/drive/1k8-OALzmpi5dXWK-UFuo4KsKqwbP8H6T).
+2.  **Run**:  Open Pollen_viability_Routine_detection.ipynb in Google Colab  ![Open In Colab](https://colab.research.google.com/drive/1k8-OALzmpi5dXWK-UFuo4KsKqwbP8H6T).
 3.  **Execute**: Run the section labeled **"7. Detect, compute..."**.
 
 ### Results
@@ -46,7 +46,7 @@ Follow these steps to improve the model using new annotations.
 
 1.  **Export**: Get your new data from Roboflow as a **YOLOv8 Zip** file.
 2.  **Upload**: Place the zip file in `staged_area/` (or `staged_area/labels/`).
-3.  **Run**:  Open pollen_viability_training.ipynb in Google Colab anmd run it [![Open In Colab](https://colab.research.google.com/drive/1fo5vSY2gq35_XyJZwm0M4DC9EyFXCXvo#scrollTo=DTjLLuXsLTZp&uniqifier=5).
+3.  **Run**:  Open pollen_viability_training.ipynb in Google Colab anmd run it ![Open In Colab](https://colab.research.google.com/drive/1fo5vSY2gq35_XyJZwm0M4DC9EyFXCXvo#scrollTo=DTjLLuXsLTZp&uniqifier=5).
     > *Note: The script automatically detects the zip, checks for duplicates, and splits data (85% Train / 15% Val).*
 4.  **Train**: Run the **"3. Model Training"** section to retrain and save a new `.pt` model file.
 
