@@ -71,12 +71,12 @@ We use **Roboflow** for annotating datasets. If you are contributing to the data
 ### 2. Class: `non_viable` (Target)
 **Definition:** Pollen grains that are aborted, empty, or dead. They lack the cytoplasm required for fertilization.
 
-* **Color:** Primarily **Green** (stained by Malachite Green).
+* **Color:** Primarily **Pale**.
 * **Content:** Appears empty; only the outer cell wall is visible.
-* **Shape:** Often shriveled, collapsed, or significantly smaller than viable grains.
+* **Shape:** Often shrivelled, collapsed, or significantly smaller than viable grains.
 * **Intermediate Cases:**
     * **Pale Pink / Orange:** Grains that are very pale or only partially stained red are likely aborted. Label as **Non-Viable** unless they are fully dark.
-    * **Empty Shells:** Transparent or faint outlines with no color.
+    * **Empty Shells:** Transparent or faint outlines with no colour.
 
 > **Example:** ![Non-Viable Example](path/to/non_viable_example.jpg) *(Add your example image here)*
 
