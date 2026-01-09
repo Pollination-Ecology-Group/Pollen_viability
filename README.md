@@ -116,8 +116,3 @@ The routine detection pipeline features:
 
 **License:** MIT
 
-
-The model training is optimized for biological imagery using the following augmentations:
-* **Heavy Rotation**
-* **Vertical Flips**
-* **Low Saturation Noise**
