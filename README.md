@@ -44,7 +44,7 @@ This project has migrated from Google Colab to the **CESNET Cluster** for better
 ### 1. Connecting to CESNET
 Detailed instructions on how to set up your environment, connect via SSH, and manage files can be found in our connection guide:
 
-👉 **[CESNET Connection Guide](Pollen_viability/vignettes/CESNET_connection_guide.md)** 
+👉 **[CESNET Connection Guide](/vignettes/CESNET_connection_guide.md)** 
 
 ### 2. Environment Installation
 The environment uses a custom Jupyter kernel. Dependencies include `ultralytics`, `opencv-python-headless`, and `pandas`.
