@@ -48,3 +48,4 @@ sleep 5
 
 echo "👀 6. Streaming logs..."
 $KUBECTL logs -f job/pollen-train-job -n $NAMESPACE
+

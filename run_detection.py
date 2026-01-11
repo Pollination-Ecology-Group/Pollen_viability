@@ -71,6 +71,7 @@ def get_tiles(img, tile_size=1600, overlap=0.2):
     x_starts = list(range(0, w, stride))
     if y_starts[-1] + tile_size < h: y_starts[-1] = h - tile_size
     if x_starts[-1] + tile_size < w: x_starts[-1] = w - tile_size
+./deploy_pollen.sh
 
     for y in y_starts:
         for x in x_starts:
@@ -131,7 +132,7 @@ def run_detection():
             all_boxes, all_scores, all_cls = [], [], []
             
             for (tx, ty, tile) in tile_list:
-                results = model(tile, verbose=False, imgsz=TILE_SIZE, conf=CONF_THRESHOLD)
+                results = model(tile, verbose=False, imgsz=TILE_SIZE, conf=CONF_THRESHOLD, project='/app/runs', name='predict')
                 for box in results[0].boxes:
                     lx1, ly1, lx2, ly2 = box.xyxy[0].tolist()
                     # Border Patrol
@@ -155,7 +156,7 @@ def run_detection():
             else:
                  final_boxes, final_scores, final_cls = [], [], []
         else:
-            results = model(img_path, verbose=False, imgsz=1280, conf=CONF_THRESHOLD)
+            results = model(img_path, verbose=False, imgsz=1280, conf=CONF_THRESHOLD, project='/app/runs', name='predict')
             if results[0].boxes:
                 final_boxes = results[0].boxes.xyxy.cpu().numpy()
                 final_scores = results[0].boxes.conf.cpu().numpy()
@@ -193,7 +194,7 @@ def run_detection():
         
         # 3. Upload Results
         if s3:
-            upload_s3_folder(s3, LOCAL_DETECTED, 'Ostatni/Pollen_viability/detected')
+            upload_s3_folder(s3, LOCAL_DETECTED, 'Ostatni/Pollen_viability/detected_images')
 
 if __name__ == "__main__":
     run_detection()

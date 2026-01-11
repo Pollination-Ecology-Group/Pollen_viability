@@ -17,6 +17,7 @@ spec:
         - name: pollen-trainer
           image: ttl.sh/pollen-detector-REPLACE_ME:24h
           imagePullPolicy: Always
+          command: ["python", "train_model.py"]
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:

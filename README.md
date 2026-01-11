@@ -12,6 +12,7 @@ An automated computer vision pipeline for assessing pollen viability using the *
 - [Project Overview](#-project-overview)
 - [Methodology](#-methodology)
 - [Workflow Setup](#-workflow-setup)
+- [Kubernetes Workflow](/vignettes/kubernetes_workflow.md)
 - [Labeling Guide](#-labeling-guide)
 - [Training](#-training-cesnet-cluster)
 - [Routine Detection](#-routine-detection-coming-soon)
@@ -45,6 +46,10 @@ This project has migrated from Google Colab to the **CESNET Cluster** for better
 Detailed instructions on how to set up your environment, connect via SSH, and manage files can be found in our connection guide:
 
 👉 **[CESNET Connection Guide](/vignettes/CESNET_connection_guide.md)** 
+
+### 2. Kubernetes Workflow
+For instructions on running detection and training jobs:
+👉 **[Kubernetes Workflow Guide](/vignettes/kubernetes_workflow.md)** 
 
 ### 2. Environment Installation
 The environment uses a custom Jupyter kernel. Dependencies include `ultralytics`, `opencv-python-headless`, and `pandas`.
