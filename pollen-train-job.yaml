@@ -1,0 +1,30 @@
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: pollen-train-job
+spec:
+  template:
+    spec:
+      containers:
+      - name: pollen-trainer
+        image: ttl.sh/pollen-detector-REPLACE_ME:24h
+        imagePullPolicy: Always
+        resources:
+          limits:
+            nvidia.com/gpu: 1
+            memory: "32Gi" # Training needs more RAM
+          requests:
+            nvidia.com/gpu: 1
+            memory: "16Gi"
+        env:
+        - name: S3_ENDPOINT
+          value: "https://s3.cl4.du.cesnet.cz"
+        - name: S3_BUCKET
+          value: "bucket"
+        - name: AWS_ACCESS_KEY_ID
+          value: "1Y920BKC0SAWPNDE8RD6"  # Pre-filled from previous context
+        - name: AWS_SECRET_ACCESS_KEY
+          value: "SnKMQbJ8mRKVboPDymkYFaFTz7VBxysrsWwJRoMD" # Pre-filled
+      restartPolicy: Never
+  backoffLimit: 0 # Don't restart training from scratch if it fails
