@@ -60,7 +60,14 @@ def upload_s3_folder(s3, local_dir, prefix):
             local_path = os.path.join(root, file)
             rel_path = os.path.relpath(local_path, local_dir)
             s3_path = os.path.join(prefix, rel_path)
-            bucket.upload_file(local_path, s3_path)
+            
+            # Use put_object for better compatibility with non-AWS S3 (Ceph)
+            # and to avoid MissingContentLength errors
+            try:
+                with open(local_path, 'rb') as data:
+                    bucket.put_object(Key=s3_path, Body=data)
+            except Exception as e:
+                print(f"❌ Failed to upload {file}: {e}")
     print("✅ Upload complete.")
 
 def get_tiles(img, tile_size=1600, overlap=0.2):
@@ -71,7 +78,6 @@ def get_tiles(img, tile_size=1600, overlap=0.2):
     x_starts = list(range(0, w, stride))
     if y_starts[-1] + tile_size < h: y_starts[-1] = h - tile_size
     if x_starts[-1] + tile_size < w: x_starts[-1] = w - tile_size
-./deploy_pollen.sh
 
     for y in y_starts:
         for x in x_starts:
