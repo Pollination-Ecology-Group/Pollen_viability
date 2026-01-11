@@ -1,0 +1,30 @@
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: pollen-detector-job
+spec:
+  template:
+    spec:
+      containers:
+      - name: pollen-detector
+        image: yourname/pollen-detector:v1
+        imagePullPolicy: Always
+        resources:
+          limits:
+            nvidia.com/gpu: 1
+            memory: "16Gi"
+          requests:
+            nvidia.com/gpu: 1
+            memory: "8Gi"
+        env:
+        - name: S3_ENDPOINT
+          value: "https://s3.cl4.du.cesnet.cz"
+        - name: S3_BUCKET
+          value: "bucket"
+        - name: AWS_ACCESS_KEY_ID
+          value: "1Y920BKC0SAWPNDE8RD6"
+        - name: AWS_SECRET_ACCESS_KEY
+          value: "SnKMQbJ8mRKVboPDymkYFaFTz7VBxysrsWwJRoMD"
+      restartPolicy: Never
+  backoffLimit: 2
