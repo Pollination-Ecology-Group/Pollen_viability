@@ -7,6 +7,7 @@ set -e
 # We add a random suffix to avoid collisions
 RANDOM_ID=$(openssl rand -hex 4)
 IMAGE_NAME="ttl.sh/pollen-detector-$RANDOM_ID:24h"
+NAMESPACE="stenc-ns"
 
 echo "-------------------------------------"
 echo "🌸 Pollen Detector Deployment Script"
@@ -32,8 +33,14 @@ else
     KUBECTL="kubectl"
 fi
 
+# Check for local kubeconfig
+if [ -f "./kubeconfig.yaml" ]; then
+    echo "🔑 Using local kubeconfig.yaml..."
+    export KUBECONFIG="$(pwd)/kubeconfig.yaml"
+fi
+
 echo "🧹 3. Cleaning up old jobs..."
-$KUBECTL delete job pollen-detector-job --ignore-not-found
+$KUBECTL delete job pollen-detector-job -n $NAMESPACE --ignore-not-found
 
 echo "🚀 4. Deploying Job to Cluster..."
 # We need to update the yaml with the generated dynamic image name
@@ -44,4 +51,4 @@ echo "⏳ 5. Waiting for Pod to start..."
 sleep 5
 
 echo "👀 6. Streaming logs..."
-$KUBECTL logs -f job/pollen-detector-job
+$KUBECTL logs -f job/pollen-detector-job -n $NAMESPACE

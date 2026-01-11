@@ -6,6 +6,7 @@ set -e
 # Using ttl.sh ephemeral registry
 RANDOM_ID=$(openssl rand -hex 4)
 IMAGE_NAME="ttl.sh/pollen-trainer-$RANDOM_ID:24h"
+NAMESPACE="stenc-ns"
 
 echo "-------------------------------------"
 echo "🌸 Pollen Training Deployment Script"
@@ -29,8 +30,14 @@ else
     KUBECTL="kubectl"
 fi
 
+# Check for local kubeconfig
+if [ -f "./kubeconfig.yaml" ]; then
+    echo "🔑 Using local kubeconfig.yaml..."
+    export KUBECONFIG="$(pwd)/kubeconfig.yaml"
+fi
+
 echo "🧹 3. Cleaning up old training jobs..."
-$KUBECTL delete job pollen-train-job --ignore-not-found
+$KUBECTL delete job pollen-train-job -n $NAMESPACE --ignore-not-found
 
 echo "🚀 4. Deploying Training Job..."
 # Inject dynamic image name
@@ -40,4 +47,4 @@ echo "⏳ 5. Waiting for Pod to start..."
 sleep 5
 
 echo "👀 6. Streaming logs..."
-$KUBECTL logs -f job/pollen-train-job
+$KUBECTL logs -f job/pollen-train-job -n $NAMESPACE
