@@ -93,7 +93,7 @@ def run_detection():
         # But 'detect_images' is likely a folder at the root (or 'Pollen_viability/detect_images').
         # The notebook used prefix 'Ostatni/Pollen_viability'. I'll assume Ostatni/Pollen_viability/detect_images or just check env.
         # To be safe, I'll assume the bucket root contains 'detect_images' unless configured otherwise.
-        download_s3_folder(s3, 'detect_images', LOCAL_DETECT_IMAGES)
+        download_s3_folder(s3, 'Ostatni/Pollen_viability/detect_images', LOCAL_DETECT_IMAGES)
         
         # Try to download model if not present
         if not os.path.exists(LOCAL_MODEL):
@@ -193,7 +193,7 @@ def run_detection():
         
         # 3. Upload Results
         if s3:
-            upload_s3_folder(s3, LOCAL_DETECTED, 'detected')
+            upload_s3_folder(s3, LOCAL_DETECTED, 'Ostatni/Pollen_viability/detected')
 
 if __name__ == "__main__":
     run_detection()
