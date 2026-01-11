@@ -64,8 +64,9 @@ def upload_s3_folder(s3, local_dir, prefix):
             # Use put_object for better compatibility with non-AWS S3 (Ceph)
             # and to avoid MissingContentLength errors
             try:
+                file_size = os.path.getsize(local_path)
                 with open(local_path, 'rb') as data:
-                    bucket.put_object(Key=s3_path, Body=data)
+                    bucket.put_object(Key=s3_path, Body=data, ContentLength=file_size)
             except Exception as e:
                 print(f"❌ Failed to upload {file}: {e}")
     print("✅ Upload complete.")
