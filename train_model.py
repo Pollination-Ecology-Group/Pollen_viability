@@ -29,8 +29,7 @@ VIS_DIR = 'visualizations'
 
 def setup_s3():
     if not all([S3_BUCKET, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY]):
-        print("⚠️ S3 Environment variables missing, skipping S3 sync.")
-        return None
+        raise ValueError("❌ S3 Environment variables missing! Cannot sync data.")
     return boto3.resource('s3',
         endpoint_url=S3_ENDPOINT,
         aws_access_key_id=AWS_ACCESS_KEY_ID,

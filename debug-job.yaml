@@ -1,0 +1,47 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: debug-job
+  namespace: stenc-ns
+  labels:
+    app: pollen-debug
+spec:
+  template:
+    metadata:
+      labels:
+        app: pollen-debug
+    spec:
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      restartPolicy: Never
+      containers:
+        - name: pollen-detector
+          image: ttl.sh/pollen-detector-c1742415:24h
+          command: ["sleep", "3600"]
+          imagePullPolicy: Always
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          resources:
+            limits:
+              memory: 16Gi
+              nvidia.com/gpu: 1
+            requests:
+              memory: 8Gi
+              nvidia.com/gpu: 1
+          env:
+            - name: S3_ENDPOINT
+              value: "https://s3.cl4.du.cesnet.cz"
+            - name: S3_BUCKET
+              value: "bucket"
+            - name: AWS_ACCESS_KEY_ID
+              value: "1Y920BKC0SAWPNDE8RD6"
+            - name: AWS_SECRET_ACCESS_KEY
+              value: "SnKMQbJ8mRKVboPDymkYFaFTz7VBxysrsWwJRoMD"

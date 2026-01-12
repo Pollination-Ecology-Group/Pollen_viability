@@ -14,11 +14,11 @@ echo "🌸 Pollen Detector Deployment Script"
 echo "-------------------------------------"
 
 echo "🚀 1. Building Docker image..."
-sudo docker build -t $IMAGE_NAME .
+docker build -t $IMAGE_NAME .
 
 echo "☁️ 2. Pushing image to registry..."
 # Ensure you are logged in via 'docker login'
-sudo docker push $IMAGE_NAME
+docker push $IMAGE_NAME
 
 echo "🧹 3. Cleaning up old jobs..."
 # Check for kubectl
