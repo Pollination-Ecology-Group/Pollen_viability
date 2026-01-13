@@ -1,0 +1,6 @@
+.env
+**/__pycache__/
+.venv/
+pollen_counting_results/
+detected/
+detect_images/

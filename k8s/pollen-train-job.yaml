@@ -38,5 +38,12 @@ spec:
               value: "1Y920BKC0SAWPNDE8RD6" # Pre-filled from previous context
             - name: AWS_SECRET_ACCESS_KEY
               value: "SnKMQbJ8mRKVboPDymkYFaFTz7VBxysrsWwJRoMD" # Pre-filled
+          volumeMounts:
+            - mountPath: /dev/shm
+              name: dshm
+      volumes:
+        - name: dshm
+          emptyDir:
+            medium: Memory
       restartPolicy: Never
   backoffLimit: 0 # Don't restart training from scratch if it fails
