@@ -9,13 +9,21 @@
 An automated computer vision pipeline for assessing pollen viability using the **Alexander Stain** technique. This project leverages YOLOv8 to detect and classify pollen grains as either **Viable** (Magenta/Purple) or **Non-Viable** (Green/Shriveled) from high-resolution microscope images.
 
 ## 📌 Table of Contents
-- [Project Overview](#-project-overview)
-- [Methodology](#-methodology)
-- [Workflow Setup](#-workflow-setup)
-- [Kubernetes Workflow](/vignettes/kubernetes_workflow.md)
-- [Labeling Guide](#-labeling-guide)
-- [Training](#-training-cesnet-cluster)
-- [Routine Detection](#-routine-detection-coming-soon)
+- [🌸 Pollen Viability Detector (YOLOv8)](#-pollen-viability-detector-yolov8)
+  - [📌 Table of Contents](#-table-of-contents)
+  - [🔭 Project Overview](#-project-overview)
+  - [🔬 Methodology](#-methodology)
+    - [Key Strategies used in this model:](#key-strategies-used-in-this-model)
+  - [⚙️ Workflow Setup](#️-workflow-setup)
+    - [1. Connecting to CESNET](#1-connecting-to-cesnet)
+    - [2. Kubernetes Workflow](#2-kubernetes-workflow)
+    - [2. Environment Installation](#2-environment-installation)
+  - [🏷️ Labeling Guide (Roboflow)](#️-labeling-guide-roboflow)
+    - [1. Class: `viable` (Target)](#1-class-viable-target)
+    - [2. Class: `non_viable` (Target)](#2-class-non_viable-target)
+    - [3. Edge Cases \& Rules](#3-edge-cases--rules)
+  - [🏋️ Training (CESNET Cluster)](#️-training-cesnet-cluster)
+  - [🔍 Routine Detection](#-routine-detection)
 
 ---
 
@@ -94,28 +102,48 @@ We use **Roboflow** for annotating datasets. If you are contributing to the data
 
 ## 🏋️ Training (CESNET Cluster)
 
-Training is performed using the `Pollen_viability_training_cluster.ipynb` notebook.
+Training is now fully automated using Kubernetes jobs managed by `deploy_training.sh`.
 
-**Steps Overview:**
-1.  **Data Loading:** Automatically downloads the latest dataset version from Roboflow using the API.
-2.  **Configuration:**
-    * **Epochs:** 50
-    * **Image Size:** 640px
-    * **Batch Size:** 32 (Adjusted for GPU VRAM)
-    * **Optimizer:** `auto` (YOLO default)
-3.  **Refinement:** The training disables Mosaic augmentation (`close_mosaic=10`) for the final 10 epochs to refine detection of small objects.
-4.  **Backup:** The best model weights (`best.pt`) are automatically zipped and backed up to S3 storage to prevent data loss.
+**Workflow:**
+1.  **Script:** `src/train_model.py` handles the entire pipeline.
+2.  **Data:** Automatically syncs datasets and staging areas from S3.
+3.  **Configuration:**
+    *   **Epochs:** 300
+    *   **Image Size:** 640px
+    *   **Batch Size:** 16
+    *   **Augmentations:** Full rotation (180°), flips, and Mosaic (1.0).
+4.  **Process:** Merges new staged data, generates synthetic negatives, and trains YOLOv8x.
+5.  **Backup:** Results (weights, logs, visualizations) are automatically uploaded back to S3.
+
+**To Run:**
+```bash
+sudo ./deploy_training.sh
+```
 
 ---
 
-## 🔍 Routine Detection (Coming Soon)
+## 🔍 Routine Detection
 
-*This section will be updated with the finalized `run_detection.py` script for local "Drop & Run" usage.*
+Detection is handled by `src/run_detection.py` and deployed via `deploy_pollen.sh`.
 
-The routine detection pipeline features:
-* **Automatic Tiling:** Handles large microscope slides without manual cropping.
-* **Artifact Removal:** Cleans up overlapping boxes from tiling.
-* **CSV Reports:** Generates summary statistics (Viability %) automatically.
+**Workflow:**
+1.  **Input:** Downloads images from `detect_images/` on S3.
+2.  **Processing:** 
+    *   Auto-tiles large microscope slides.
+    *   Detects minimal pollen grains.
+    *   Calculates viability statistics.
+3.  **Output:** 
+    *   Annotated images uploaded to `detected_images/`.
+    *   Summary CSV (`pollen_counts.csv`) generated and synced locally.
+
+**To Run:**
+```bash
+# 1. Deploy the job
+sudo ./deploy_pollen.sh
+
+# 2. Sync results locally (automatic or manual)
+python3 src/sync_results.py
+```
 
 ---
 

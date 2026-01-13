@@ -14,6 +14,11 @@ echo "🌸 Pollen Detector Deployment Script"
 echo "-------------------------------------"
 
 echo "🚀 1. Building Docker image..."
+if ! docker info > /dev/null 2>&1; then
+    echo "❌ Error: Docker permission denied or Docker not running."
+    echo "   👉 Try running this script with sudo: sudo ./deploy_pollen.sh"
+    exit 1
+fi
 docker build -t $IMAGE_NAME .
 
 echo "☁️ 2. Pushing image to registry..."
@@ -44,11 +49,28 @@ $KUBECTL delete job pollen-detector-job -n $NAMESPACE --ignore-not-found
 
 echo "🚀 4. Deploying Job to Cluster..."
 # We need to update the yaml with the generated dynamic image name
-sed "s|image: .*|image: $IMAGE_NAME|g" pollen-job.yaml | $KUBECTL apply -f -
+sed "s|image: .*|image: $IMAGE_NAME|g" k8s/pollen-job.yaml | $KUBECTL apply -f -
 
 echo "⏳ 5. Waiting for Pod to start..."
 # Wait a bit for the pod to be scheduled
 sleep 5
 
+
 echo "👀 6. Streaming logs..."
 $KUBECTL logs -f job/pollen-detector-job -n $NAMESPACE
+
+
+echo ""
+echo "🔄 7. Auto-syncing results..."
+PYTHON_CMD="python3"
+if [ -f ".venv/bin/python" ]; then
+    PYTHON_CMD=".venv/bin/python"
+fi
+
+$PYTHON_CMD src/sync_results.py
+
+# Fix permissions if running as root (via sudo)
+if [ -n "$SUDO_USER" ]; then
+    chown -R $SUDO_USER:$SUDO_USER pollen_counting_results
+fi
+

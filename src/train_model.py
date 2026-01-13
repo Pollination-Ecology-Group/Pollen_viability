@@ -1,5 +1,9 @@
 
 import os
+# Force YOLO to use a writable config directory
+os.environ['YOLO_CONFIG_DIR'] = '/app/yolo_config'
+os.environ['MPLCONFIGDIR'] = '/tmp/matplotlib'
+
 import sys
 import boto3
 import shutil
@@ -9,8 +13,16 @@ import cv2
 import numpy as np
 import argparse
 from botocore.client import Config
-from ultralytics import YOLO
+from ultralytics import YOLO, settings
 from datetime import datetime
+
+# Update global settings to prevent "Permission denied" in /ultralytics/runs
+# This fixes the AMP check crash
+settings.update({
+    'runs_dir': '/app/runs',
+    'datasets_dir': '/app/datasets',
+    'weights_dir': '/app/weights'
+})
 
 # --- CONFIGURATION FROM ENV ---
 S3_ENDPOINT = os.environ.get('S3_ENDPOINT', 'https://s3.cl4.du.cesnet.cz')
@@ -34,7 +46,7 @@ def setup_s3():
         endpoint_url=S3_ENDPOINT,
         aws_access_key_id=AWS_ACCESS_KEY_ID,
         aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
-        config=Config(signature_version='s3v4')
+        config=Config(signature_version='s3v4', s3={'payload_signing_enabled': False})
     )
 
 def download_s3_prefix(s3, prefix, local_dir):
@@ -257,7 +269,7 @@ def main():
 
     s3 = setup_s3()
     
-    # 1. Sync Data
+    # 1. Sync Dataresults
     if s3:
         # We assume the bucket structure: Ostatni/Pollen_viability/datasets...
         # Adjust prefixes to match user's S3 structure
@@ -280,22 +292,33 @@ def main():
         model = YOLO('yolov8x.pt')
         run_name = f"pollen_train_{datetime.now().strftime('%Y%m%d_%H%M')}"
         
-        # Ensure data.yaml exists
+        # ALWAYS overwrite data.yaml to ensure paths are correct for this container
         yaml_path = os.path.join(DATASET_ROOT, 'data.yaml')
-        if not os.path.exists(yaml_path):
-             # Basic yaml creation if missing
-             with open(yaml_path, 'w') as f:
-                 f.write(f"path: {os.path.abspath(DATASET_ROOT)}\ntrain: train/images\nval: val/images\nnames:\n  0: viable\n  1: non_viable")
+        print(f"🔧 Fixing data.yaml at {yaml_path}...")
+        with open(yaml_path, 'w') as f:
+            # We use absolute paths to be safe
+            abs_root = os.path.abspath(DATASET_ROOT)
+            f.write(f"path: {abs_root}\n")
+            f.write("train: train/images\n")
+            f.write("val: val/images\n")
+            # Assuming standard classes for this project
+            f.write("names:\n  0: viable\n  1: non_viable\n")
 
         results = model.train(
             data=yaml_path,
             epochs=args.epochs,
+            patience=50,
             batch=args.batch,
             imgsz=640,
             device=device,
+            task='detect',
             name=run_name,
-            project='runs/detect',
+            project=os.path.join(os.getcwd(), 'runs/detect'),
             agnostic_nms=True,
+            val=True,
+            degrees=180,
+            flipud=0.5,
+            fliplr=0.5,
             mosaic=1.0,
             close_mosaic=20
         )

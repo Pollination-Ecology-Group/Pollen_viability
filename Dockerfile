@@ -7,13 +7,14 @@ WORKDIR /app
 RUN pip install boto3 pandas
 
 # Copy application code
-# Copy application code
-COPY run_detection.py train_model.py ./
+COPY src/ ./
 
 # Create a non-root user
 RUN groupadd -g 1000 appuser && \
     useradd -r -u 1000 -g appuser appuser && \
-    chown -R appuser:appuser /app
+    chown -R appuser:appuser /app && \
+    mkdir -p /ultralytics/runs && \
+    chown -R appuser:appuser /ultralytics
 
 USER 1000
 

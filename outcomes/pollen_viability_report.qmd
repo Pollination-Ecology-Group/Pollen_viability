@@ -1,0 +1,72 @@
+---
+title: ""
+format: html
+editor: visual
+---
+
+# Pollen viability - summary
+
+```{r setup, include=FALSE}
+knitr::opts_knit$set(root.dir = "../")
+```
+
+```{r}
+library(ggplot2)
+pollen_viability <- read.csv("pollen_counting_results/pollen_counts.csv")
+```
+
+```{r}
+# Define the pattern
+pattern <- "([Ss]?\\d+x)_([A-Z])"
+
+# Find matches
+matches <- regmatches(pollen_viability$filename, regexec(pattern, pollen_viability$filename))
+
+# Convert list to a data frame (do.call binds the list rows together)
+match_matrix <- do.call(rbind, matches)
+
+# Calculate viability percent
+pollen_viability$viability_percent <- (pollen_viability$viable / pollen_viability$total) * 100
+
+# Create the final dataframe
+pollen_viability2 <- data.frame(
+    filename = pollen_viability$filename,
+    viability_percent = pollen_viability$viability_percent,
+    ploidy_level = match_matrix[, 2], # Column 2 holds the first capture group
+    replication = match_matrix[, 3] # Column 3 holds the second capture group
+)
+
+# cheking ploidy level
+table(pollen_viability2$ploidy_level)
+
+# repairing ploidy level naming typo
+pollen_viability2[pollen_viability2$ploidy_level == "s4x", ]$ploidy_level <- "S4x"
+```
+
+The `echo: false` option disables the printing of code (only output is displayed).
+
+```{r}
+plot(as.factor(pollen_viability2$ploidy_level), as.numeric(pollen_viability2$viability_percent), ylim = c(0, 100), xlim = c(0, 5))
+
+# zkusit biomodial?
+
+p <- ggplot(pollen_viability2, aes(ploidy_level, viability_percent))
+p + geom_boxplot(outlier.shape = NA) + geom_jitter(width = 0.2, alpha = 0.5) +
+    theme_classic()
+p + geom_violin() + geom_jitter(height = 0, width = 0.1, alpha = 0.5) +
+    theme_classic() + labs(x = "Ploidy level", y = "Pollen viability (%)") + ggtitle("Pollen viability", subtitle = "Before excluding weird images")
+```
+
+## Low pollen viability samples
+
+```{r}
+# Filter for samples with less than 10% viability
+low_viability <- pollen_viability2[pollen_viability2$viability_percent < 10, ]
+low_viability <- low_viability[order(low_viability$viability_percent), ]
+
+# Display as a table
+knitr::kable(low_viability[, c("filename", "viability_percent", "ploidy_level")],
+    caption = "Samples with <10% Viability",
+    row.names = FALSE
+)
+```
