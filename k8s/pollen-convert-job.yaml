@@ -1,0 +1,49 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: pollen-convert-job
+  namespace: stenc-ns
+spec:
+  template:
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      containers:
+        - name: pollen-convert
+          image: ttl.sh/pollen-detector-REPLACE_ME:24h
+          imagePullPolicy: Always
+          command: ["python", "run_conversion_k8s.py"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            limits:
+              nvidia.com/gpu: 1
+              memory: "16Gi"
+            requests:
+              nvidia.com/gpu: 1
+              memory: "8Gi"
+          env:
+            - name: S3_ENDPOINT
+              value: "https://s3.cl4.du.cesnet.cz"
+            - name: S3_BUCKET
+              value: "bucket"
+            - name: AWS_ACCESS_KEY_ID
+              value: "1Y920BKC0SAWPNDE8RD6" 
+            - name: AWS_SECRET_ACCESS_KEY
+              value: "SnKMQbJ8mRKVboPDymkYFaFTz7VBxysrsWwJRoMD" 
+          volumeMounts:
+            - mountPath: /dev/shm
+              name: dshm
+      volumes:
+        - name: dshm
+          emptyDir:
+            medium: Memory
+      restartPolicy: Never
+  backoffLimit: 0

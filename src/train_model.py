@@ -32,7 +32,7 @@ AWS_SECRET_ACCESS_KEY = os.environ.get('AWS_SECRET_ACCESS_KEY')
 
 # Paths
 LOCAL_ROOT = 'Pollen_viability'
-DATASET_ROOT = os.path.join(LOCAL_ROOT, 'datasets/pollen_v1')
+DATASET_ROOT = os.path.join(LOCAL_ROOT, 'datasets/pollen_v1_seg')
 STAGING_AREA = os.path.join(LOCAL_ROOT, 'staged_area')
 SMUDGES_RAW = os.path.join(LOCAL_ROOT, 'smudges_raw')
 TRAIN_DIR = os.path.join(DATASET_ROOT, 'train')
@@ -190,18 +190,20 @@ def visualize_dataset(num_samples=None):
                     for line in f:
                         parts = line.strip().split()
                         if len(parts) >= 5:
+                            # Segmentation model annotations: cls x1 y1 ... xn yn
                             cls = int(parts[0])
-                            cx, cy, bw, bh = map(float, parts[1:5])
                             
-                            # Convert YOLO to xyxy
-                            x1 = int((cx - bw/2) * w)
-                            y1 = int((cy - bh/2) * h)
-                            x2 = int((cx + bw/2) * w)
-                            y2 = int((cy + bh/2) * h)
+                            coords = list(map(float, parts[1:]))
+                            points = np.array(coords).reshape(-1, 2)
+                            points[:, 0] *= w
+                            points[:, 1] *= h
+                            pts = points.astype(np.int32).reshape((-1, 1, 2))
                             
                             color = COLOR_MAP.get(cls, (255, 255, 255))
-                            cv2.rectangle(img, (x1, y1), (x2, y2), color, 2)
-                            cv2.putText(img, str(cls), (x1, y1-5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)
+                            cv2.polylines(img, [pts], True, color, 2)
+                            
+                            tx, ty = pts[0][0]
+                            cv2.putText(img, str(cls), (tx, ty-5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)
             
             cv2.imwrite(os.path.join(save_dir, img_file), img)
     print("✅ Visualization complete.")
@@ -273,7 +275,7 @@ def main():
     if s3:
         # We assume the bucket structure: Ostatni/Pollen_viability/datasets...
         # Adjust prefixes to match user's S3 structure
-        download_s3_prefix(s3, 'Ostatni/Pollen_viability/datasets/pollen_v1', DATASET_ROOT)
+        download_s3_prefix(s3, 'Ostatni/Pollen_viability/datasets/pollen_v1_seg', DATASET_ROOT)
         download_s3_prefix(s3, 'Ostatni/Pollen_viability/staging_area', STAGING_AREA)
         download_s3_prefix(s3, 'Ostatni/Pollen_viability/smudges_raw', SMUDGES_RAW)
 
@@ -289,7 +291,7 @@ def main():
         device = 0 if torch.cuda.is_available() else 'cpu'
         print(f"   Device: {device}")
         
-        model = YOLO('yolov8x.pt')
+        model = YOLO('yolov8x-seg.pt')
         run_name = f"pollen_train_{datetime.now().strftime('%Y%m%d_%H%M')}"
         
         # ALWAYS overwrite data.yaml to ensure paths are correct for this container
@@ -307,11 +309,11 @@ def main():
         results = model.train(
             data=yaml_path,
             epochs=args.epochs,
-            patience=50,
+           # patience=50,
             batch=args.batch,
             imgsz=640,
             device=device,
-            task='detect',
+            task='segment',
             name=run_name,
             project=os.path.join(os.getcwd(), 'runs/detect'),
             agnostic_nms=True,

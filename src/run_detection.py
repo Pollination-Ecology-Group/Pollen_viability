@@ -125,7 +125,7 @@ def run_detection():
                 print("   ⚠️ Falling back to generic YOLOv8x (Results will be poor!)")
 
     # 2. Load Model
-    model_name = LOCAL_MODEL if os.path.exists(LOCAL_MODEL) else 'yolov8x.pt'
+    model_name = LOCAL_MODEL if os.path.exists(LOCAL_MODEL) else 'yolov8x-seg.pt'
     print(f"🔮 Loading Model: {model_name}")
     model = YOLO(model_name)
 
@@ -148,65 +148,93 @@ def run_detection():
         
         h_orig, w_orig = original_img.shape[:2]
         
-        # Processing logic
         if w_orig > 2000 or h_orig > 2000:
             tile_list = get_tiles(original_img, tile_size=TILE_SIZE, overlap=0.25)
             all_boxes, all_scores, all_cls = [], [], []
+            all_masks = []
             
             for (tx, ty, tile) in tile_list:
                 results = model(tile, verbose=False, imgsz=TILE_SIZE, conf=CONF_THRESHOLD, project='/app/runs', name='predict')
-                for box in results[0].boxes:
-                    lx1, ly1, lx2, ly2 = box.xyxy[0].tolist()
-                    on_left = (lx1 < BORDER_MARGIN) and (tx > 0)
-                    on_right = (lx2 > TILE_SIZE - BORDER_MARGIN) and (tx + TILE_SIZE < w_orig)
-                    on_top = (ly1 < BORDER_MARGIN) and (ty > 0)
-                    on_bottom = (ly2 > TILE_SIZE - BORDER_MARGIN) and (ty + TILE_SIZE < h_orig)
-                    
-                    if not (on_left or on_right or on_top or on_bottom):
-                        all_boxes.append([lx1 + tx, ly1 + ty, lx2 + tx, ly2 + ty])
-                        all_scores.append(float(box.conf[0]))
-                        all_cls.append(int(box.cls[0]))
+                
+                if results[0].masks is not None:
+                    # masks.xy gives coordinates in original image pixel scale
+                    for m_idx, mask_coords in enumerate(results[0].masks.xy):
+                        if len(mask_coords) == 0: continue
+                        
+                        box = results[0].boxes[m_idx]
+                        lx1, ly1, lx2, ly2 = box.xyxy[0].tolist()
+                        on_left = (lx1 < BORDER_MARGIN) and (tx > 0)
+                        on_right = (lx2 > TILE_SIZE - BORDER_MARGIN) and (tx + TILE_SIZE < w_orig)
+                        on_top = (ly1 < BORDER_MARGIN) and (ty > 0)
+                        on_bottom = (ly2 > TILE_SIZE - BORDER_MARGIN) and (ty + TILE_SIZE < h_orig)
+                        
+                        if not (on_left or on_right or on_top or on_bottom):
+                            all_boxes.append([lx1 + tx, ly1 + ty, lx2 + tx, ly2 + ty])
+                            all_scores.append(float(box.conf[0]))
+                            all_cls.append(int(box.cls[0]))
+                            
+                            # Shift mask coordinates by tile offset
+                            shifted_mask = np.copy(mask_coords)
+                            shifted_mask[:, 0] += tx
+                            shifted_mask[:, 1] += ty
+                            all_masks.append(shifted_mask)
             
             if all_boxes:
                 boxes_t = torch.tensor(all_boxes)
                 scores_t = torch.tensor(all_scores)
                 keep = nms(boxes_t, scores_t, IOU_MERGE_THRESHOLD)
+                
                 final_boxes = boxes_t[keep].numpy()
                 final_scores = scores_t[keep].numpy()
                 final_cls = torch.tensor(all_cls)[keep].numpy()
+                final_masks = [all_masks[idx] for idx in keep]
             else:
-                 final_boxes, final_scores, final_cls = [], [], []
+                 final_boxes, final_scores, final_cls, final_masks = [], [], [], []
         else:
             results = model(img_path, verbose=False, imgsz=1280, conf=CONF_THRESHOLD, project='/app/runs', name='predict')
-            if results[0].boxes:
+            if results[0].masks is not None:
                 final_boxes = results[0].boxes.xyxy.cpu().numpy()
                 final_scores = results[0].boxes.conf.cpu().numpy()
                 final_cls = results[0].boxes.cls.cpu().numpy()
+                final_masks = results[0].masks.xy
             else:
-                final_boxes, final_scores, final_cls = [], [], []
+                final_boxes, final_scores, final_cls, final_masks = [], [], [], []
 
         v_count, nv_count = 0, 0
         COLOR_VIABLE = (0, 200, 0)
         COLOR_NON_VIABLE = (0, 0, 255)
 
+        # Create overlay for transparent fill
+        overlay = original_img.copy()
+
         for j in range(len(final_boxes)):
-            x1, y1, x2, y2 = map(int, final_boxes[j])
             cls_id = int(final_cls[j])
             conf = final_scores[j]
+            mask = final_masks[j]
+            
+            if len(mask) == 0: continue
             
             color = COLOR_VIABLE if cls_id == 0 else COLOR_NON_VIABLE
-            label = f"{'V' if cls_id == 0 else 'NV'} {conf:.2f}"
             
             if cls_id == 0: v_count += 1
             else: nv_count += 1
             
-            cv2.rectangle(original_img, (x1, y1), (x2, y2), color, 4)
+            pts = np.array(mask, np.int32).reshape((-1, 1, 2))
             
-            # Draw confidence text
+            # Fill Polygon
+            cv2.fillPoly(overlay, [pts], color)
+            # Draw Border
+            cv2.polylines(original_img, [pts], True, color, 3)
+            
+            # Draw confidence text near the top point of the polygon
+            top_pt = min(pts, key=lambda p: p[0][1])[0]
             if w_orig < 5000:
-                cv2.putText(original_img, label, (x1, y1-10), 
+                label = f"{'V' if cls_id == 0 else 'NV'} {conf:.2f}"
+                cv2.putText(original_img, label, (int(top_pt[0]), max(0, int(top_pt[1])-10)), 
                            cv2.FONT_HERSHEY_SIMPLEX, 0.9, color, 2)
-
+                           
+        # Blend overlay for transparent fill effect (opacity 0.3)
+        cv2.addWeighted(overlay, 0.3, original_img, 0.7, 0, original_img)
         
         out_path = os.path.join(LOCAL_DETECTED, img_file)
         cv2.imwrite(out_path, original_img)
