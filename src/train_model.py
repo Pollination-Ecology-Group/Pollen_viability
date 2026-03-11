@@ -248,7 +248,8 @@ def upload_results(s3, train_name):
             for file in files:
                 local_path = os.path.join(root, file)
                 rel_path = os.path.relpath(local_path, local_run_dir)
-                bucket.upload_file(local_path, f"{s3_prefix_run}/{rel_path}")
+                with open(local_path, "rb") as data:
+                    bucket.put_object(Key=f"{s3_prefix_run}/{rel_path}", Body=data.read())
 
     # 2. Visualizations
     s3_prefix_vis = f"Ostatni/Pollen_viability/trained_models/{train_name}/visualizations"
@@ -258,7 +259,8 @@ def upload_results(s3, train_name):
             for file in files:
                 local_path = os.path.join(root, file)
                 rel_path = os.path.relpath(local_path, VIS_DIR)
-                bucket.upload_file(local_path, f"{s3_prefix_vis}/{rel_path}")
+                with open(local_path, "rb") as data:
+                    bucket.put_object(Key=f"{s3_prefix_vis}/{rel_path}", Body=data.read())
                 
     print("✅ Upload complete.")
 
