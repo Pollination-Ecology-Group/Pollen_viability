@@ -4,3 +4,6 @@
 pollen_counting_results/
 detected/
 detect_images/
+
+/.quarto/
+**/*.quarto_ipynb

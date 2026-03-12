@@ -1,6 +1,9 @@
 project:
   type: website
   output-dir: _site
+  render:
+    - index.qmd
+    - "vignettes/*.md"
 
 website:
   title: "🌸 Pollen Viability Detector"

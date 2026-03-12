@@ -7,7 +7,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
 
-<title>pollen_viability_report</title>
+<title>kubernetes_workflow – 🌸 Pollen Viability Detector</title>
 <style>
 code{white-space: pre-wrap;}
 span.smallcaps{font-variant: small-caps;}
@@ -20,142 +20,280 @@ ul.task-list li input[type="checkbox"] {
   margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
   vertical-align: middle;
 }
-/* CSS for syntax highlighting */
-html { -webkit-text-size-adjust: 100%; }
-pre > code.sourceCode { white-space: pre; position: relative; }
-pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
-pre > code.sourceCode > span:empty { height: 1.2em; }
-.sourceCode { overflow: visible; }
-code.sourceCode > span { color: inherit; text-decoration: inherit; }
-div.sourceCode { margin: 1em 0; }
-pre.sourceCode { margin: 0; }
-@media screen {
-div.sourceCode { overflow: auto; }
-}
-@media print {
-pre > code.sourceCode { white-space: pre-wrap; }
-pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
-}
-pre.numberSource code
-  { counter-reset: source-line 0; }
-pre.numberSource code > span
-  { position: relative; left: -4em; counter-increment: source-line; }
-pre.numberSource code > span > a:first-child::before
-  { content: counter(source-line);
-    position: relative; left: -1em; text-align: right; vertical-align: baseline;
-    border: none; display: inline-block;
-    -webkit-touch-callout: none; -webkit-user-select: none;
-    -khtml-user-select: none; -moz-user-select: none;
-    -ms-user-select: none; user-select: none;
-    padding: 0 4px; width: 4em;
-  }
-pre.numberSource { margin-left: 3em;  padding-left: 4px; }
-div.sourceCode
-  {   }
-@media screen {
-pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
-}
 </style>
 
 
-<script src="pollen_viability_report_files/libs/clipboard/clipboard.min.js"></script>
-<script src="pollen_viability_report_files/libs/quarto-html/quarto.js" type="module"></script>
-<script src="pollen_viability_report_files/libs/quarto-html/tabsets/tabsets.js" type="module"></script>
-<script src="pollen_viability_report_files/libs/quarto-html/axe/axe-check.js" type="module"></script>
-<script src="pollen_viability_report_files/libs/quarto-html/popper.min.js"></script>
-<script src="pollen_viability_report_files/libs/quarto-html/tippy.umd.min.js"></script>
-<script src="pollen_viability_report_files/libs/quarto-html/anchor.min.js"></script>
-<link href="pollen_viability_report_files/libs/quarto-html/tippy.css" rel="stylesheet">
-<link href="pollen_viability_report_files/libs/quarto-html/quarto-syntax-highlighting-7b89279ff1a6dce999919e0e67d4d9ec.css" rel="stylesheet" id="quarto-text-highlighting-styles">
-<script src="pollen_viability_report_files/libs/bootstrap/bootstrap.min.js"></script>
-<link href="pollen_viability_report_files/libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
-<link href="pollen_viability_report_files/libs/bootstrap/bootstrap-22b0d821c27ea41f22c0c69c3aea3214.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<script src="../site_libs/quarto-nav/quarto-nav.js"></script>
+<script src="../site_libs/quarto-nav/headroom.min.js"></script>
+<script src="../site_libs/clipboard/clipboard.min.js"></script>
+<script src="../site_libs/quarto-search/autocomplete.umd.js"></script>
+<script src="../site_libs/quarto-search/fuse.min.js"></script>
+<script src="../site_libs/quarto-search/quarto-search.js"></script>
+<meta name="quarto:offset" content="../">
+<script src="../site_libs/quarto-html/quarto.js" type="module"></script>
+<script src="../site_libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="../site_libs/quarto-html/axe/axe-check.js" type="module"></script>
+<script src="../site_libs/quarto-html/popper.min.js"></script>
+<script src="../site_libs/quarto-html/tippy.umd.min.js"></script>
+<script src="../site_libs/quarto-html/anchor.min.js"></script>
+<link href="../site_libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="../site_libs/quarto-html/quarto-syntax-highlighting-7b89279ff1a6dce999919e0e67d4d9ec.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="../site_libs/bootstrap/bootstrap.min.js"></script>
+<link href="../site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="../site_libs/bootstrap/bootstrap-7b5c0ce545d2176c048405d48561d2c7.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+<script id="quarto-search-options" type="application/json">{
+  "location": "sidebar",
+  "copy-button": false,
+  "collapse-after": 3,
+  "panel-placement": "start",
+  "type": "textbox",
+  "limit": 50,
+  "keyboard-shortcut": [
+    "f",
+    "/",
+    "s"
+  ],
+  "show-item-context": false,
+  "language": {
+    "search-no-results-text": "No results",
+    "search-matching-documents-text": "matching documents",
+    "search-copy-link-title": "Copy link to search",
+    "search-hide-matches-text": "Hide additional matches",
+    "search-more-match-text": "more match in this document",
+    "search-more-matches-text": "more matches in this document",
+    "search-clear-button-title": "Clear",
+    "search-text-placeholder": "",
+    "search-detached-cancel-button-title": "Cancel",
+    "search-submit-button-title": "Submit",
+    "search-label": "Search"
+  }
+}</script>
 
 
+<link rel="stylesheet" href="../styles.css">
 </head>
 
-<body class="fullcontent quarto-light">
+<body class="nav-sidebar docked quarto-light">
 
-<div id="quarto-content" class="page-columns page-rows-contents page-layout-article">
+<div id="quarto-search-results"></div>
+  <header id="quarto-header" class="headroom fixed-top">
+  <nav class="quarto-secondary-nav">
+    <div class="container-fluid d-flex">
+      <button type="button" class="quarto-btn-toggle btn" data-bs-toggle="collapse" role="button" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">
+        <i class="bi bi-layout-text-sidebar-reverse"></i>
+      </button>
+        <nav class="quarto-page-breadcrumbs" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="../vignettes/routine_detection_manual.html">Guides</a></li><li class="breadcrumb-item"><a href="../vignettes/kubernetes_workflow.html">Kubernetes Workflow</a></li></ol></nav>
+        <a class="flex-grow-1" role="navigation" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item" aria-controls="quarto-sidebar" aria-expanded="false" aria-label="Toggle sidebar navigation" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">      
+        </a>
+      <button type="button" class="btn quarto-search-button" aria-label="Search" onclick="window.quartoOpenSearch();">
+        <i class="bi bi-search"></i>
+      </button>
+    </div>
+  </nav>
+</header>
+<!-- content -->
+<div id="quarto-content" class="quarto-container page-columns page-rows-contents page-layout-article">
+<!-- sidebar -->
+  <nav id="quarto-sidebar" class="sidebar collapse collapse-horizontal quarto-sidebar-collapse-item sidebar-navigation docked overflow-auto">
+    <div class="pt-lg-2 mt-2 text-left sidebar-header">
+      <a href="../index.html" class="sidebar-logo-link">
+      </a>
+      </div>
+        <div class="mt-2 flex-shrink-0 align-items-center">
+        <div class="sidebar-search">
+        <div id="quarto-search" class="" title="Search"></div>
+        </div>
+        </div>
+    <div class="sidebar-menu-container"> 
+    <ul class="list-unstyled mt-1">
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../index.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Home &amp; Overview</span></a>
+  </div>
+</li>
+        <li class="sidebar-item sidebar-item-section">
+      <div class="sidebar-item-container"> 
+            <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-1" role="navigation" aria-expanded="true">
+ <span class="menu-text">Guides</span></a>
+          <a class="sidebar-item-toggle text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-1" role="navigation" aria-expanded="true" aria-label="Toggle section">
+            <i class="bi bi-chevron-right ms-2"></i>
+          </a> 
+      </div>
+      <ul id="quarto-sidebar-section-1" class="collapse list-unstyled sidebar-section depth1 show">  
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../vignettes/routine_detection_manual.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Routine Detection Manual</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../vignettes/kubernetes_workflow.html" class="sidebar-item-text sidebar-link active">
+ <span class="menu-text">Kubernetes Workflow</span></a>
+  </div>
+</li>
+          <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../vignettes/CESNET_connection_guide.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">CESNET Connection Guide</span></a>
+  </div>
+</li>
+      </ul>
+  </li>
+    </ul>
+    </div>
+</nav>
+<div id="quarto-sidebar-glass" class="quarto-sidebar-collapse-item" data-bs-toggle="collapse" data-bs-target=".quarto-sidebar-collapse-item"></div>
+<!-- margin-sidebar -->
+    <div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+        <nav id="TOC" role="doc-toc" class="toc-active">
+    <h2 id="toc-title">On this page</h2>
+   
+  <ul>
+  <li><a href="#kubernetes-workflow-guide-for-pollen-viability" id="toc-kubernetes-workflow-guide-for-pollen-viability" class="nav-link active" data-scroll-target="#kubernetes-workflow-guide-for-pollen-viability">Kubernetes Workflow Guide for Pollen Viability</a>
+  <ul class="collapse">
+  <li><a href="#architecture-overview" id="toc-architecture-overview" class="nav-link" data-scroll-target="#architecture-overview">🏗️ Architecture Overview</a></li>
+  <li><a href="#quick-start" id="toc-quick-start" class="nav-link" data-scroll-target="#quick-start">🚀 Quick Start</a>
+  <ul class="collapse">
+  <li><a href="#prerequisites" id="toc-prerequisites" class="nav-link" data-scroll-target="#prerequisites">1. Prerequisites</a></li>
+  <li><a href="#running-detection" id="toc-running-detection" class="nav-link" data-scroll-target="#running-detection">2. Running Detection</a></li>
+  <li><a href="#running-training" id="toc-running-training" class="nav-link" data-scroll-target="#running-training">3. Running Training</a></li>
+  </ul></li>
+  <li><a href="#file-structure" id="toc-file-structure" class="nav-link" data-scroll-target="#file-structure">📂 File Structure</a></li>
+  <li><a href="#access-security" id="toc-access-security" class="nav-link" data-scroll-target="#access-security">🔑 Access &amp; Security</a></li>
+  <li><a href="#troubleshooting" id="toc-troubleshooting" class="nav-link" data-scroll-target="#troubleshooting">🛠️ Troubleshooting</a></li>
+  </ul></li>
+  </ul>
+</nav>
+    </div>
+<!-- main -->
+<main class="content" id="quarto-document-content"><header id="title-block-header" class="quarto-title-block"><nav class="quarto-page-breadcrumbs quarto-title-breadcrumbs d-none d-lg-block" aria-label="breadcrumb"><ol class="breadcrumb"><li class="breadcrumb-item"><a href="../vignettes/routine_detection_manual.html">Guides</a></li><li class="breadcrumb-item"><a href="../vignettes/kubernetes_workflow.html">Kubernetes Workflow</a></li></ol></nav></header>
 
-<main class="content" id="quarto-document-content">
 
 
 
+<section id="kubernetes-workflow-guide-for-pollen-viability" class="level1">
+<h1>Kubernetes Workflow Guide for Pollen Viability</h1>
+<p>This guide documents the automated workflow for deploying Pollen Viability detection and training jobs to the CERIT-SC Kubernetes cluster.</p>
+<section id="architecture-overview" class="level2">
+<h2 class="anchored" data-anchor-id="architecture-overview">🏗️ Architecture Overview</h2>
+<p>The system runs as ephemeral <strong>Kubernetes Jobs</strong>. It follows this data flow:</p>
+<ol type="1">
+<li><strong>Input</strong>: Data (images/datasets) is read from <strong>S3 Storage</strong>.</li>
+<li><strong>Processing</strong>: A Docker container crashes processing logic (YOLOv8 + Custom Scripts).</li>
+<li><strong>Output</strong>: Results (CSV, Annotated Images, Trained Models) are uploaded back to <strong>S3</strong>.</li>
+</ol>
+</section>
+<section id="quick-start" class="level2">
+<h2 class="anchored" data-anchor-id="quick-start">🚀 Quick Start</h2>
+<section id="prerequisites" class="level3">
+<h3 class="anchored" data-anchor-id="prerequisites">1. Prerequisites</h3>
+<ul>
+<li><strong>Kubeconfig</strong>: You must have a valid <code>kubeconfig.yaml</code> in the project root. &gt; <strong>How to obtain:</strong> &gt; 1. Log in to <a href="https://rancher.cloud.e-infra.cz">Rancher Dashboard</a>. &gt; 2. Open your assigned cluster. &gt; 3. Click <strong>“Download Kubeconfig”</strong> (Top Right) or “Kubeconfig File” icon. &gt; 4. Save as <code>kubeconfig.yaml</code> in this project folder. &gt; 5. <strong>Security:</strong> Run <code>chmod 600 kubeconfig.yaml</code> to secure the file.</li>
+<li><strong>Docker</strong>: Must be installed locally to build images.</li>
+<li><strong>kubectl</strong>: auto-downloaded by the scripts if missing.</li>
+</ul>
+</section>
+<section id="running-detection" class="level3">
+<h3 class="anchored" data-anchor-id="running-detection">2. Running Detection</h3>
+<p>To detect viable pollen in new images:</p>
+<ol type="1">
+<li>Ensure input images are in S3: <code>Ostatni/Pollen_viability/detect_images</code>.</li>
+<li>Run the deployment script: <code>bash     ./deploy_pollen.sh</code></li>
+<li><strong>What happens?</strong>
+<ul>
+<li>The script builds a Docker image.</li>
+<li>Pushes it to <code>ttl.sh</code> (ephemeral registry).</li>
+<li>Launches a K8s Job (<code>pollen-detector-job</code>) in namespace <code>stenc-ns</code>.</li>
+<li>Streams logs until completion.</li>
+</ul></li>
+<li><strong>Results</strong>: Check S3: <code>Ostatni/Pollen_viability/detected_images</code>.</li>
+</ol>
+</section>
+<section id="running-training" class="level3">
+<h3 class="anchored" data-anchor-id="running-training">3. Running Training</h3>
+<p>To retrain the YOLOv8 model:</p>
+<ol type="1">
+<li>Ensure datasets are in S3 (<code>datasets/pollen_v1</code>).</li>
+<li>Run the training deployment: <code>bash     ./deploy_training.sh</code></li>
+<li><strong>Process</strong>:
+<ul>
+<li>Syncs datasets and staging area from S3.</li>
+<li>Merges new labelled data.</li>
+<li>Generates synthetic negative samples.</li>
+<li>Trains the model (approx 2-4 hours).</li>
+<li>Uploads the best model (<code>best.pt</code>) and charts to S3.</li>
+</ul></li>
+</ol>
+</section>
+</section>
+<section id="file-structure" class="level2">
+<h2 class="anchored" data-anchor-id="file-structure">📂 File Structure</h2>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 23%">
+<col style="width: 76%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>File</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>deploy_pollen.sh</code></td>
+<td>Orchestrates the detection workflow. Builds Docker -&gt; Deploys Job.</td>
+</tr>
+<tr class="even">
+<td><code>deploy_training.sh</code></td>
+<td>Orchestrates the training workflow.</td>
+</tr>
+<tr class="odd">
+<td><code>pollen-job.yaml</code></td>
+<td>Kubernetes Manifest for detection. Defines resources (GPU/RAM) and env vars.</td>
+</tr>
+<tr class="even">
+<td><code>pollen-train-job.yaml</code></td>
+<td>Kubernetes Manifest for training.</td>
+</tr>
+<tr class="odd">
+<td><code>Dockerfile</code></td>
+<td>Defines the environment (Python, YOLOv8, non-root user).</td>
+</tr>
+<tr class="even">
+<td><code>run_detection.py</code></td>
+<td>Core script for detection logic + S3 sync.</td>
+</tr>
+<tr class="odd">
+<td><code>train_model.py</code></td>
+<td>Core script for training logic + S3 sync.</td>
+</tr>
+</tbody>
+</table>
+</section>
+<section id="access-security" class="level2">
+<h2 class="anchored" data-anchor-id="access-security">🔑 Access &amp; Security</h2>
+<ul>
+<li><strong>Namespace</strong>: <code>stenc-ns</code> (Your isolated environment).</li>
+<li><strong>Users</strong>: Pods run as <code>appuser</code> (UID 1000) for security compliance.</li>
+<li><strong>Secrets</strong>: AWS credentials are injected via Environment Variables in the YAML files.</li>
+</ul>
+</section>
+<section id="troubleshooting" class="level2">
+<h2 class="anchored" data-anchor-id="troubleshooting">🛠️ Troubleshooting</h2>
+<ul>
+<li><strong>“Forbidden” errors</strong>: Ensure <code>kubeconfig.yaml</code> is correct and you are deploying to <code>stenc-ns</code>.</li>
+<li><strong>“ImagePullBackOff”</strong>: The <code>ttl.sh</code> image might have expired (they last 24h). Re-run the deploy script to rebuild and push.</li>
+<li><strong>Empty Output</strong>: Check S3 paths in <code>run_detection.py</code>. Verify source images exist.</li>
+</ul>
 
-<section id="pollen-viability---summary" class="level1">
-<h1>Pollen viability - summary</h1>
-<div class="cell">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(ggplot2)</span>
-<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>pollen_viability <span class="ot">&lt;-</span> <span class="fu">read.csv</span>(<span class="st">"pollen_counting_results/pollen_counts.csv"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
-</div>
-<div class="cell">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb2"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Define the pattern</span></span>
-<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>pattern <span class="ot">&lt;-</span> <span class="st">"([Ss]?</span><span class="sc">\\</span><span class="st">d+x)_([A-Z])"</span></span>
-<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="co"># Find matches</span></span>
-<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>matches <span class="ot">&lt;-</span> <span class="fu">regmatches</span>(pollen_viability<span class="sc">$</span>filename, <span class="fu">regexec</span>(pattern, pollen_viability<span class="sc">$</span>filename))</span>
-<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a><span class="co"># Convert list to a data frame (do.call binds the list rows together)</span></span>
-<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a>match_matrix <span class="ot">&lt;-</span> <span class="fu">do.call</span>(rbind, matches)</span>
-<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a><span class="co"># Calculate viability percent</span></span>
-<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a>pollen_viability<span class="sc">$</span>viability_percent <span class="ot">&lt;-</span> (pollen_viability<span class="sc">$</span>viable <span class="sc">/</span> pollen_viability<span class="sc">$</span>total) <span class="sc">*</span> <span class="dv">100</span></span>
-<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a><span class="co"># Create the final dataframe</span></span>
-<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a>pollen_viability2 <span class="ot">&lt;-</span> <span class="fu">data.frame</span>(</span>
-<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a>    <span class="at">filename =</span> pollen_viability<span class="sc">$</span>filename,</span>
-<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a>    <span class="at">viability_percent =</span> pollen_viability<span class="sc">$</span>viability_percent,</span>
-<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a>    <span class="at">ploidy_level =</span> match_matrix[, <span class="dv">2</span>], <span class="co"># Column 2 holds the first capture group</span></span>
-<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a>    <span class="at">replication =</span> match_matrix[, <span class="dv">3</span>] <span class="co"># Column 3 holds the second capture group</span></span>
-<span id="cb2-19"><a href="#cb2-19" aria-hidden="true" tabindex="-1"></a>)</span>
-<span id="cb2-20"><a href="#cb2-20" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb2-21"><a href="#cb2-21" aria-hidden="true" tabindex="-1"></a><span class="co"># cheking ploidy level</span></span>
-<span id="cb2-22"><a href="#cb2-22" aria-hidden="true" tabindex="-1"></a><span class="fu">table</span>(pollen_viability2<span class="sc">$</span>ploidy_level)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
-<div class="cell-output cell-output-stdout">
-<pre><code>
- 2x  4x S2x s4x S4x 
-166 174  99   3 114 </code></pre>
-</div>
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb4"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="co"># repairing ploidy level naming typo</span></span>
-<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>pollen_viability2[pollen_viability2<span class="sc">$</span>ploidy_level <span class="sc">==</span> <span class="st">"s4x"</span>, ]<span class="sc">$</span>ploidy_level <span class="ot">&lt;-</span> <span class="st">"S4x"</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
-</div>
-<p>The <code>echo: false</code> option disables the printing of code (only output is displayed).</p>
-<div class="cell">
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb5"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="fu">plot</span>(<span class="fu">as.factor</span>(pollen_viability2<span class="sc">$</span>ploidy_level), <span class="fu">as.numeric</span>(pollen_viability2<span class="sc">$</span>viability_percent), <span class="at">ylim =</span> <span class="fu">c</span>(<span class="dv">0</span>, <span class="dv">100</span>), <span class="at">xlim =</span> <span class="fu">c</span>(<span class="dv">0</span>, <span class="dv">5</span>))</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
-<div class="cell-output-display">
-<div>
-<figure class="figure">
-<p><img src="pollen_viability_report_files/figure-html/unnamed-chunk-3-1.png" class="img-fluid figure-img" width="672"></p>
-</figure>
-</div>
-</div>
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb6"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a><span class="co"># zkusit biomodial?</span></span>
-<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>p <span class="ot">&lt;-</span> <span class="fu">ggplot</span>(pollen_viability2, <span class="fu">aes</span>(ploidy_level, viability_percent))</span>
-<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a>p <span class="sc">+</span> <span class="fu">geom_boxplot</span>(<span class="at">outlier.shape =</span> <span class="cn">NA</span>) <span class="sc">+</span> <span class="fu">geom_jitter</span>(<span class="at">width =</span> <span class="fl">0.2</span>, <span class="at">alpha =</span> <span class="fl">0.5</span>) <span class="sc">+</span></span>
-<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a>    <span class="fu">theme_classic</span>()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
-<div class="cell-output-display">
-<div>
-<figure class="figure">
-<p><img src="pollen_viability_report_files/figure-html/unnamed-chunk-3-2.png" class="img-fluid figure-img" width="672"></p>
-</figure>
-</div>
-</div>
-<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb7"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>p <span class="sc">+</span> <span class="fu">geom_violin</span>() <span class="sc">+</span> <span class="fu">geom_jitter</span>(<span class="at">height =</span> <span class="dv">0</span>, <span class="at">width =</span> <span class="fl">0.1</span>, <span class="at">alpha =</span> <span class="fl">0.5</span>) <span class="sc">+</span></span>
-<span id="cb7-2"><a href="#cb7-2" aria-hidden="true" tabindex="-1"></a>    <span class="fu">theme_classic</span>() <span class="sc">+</span> <span class="fu">labs</span>(<span class="at">x =</span> <span class="st">"Ploidy level"</span>, <span class="at">y =</span> <span class="st">"Pollen viability (%)"</span>) <span class="sc">+</span> <span class="fu">ggtitle</span>(<span class="st">"Pollen viability"</span>, <span class="at">subtitle =</span> <span class="st">"Before excluding weird images"</span>)</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
-<div class="cell-output-display">
-<div>
-<figure class="figure">
-<p><img src="pollen_viability_report_files/figure-html/unnamed-chunk-3-3.png" class="img-fluid figure-img" width="672"></p>
-</figure>
-</div>
-</div>
-</div>
+
+</section>
 </section>
 
-</main>
-<!-- /main column -->
+</main> <!-- /main -->
 <script id="quarto-html-after-body" type="application/javascript">
   window.document.addEventListener("DOMContentLoaded", function (event) {
     const icon = "";
