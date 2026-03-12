@@ -1,0 +1,26 @@
+project:
+  type: website
+  output-dir: _site
+
+website:
+  title: "🌸 Pollen Viability Detector"
+  sidebar:
+    style: "docked"
+    search: true
+    contents:
+      - href: index.qmd
+        text: "Home & Overview"
+      - section: "Guides"
+        contents:
+          - href: vignettes/routine_detection_manual.md
+            text: "Routine Detection Manual"
+          - href: vignettes/kubernetes_workflow.md
+            text: "Kubernetes Workflow"
+          - href: vignettes/CESNET_connection_guide.md
+            text: "CESNET Connection Guide"
+
+format:
+  html:
+    theme: cosmo
+    css: styles.css
+    toc: true
