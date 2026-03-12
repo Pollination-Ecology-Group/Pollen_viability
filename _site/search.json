@@ -6,6 +6,7 @@
     "section": "",
     "text": "This guide walks you through the full process of running an automated pollen viability analysis — from preparing your images to downloading your results. No programming experience is required.\n\n[!NOTE] This pipeline runs the heavy computation on a remote university server (CESNET cluster), so it works even on modest laptops. You only need to start the job from your computer — the actual image analysis happens remotely.\n\n\n\n\nYou only need to do these steps once when setting up the workflow for the first time.\n\n\nAll images and results are stored in the CESNET S3 cloud. You need access before anything else.\n👉 Follow the CESNET S3 Connection Guide\nThis will take you through applying for access, generating your personal keys, and installing Cyberduck (the tool you will use to upload and download files).\n\n\n\n\nThe detection pipeline is run via a script. You need to have the project code and its required tools installed once on the computer you’ll use to launch jobs.\n\n\nYou will need three programs installed:\n\n\n\nProgram\nWhat it does\nDownload\n\n\n\n\nGit\nDownloads the project code\ngit-scm.com\n\n\nDocker Desktop\nPackages the detection code to run on the cluster\ndocker.com/get-started\n\n\nWSL 2 (Windows only)\nLets Windows run Linux-style scripts\nMicrosoft Docs\n\n\n\n\n[!IMPORTANT] On Windows: After installing WSL 2, open Docker Desktop → Settings → Resources → WSL Integration and enable it for your Linux distribution. On Linux: After installing Docker, run sudo usermod -aG docker $USER and log out and back in.\n\n\n\n\nOpen a terminal (on Windows: search for “Ubuntu” or “WSL” in the Start menu) and type:\ngit clone https://github.com/Pollination-Ecology-Group/Pollen_viability.git\ncd Pollen_viability\nThis downloads all the scripts you need into a folder called Pollen_viability.\n\n\n\nYou will also need the kubeconfig.yaml file — this is the key that lets your computer talk to the CESNET cluster. Ask the project lead to send you this file, then place it inside the Pollen_viability folder you just downloaded.\n\n\n\n\n\n\nOnce setup is complete, running detection every time takes just 3 steps.\n\n\nUsing Cyberduck, navigate to the Ostatni/Pollen_viability/detect_images/ folder in the S3 bucket and drag your microscope images (TIF or JPG format) into it.\n\n[!TIP] You can upload a whole folder at once. Just drag it into the Cyberduck window.\n\n\n\n\n\nOpen a terminal (on Windows: Ubuntu / WSL) and navigate to the project folder:\ncd Pollen_viability\nThen run:\n./deploy_pollen.sh\n\n[!NOTE] The first time you run this, Docker will download several components. This may take 5–15 minutes depending on your internet speed. Subsequent runs are much faster.\n\nYou will see output in the terminal that looks like this:\n🌸 Pollen Detector Deployment Script\n🚀 1. Building Docker image...\n☁️ 2. Pushing image...\n🚀 4. Deploying Job to Cluster...\n👀 6. Streaming logs...\nThe terminal will then show live progress from the cluster. You don’t need to do anything — just wait.\n\n[!TIP] If you see a permission denied error when running ./deploy_pollen.sh, try:\nLinux: sg docker -c ./deploy_pollen.sh\nWindows (WSL): Make sure Docker Desktop is running and WSL integration is enabled.\n\n\n\n\n\nOnce the detection finishes (the terminal shows it has completed), your results are automatically uploaded to the S3 bucket.\nOpen Cyberduck and navigate to: - Ostatni/Pollen_viability/detected_images/ — Annotated images with coloured bounding boxes showing which pollen grains are viable (green) and non-viable (red). - Ostatni/Pollen_viability/pollen_counting_results/ — CSV summary files (pollen_counts.csv) with counts and viability percentages per image.\nDownload these files to your computer by right-clicking → Download in Cyberduck.\n\n\n\n\n\n\n\n\n\n\n\n\nProblem\nSolution\n\n\n\n\npermission denied when running script\nSee the tip in Step 2 above\n\n\nDocker Desktop not starting\nMake sure WSL 2 is installed and enabled\n\n\nScript says “cannot connect to cluster”\nCheck that kubeconfig.yaml is in the Pollen_viability folder\n\n\nNo files appear in S3 after job finishes\nWait a few minutes; large jobs can take time to upload results\n\n\nAny other issue\nContact the project lead or schedule a meeting",
     "crumbs": [
+      "Home",
       "Guides",
       "Routine Detection Manual"
     ]
@@ -17,6 +18,7 @@
     "section": "",
     "text": "You only need to do these steps once when setting up the workflow for the first time.\n\n\nAll images and results are stored in the CESNET S3 cloud. You need access before anything else.\n👉 Follow the CESNET S3 Connection Guide\nThis will take you through applying for access, generating your personal keys, and installing Cyberduck (the tool you will use to upload and download files).\n\n\n\n\nThe detection pipeline is run via a script. You need to have the project code and its required tools installed once on the computer you’ll use to launch jobs.\n\n\nYou will need three programs installed:\n\n\n\nProgram\nWhat it does\nDownload\n\n\n\n\nGit\nDownloads the project code\ngit-scm.com\n\n\nDocker Desktop\nPackages the detection code to run on the cluster\ndocker.com/get-started\n\n\nWSL 2 (Windows only)\nLets Windows run Linux-style scripts\nMicrosoft Docs\n\n\n\n\n[!IMPORTANT] On Windows: After installing WSL 2, open Docker Desktop → Settings → Resources → WSL Integration and enable it for your Linux distribution. On Linux: After installing Docker, run sudo usermod -aG docker $USER and log out and back in.\n\n\n\n\nOpen a terminal (on Windows: search for “Ubuntu” or “WSL” in the Start menu) and type:\ngit clone https://github.com/Pollination-Ecology-Group/Pollen_viability.git\ncd Pollen_viability\nThis downloads all the scripts you need into a folder called Pollen_viability.\n\n\n\nYou will also need the kubeconfig.yaml file — this is the key that lets your computer talk to the CESNET cluster. Ask the project lead to send you this file, then place it inside the Pollen_viability folder you just downloaded.",
     "crumbs": [
+      "Home",
       "Guides",
       "Routine Detection Manual"
     ]
@@ -28,6 +30,7 @@
     "section": "",
     "text": "Once setup is complete, running detection every time takes just 3 steps.\n\n\nUsing Cyberduck, navigate to the Ostatni/Pollen_viability/detect_images/ folder in the S3 bucket and drag your microscope images (TIF or JPG format) into it.\n\n[!TIP] You can upload a whole folder at once. Just drag it into the Cyberduck window.\n\n\n\n\n\nOpen a terminal (on Windows: Ubuntu / WSL) and navigate to the project folder:\ncd Pollen_viability\nThen run:\n./deploy_pollen.sh\n\n[!NOTE] The first time you run this, Docker will download several components. This may take 5–15 minutes depending on your internet speed. Subsequent runs are much faster.\n\nYou will see output in the terminal that looks like this:\n🌸 Pollen Detector Deployment Script\n🚀 1. Building Docker image...\n☁️ 2. Pushing image...\n🚀 4. Deploying Job to Cluster...\n👀 6. Streaming logs...\nThe terminal will then show live progress from the cluster. You don’t need to do anything — just wait.\n\n[!TIP] If you see a permission denied error when running ./deploy_pollen.sh, try:\nLinux: sg docker -c ./deploy_pollen.sh\nWindows (WSL): Make sure Docker Desktop is running and WSL integration is enabled.\n\n\n\n\n\nOnce the detection finishes (the terminal shows it has completed), your results are automatically uploaded to the S3 bucket.\nOpen Cyberduck and navigate to: - Ostatni/Pollen_viability/detected_images/ — Annotated images with coloured bounding boxes showing which pollen grains are viable (green) and non-viable (red). - Ostatni/Pollen_viability/pollen_counting_results/ — CSV summary files (pollen_counts.csv) with counts and viability percentages per image.\nDownload these files to your computer by right-clicking → Download in Cyberduck.",
     "crumbs": [
+      "Home",
       "Guides",
       "Routine Detection Manual"
     ]
@@ -39,6 +42,7 @@
     "section": "",
     "text": "Problem\nSolution\n\n\n\n\npermission denied when running script\nSee the tip in Step 2 above\n\n\nDocker Desktop not starting\nMake sure WSL 2 is installed and enabled\n\n\nScript says “cannot connect to cluster”\nCheck that kubeconfig.yaml is in the Pollen_viability folder\n\n\nNo files appear in S3 after job finishes\nWait a few minutes; large jobs can take time to upload results\n\n\nAny other issue\nContact the project lead or schedule a meeting",
     "crumbs": [
+      "Home",
       "Guides",
       "Routine Detection Manual"
     ]
@@ -50,6 +54,7 @@
     "section": "",
     "text": "Fill out the application for our Virtual Organization (VO) at: https://einfra.cesnet.cz/fed/registrar/?vo=VO_prfuk\nOnce your application has been approved, an administrator will add you to the appropriate group.\n\n\n\n\n\nNext, you must generate personal S3 credentials in the Gatekeeper system.\n\nGo to the Gatekeeper application: https://access.du.cesnet.cz/\nClick the blue LOG IN button.\nFrom the list of institutions, select Univerzita Karlova (Charles University) and log in using your university CAS credentials.\nIn the left menu, select the virtual organization VO_prfuk, then select the group VO_prfuk_1200:FEG.\nClick the blue + New key button. You can name it anything you like.\nImportant: Note down your Access Key and Secret Key. Once you close the window, the Secret Key will never be shown again. If you lose it, you must generate a new key pair.\n\n\n\n\n\nCyberduck provides a graphical file browser — easiest for uploading images and downloading results.\n\nDownload and install Cyberduck: https://cyberduck.io/download/\nOpen the program and click Open Connection (Nové spojení).\nSelect Amazon S3 from the protocol dropdown.\nFill in the connection details:\n\nServer: s3.cl4.du.cesnet.cz\nAccess Key: (from step 2 above)\nSecret Key: (from step 2 above)\n\nExpand More Options (Více voleb) and in the Path field, enter /feg.\nClick Connect (Připojit).\nTip: Save this as a bookmark for quick access — click the bookmark panel icon, then “+” at the bottom and give it a name.\n\n(Official guides: CESNET Gatekeeper · Cyberduck)\n\n\n\n\nGoal: Connect our team’s cloud storage (CESNET S3) to your local computer so it appears as a regular folder. This allows you to drag-and-drop files from tools like Fiji, Excel, or RStudio directly to the cloud without using the browser.\n\n\n\n\nBefore you start, you need two things: Rclone (the connector software) and a FUSE driver (which lets Rclone “talk” to your file system).\n\n\n\nInstall Rclone: bash     sudo apt install rclone\nFUSE: Usually pre-installed. If not: bash     sudo apt install fuse3\n\n\n\n\n\nInstall Rclone: Download the Rclone zip file, unzip it, and place rclone.exe somewhere safe (e.g., C:\\rclone\\). Add this folder to your system PATH.\nInstall WinFsp: Download and install WinFsp. Crucial: Rclone cannot mount a drive on Windows without this.\n\n\n\n\n\nInstall Rclone: Open Terminal and run: bash     brew install rclone (Requires Homebrew)\nInstall macFUSE: Download and install macFUSE.\n\nNote: On newer Macs (M1/M2/M3), you may need to enable kernel extensions in Recovery Mode for macFUSE to work. Alternatively, verify if fuse-t is a suitable replacement for your version.\n\n\n\n\n\n\n\nThis step is the same for everyone. Open your terminal (Command Prompt on Windows) and run:\nrclone config\nFollow the interactive menu using the Team Credentials (ask the Project Lead for keys):\nn (New remote)\n\nName: cesnet_s3\n\nStorage: Select Amazon S3 Compliant Storage.\n\nProvider: Select Ceph.\n\nenv_auth: false\n\naccess_key_id: [Enter Team Access Key]\n\nsecret_access_key: [Enter Team Secret Key]\n\nendpoint: https://s3.cl4.du.cesnet.cz\n\nacl: private\n\nSave: Press y.\n\n\n\nChoose the instructions for your operating system below. 🐧 Option A: Linux (Ubuntu/Debian)\nThe One-Time Command:\n# 1. Create the mount folder\nmkdir ~/cesnet_cloud\n\n# 2. Mount it (runs in background)\nrclone mount s3_cesnet: ~/cesnet_cloud --vfs-cache-mode writes --daemon\nMake it Permanent (Auto-start on Login):\nOpen \"Startup Applications\".\n\nClick Add.\n\nCommand:\n```bash\nrclone mount s3_cesnet: /home/YOUR_USER/cesnet_cloud --vfs-cache-mode writes --daemon\n```\n\n\nThe One-Time Command (PowerShell):\n# 1. Create the folder (or pick a drive letter like Z:)\nmkdir C:\\cesnet_cloud\n\n# 2. Mount it\nrclone mount s3_cesnet: C:\\cesnet_cloud --vfs-cache-mode writes\nNote: This terminal window must stay open. If you close it, the drive disconnects.\nMake it Permanent (Auto-start on Login):\nCreate a new text file named mount_cesnet.bat.\n\nPaste this code inside:\n\n```batch\n@echo off\nstart /b rclone mount s3_cesnet: Z: –vfs-cache-mode writes –no-console ```\n(This mounts it as the Z: drive).\nPress Win + R, type shell:startup, and press Enter.\nMove your mount_cesnet.bat file into this folder. It will now run silently every time you log in.\n\n\n\nThe One-Time Command:\n# 1. Create the mount folder\nmkdir ~/cesnet_cloud\n\n# 2. Mount it\nrclone mount s3_cesnet: ~/cesnet_cloud --vfs-cache-mode writes --daemon\nMake it Permanent (Auto-start on Login):\nOpen \"System Preferences\" &gt; \"Users & Groups\".\n\nSelect your user and go to the \"Login Items\" tab.\n\nClick the \"+\" button and add a new script.\n\nCreate a script file (e.g., mount_cesnet.sh) with the following content:\n\n```bash\n#!/bin/bash\nrclone mount s3_cesnet: /Users/YOUR_USER/cesnet_cloud --vfs-cache-mode writes --daemon\n```\n\nMake it executable:\n```bash\nchmod +x /path/to/mount_cesnet.sh\n```\n\nAdd this script to your login items.\nSave the app as “Connect CESNET”.\nGo to System Settings -&gt; General -&gt; Login Items and add “Connect CESNET” to the list.\n\n\n\nDon't Edit in Place: Avoid opening a huge video file directly from the cloud drive to edit. Copy it to your desktop first, edit, then copy it back. (Small text/image edits are fine).\n\nWait for the Upload: When you drag a file into the folder, it may take a few seconds to upload. Don't immediately shut down your computer.\n\nIf it freezes: If the folder stops responding (e.g., internet loss), unmount it:\n\n    Linux: fusermount -u ~/cesnet_cloud\n\n    Windows: Ctrl+C in the terminal or restart.\n\n    Mac: umount ~/cesnet_cloud",
     "crumbs": [
+      "Home",
       "Guides",
       "CESNET Connection Guide"
     ]
@@ -61,6 +66,7 @@
     "section": "",
     "text": "Fill out the application for our Virtual Organization (VO) at: https://einfra.cesnet.cz/fed/registrar/?vo=VO_prfuk\nOnce your application has been approved, an administrator will add you to the appropriate group.",
     "crumbs": [
+      "Home",
       "Guides",
       "CESNET Connection Guide"
     ]
@@ -72,6 +78,7 @@
     "section": "",
     "text": "Next, you must generate personal S3 credentials in the Gatekeeper system.\n\nGo to the Gatekeeper application: https://access.du.cesnet.cz/\nClick the blue LOG IN button.\nFrom the list of institutions, select Univerzita Karlova (Charles University) and log in using your university CAS credentials.\nIn the left menu, select the virtual organization VO_prfuk, then select the group VO_prfuk_1200:FEG.\nClick the blue + New key button. You can name it anything you like.\nImportant: Note down your Access Key and Secret Key. Once you close the window, the Secret Key will never be shown again. If you lose it, you must generate a new key pair.",
     "crumbs": [
+      "Home",
       "Guides",
       "CESNET Connection Guide"
     ]
@@ -83,6 +90,7 @@
     "section": "",
     "text": "Cyberduck provides a graphical file browser — easiest for uploading images and downloading results.\n\nDownload and install Cyberduck: https://cyberduck.io/download/\nOpen the program and click Open Connection (Nové spojení).\nSelect Amazon S3 from the protocol dropdown.\nFill in the connection details:\n\nServer: s3.cl4.du.cesnet.cz\nAccess Key: (from step 2 above)\nSecret Key: (from step 2 above)\n\nExpand More Options (Více voleb) and in the Path field, enter /feg.\nClick Connect (Připojit).\nTip: Save this as a bookmark for quick access — click the bookmark panel icon, then “+” at the bottom and give it a name.\n\n(Official guides: CESNET Gatekeeper · Cyberduck)",
     "crumbs": [
+      "Home",
       "Guides",
       "CESNET Connection Guide"
     ]
@@ -94,6 +102,7 @@
     "section": "",
     "text": "Goal: Connect our team’s cloud storage (CESNET S3) to your local computer so it appears as a regular folder. This allows you to drag-and-drop files from tools like Fiji, Excel, or RStudio directly to the cloud without using the browser.",
     "crumbs": [
+      "Home",
       "Guides",
       "CESNET Connection Guide"
     ]
@@ -105,6 +114,7 @@
     "section": "",
     "text": "Before you start, you need two things: Rclone (the connector software) and a FUSE driver (which lets Rclone “talk” to your file system).\n\n\n\nInstall Rclone: bash     sudo apt install rclone\nFUSE: Usually pre-installed. If not: bash     sudo apt install fuse3\n\n\n\n\n\nInstall Rclone: Download the Rclone zip file, unzip it, and place rclone.exe somewhere safe (e.g., C:\\rclone\\). Add this folder to your system PATH.\nInstall WinFsp: Download and install WinFsp. Crucial: Rclone cannot mount a drive on Windows without this.\n\n\n\n\n\nInstall Rclone: Open Terminal and run: bash     brew install rclone (Requires Homebrew)\nInstall macFUSE: Download and install macFUSE.\n\nNote: On newer Macs (M1/M2/M3), you may need to enable kernel extensions in Recovery Mode for macFUSE to work. Alternatively, verify if fuse-t is a suitable replacement for your version.",
     "crumbs": [
+      "Home",
       "Guides",
       "CESNET Connection Guide"
     ]
@@ -116,6 +126,7 @@
     "section": "",
     "text": "This step is the same for everyone. Open your terminal (Command Prompt on Windows) and run:\nrclone config\nFollow the interactive menu using the Team Credentials (ask the Project Lead for keys):\nn (New remote)\n\nName: cesnet_s3\n\nStorage: Select Amazon S3 Compliant Storage.\n\nProvider: Select Ceph.\n\nenv_auth: false\n\naccess_key_id: [Enter Team Access Key]\n\nsecret_access_key: [Enter Team Secret Key]\n\nendpoint: https://s3.cl4.du.cesnet.cz\n\nacl: private\n\nSave: Press y.",
     "crumbs": [
+      "Home",
       "Guides",
       "CESNET Connection Guide"
     ]
@@ -127,6 +138,7 @@
     "section": "",
     "text": "Choose the instructions for your operating system below. 🐧 Option A: Linux (Ubuntu/Debian)\nThe One-Time Command:\n# 1. Create the mount folder\nmkdir ~/cesnet_cloud\n\n# 2. Mount it (runs in background)\nrclone mount s3_cesnet: ~/cesnet_cloud --vfs-cache-mode writes --daemon\nMake it Permanent (Auto-start on Login):\nOpen \"Startup Applications\".\n\nClick Add.\n\nCommand:\n```bash\nrclone mount s3_cesnet: /home/YOUR_USER/cesnet_cloud --vfs-cache-mode writes --daemon\n```\n\n\nThe One-Time Command (PowerShell):\n# 1. Create the folder (or pick a drive letter like Z:)\nmkdir C:\\cesnet_cloud\n\n# 2. Mount it\nrclone mount s3_cesnet: C:\\cesnet_cloud --vfs-cache-mode writes\nNote: This terminal window must stay open. If you close it, the drive disconnects.\nMake it Permanent (Auto-start on Login):\nCreate a new text file named mount_cesnet.bat.\n\nPaste this code inside:\n\n```batch\n@echo off\nstart /b rclone mount s3_cesnet: Z: –vfs-cache-mode writes –no-console ```\n(This mounts it as the Z: drive).\nPress Win + R, type shell:startup, and press Enter.\nMove your mount_cesnet.bat file into this folder. It will now run silently every time you log in.\n\n\n\nThe One-Time Command:\n# 1. Create the mount folder\nmkdir ~/cesnet_cloud\n\n# 2. Mount it\nrclone mount s3_cesnet: ~/cesnet_cloud --vfs-cache-mode writes --daemon\nMake it Permanent (Auto-start on Login):\nOpen \"System Preferences\" &gt; \"Users & Groups\".\n\nSelect your user and go to the \"Login Items\" tab.\n\nClick the \"+\" button and add a new script.\n\nCreate a script file (e.g., mount_cesnet.sh) with the following content:\n\n```bash\n#!/bin/bash\nrclone mount s3_cesnet: /Users/YOUR_USER/cesnet_cloud --vfs-cache-mode writes --daemon\n```\n\nMake it executable:\n```bash\nchmod +x /path/to/mount_cesnet.sh\n```\n\nAdd this script to your login items.\nSave the app as “Connect CESNET”.\nGo to System Settings -&gt; General -&gt; Login Items and add “Connect CESNET” to the list.\n\n\n\nDon't Edit in Place: Avoid opening a huge video file directly from the cloud drive to edit. Copy it to your desktop first, edit, then copy it back. (Small text/image edits are fine).\n\nWait for the Upload: When you drag a file into the folder, it may take a few seconds to upload. Don't immediately shut down your computer.\n\nIf it freezes: If the folder stops responding (e.g., internet loss), unmount it:\n\n    Linux: fusermount -u ~/cesnet_cloud\n\n    Windows: Ctrl+C in the terminal or restart.\n\n    Mac: umount ~/cesnet_cloud",
     "crumbs": [
+      "Home",
       "Guides",
       "CESNET Connection Guide"
     ]
@@ -138,6 +150,7 @@
     "section": "",
     "text": "An automated computer vision pipeline for assessing pollen viability using the Alexander Stain technique. This project leverages YOLOv8 to detect and classify pollen grains as either Viable (Magenta/Purple) or Non-Viable (Green/Shriveled) from high-resolution microscope images.\n\n\n\n🌸 Pollen Viability Detector (YOLOv8)\n\n📌 Table of Contents\n🔭 Project Overview\n🔬 Methodology\n\nKey Strategies used in this model:\n\n⚙️ Workflow Setup\n\n1. Connecting to CESNET\n2. Kubernetes Workflow\n2. Environment Installation\n\n🏷️ Labeling Guide (Roboflow)\n\n1. Class: viable (Target)\n2. Class: non_viable (Target)\n3. Edge Cases & Rules\n\n🏋️ Training (CESNET Cluster)\n🔍 Routine Detection\n\n\n\n\n\n\nThis tool automates the tedious process of counting pollen grains on microscope slides. It uses deep learning to replicate the judgment of a biologist following the Alexander Stain protocol.\n\nInput: High-resolution microscope images (TIF/JPG).\nOutput: Annotated images with bounding boxes, CSV summaries of counts, and viability percentages.\nPerformance: Optimized for large, crowded scans using tiling and global Non-Maximum Suppression (NMS).\n\n\n\n\n\nThe project runs on the CESNET MetaCentrum high-performance computing cluster, utilizing NVIDIA A40/A100 GPUs for rapid training and inference.\n\n\n\nMosaic Disabling: We disable mosaic augmentation for the final 10 epochs of training. This stabilizes the training loss and prevents the model from hallucinating pollen in empty space (ghost detections).\nHigh-Res Tiling: For inference, large microscope scans (&gt;2000px) are sliced into overlapping tiles (1600x1600px). This prevents the “Squish Effect,” ensuring small grains retain their texture and are not lost during resizing.\nBorder Patrol: To prevent double-counting grains on tile edges, we implement a custom logic that ignores edge detections, relying on the neighboring tile to capture the grain centrally.\n\n\n\n\n\n\nThis project has migrated from Google Colab to the CESNET Cluster for better performance and data privacy.\n\n\nDetailed instructions on how to set up your environment, connect via SSH, and manage files can be found in our connection guide:\n👉 CESNET Connection Guide\n\n\n\nFor instructions on running detection and training jobs: 👉 Kubernetes Workflow Guide\n\n\n\nThe environment uses a custom Jupyter kernel. Dependencies include ultralytics, opencv-python-headless, and pandas. (See the setup_environment.py script in the repo for automated dependency handling).\n\n\n\n\n\nWe use Roboflow for annotating datasets. If you are contributing to the dataset, please adhere to strict Alexander Stain criteria.\nSource: Pollen Viability Staining Guide (Alexander Stain)\n\n\nDefinition: Pollen grains that contain healthy, full cytoplasm and are capable of fertilization.\n\nColor: Must be Magenta-Red or Dark Purple.\nContent: The grain appears “full” and dense, indicating the presence of cytoplasm.\nShape: Typically regular, round, or plump.\nRule of Thumb: If it is dark red/purple and looks “full,” label it Viable.\n\n\nExample:  (Add your example image here)\n\n\n\n\nDefinition: Pollen grains that are aborted, empty, or dead. They lack the cytoplasm required for fertilization.\n\nColor: Primarily Pale.\nContent: Appears empty; only the outer cell wall is visible.\nShape: Often shrivelled, collapsed, or significantly smaller than viable grains.\nIntermediate Cases:\n\nPale Pink / Orange: Grains that are very pale or only partially stained red are likely aborted. Label as Non-Viable unless they are fully dark.\nEmpty Shells: Transparent or faint outlines with no colour.\n\n\n\nExample:  (Add your example image here)\n\n\n\n\n\nClusters: If grains are touching, draw a separate box for each individual grain. Do not draw one big box around a clump.\nCut-off Grains: If &gt;50% of the grain is visible at the image edge, label it. If &lt;50% is visible, ignore it.\nDebris: Do not label dirt, bubbles, or stain blobs. Only label clear pollen grains.\n\n\n\n\n\n\nTraining is now fully automated using Kubernetes jobs managed by deploy_training.sh.\nWorkflow: 1. Script: src/train_model.py handles the entire pipeline. 2. Data: Automatically syncs datasets and staging areas from S3. 3. Configuration: * Epochs: 300 * Image Size: 640px * Batch Size: 16 * Augmentations: Full rotation (180°), flips, and Mosaic (1.0). 4. Process: Merges new staged data, generates synthetic negatives, and trains YOLOv8x. 5. Backup: Results (weights, logs, visualizations) are automatically uploaded back to S3.\nTo Run:\nsudo ./deploy_training.sh\n\n\n\n\nDetection is handled by src/run_detection.py and deployed via deploy_pollen.sh.\n👉 Routine Detection Manual\nQuickstart Pipeline: 1. Upload images via Cyberduck to the S3 Bucket detect_images/ folder. 2. Deploy the job:\nsudo ./deploy_pollen.sh\n\nSync results locally (automatic or manual):\n\npython3 src/sync_results.py\n\nLicense: MIT",
     "crumbs": [
+      "Home",
       "Home & Overview"
     ]
   },
@@ -148,6 +161,7 @@
     "section": "",
     "text": "🌸 Pollen Viability Detector (YOLOv8)\n\n📌 Table of Contents\n🔭 Project Overview\n🔬 Methodology\n\nKey Strategies used in this model:\n\n⚙️ Workflow Setup\n\n1. Connecting to CESNET\n2. Kubernetes Workflow\n2. Environment Installation\n\n🏷️ Labeling Guide (Roboflow)\n\n1. Class: viable (Target)\n2. Class: non_viable (Target)\n3. Edge Cases & Rules\n\n🏋️ Training (CESNET Cluster)\n🔍 Routine Detection",
     "crumbs": [
+      "Home",
       "Home & Overview"
     ]
   },
@@ -158,6 +172,7 @@
     "section": "",
     "text": "This tool automates the tedious process of counting pollen grains on microscope slides. It uses deep learning to replicate the judgment of a biologist following the Alexander Stain protocol.\n\nInput: High-resolution microscope images (TIF/JPG).\nOutput: Annotated images with bounding boxes, CSV summaries of counts, and viability percentages.\nPerformance: Optimized for large, crowded scans using tiling and global Non-Maximum Suppression (NMS).",
     "crumbs": [
+      "Home",
       "Home & Overview"
     ]
   },
@@ -168,6 +183,7 @@
     "section": "",
     "text": "The project runs on the CESNET MetaCentrum high-performance computing cluster, utilizing NVIDIA A40/A100 GPUs for rapid training and inference.\n\n\n\nMosaic Disabling: We disable mosaic augmentation for the final 10 epochs of training. This stabilizes the training loss and prevents the model from hallucinating pollen in empty space (ghost detections).\nHigh-Res Tiling: For inference, large microscope scans (&gt;2000px) are sliced into overlapping tiles (1600x1600px). This prevents the “Squish Effect,” ensuring small grains retain their texture and are not lost during resizing.\nBorder Patrol: To prevent double-counting grains on tile edges, we implement a custom logic that ignores edge detections, relying on the neighboring tile to capture the grain centrally.",
     "crumbs": [
+      "Home",
       "Home & Overview"
     ]
   },
@@ -178,6 +194,7 @@
     "section": "",
     "text": "This project has migrated from Google Colab to the CESNET Cluster for better performance and data privacy.\n\n\nDetailed instructions on how to set up your environment, connect via SSH, and manage files can be found in our connection guide:\n👉 CESNET Connection Guide\n\n\n\nFor instructions on running detection and training jobs: 👉 Kubernetes Workflow Guide\n\n\n\nThe environment uses a custom Jupyter kernel. Dependencies include ultralytics, opencv-python-headless, and pandas. (See the setup_environment.py script in the repo for automated dependency handling).",
     "crumbs": [
+      "Home",
       "Home & Overview"
     ]
   },
@@ -188,6 +205,7 @@
     "section": "",
     "text": "We use Roboflow for annotating datasets. If you are contributing to the dataset, please adhere to strict Alexander Stain criteria.\nSource: Pollen Viability Staining Guide (Alexander Stain)\n\n\nDefinition: Pollen grains that contain healthy, full cytoplasm and are capable of fertilization.\n\nColor: Must be Magenta-Red or Dark Purple.\nContent: The grain appears “full” and dense, indicating the presence of cytoplasm.\nShape: Typically regular, round, or plump.\nRule of Thumb: If it is dark red/purple and looks “full,” label it Viable.\n\n\nExample:  (Add your example image here)\n\n\n\n\nDefinition: Pollen grains that are aborted, empty, or dead. They lack the cytoplasm required for fertilization.\n\nColor: Primarily Pale.\nContent: Appears empty; only the outer cell wall is visible.\nShape: Often shrivelled, collapsed, or significantly smaller than viable grains.\nIntermediate Cases:\n\nPale Pink / Orange: Grains that are very pale or only partially stained red are likely aborted. Label as Non-Viable unless they are fully dark.\nEmpty Shells: Transparent or faint outlines with no colour.\n\n\n\nExample:  (Add your example image here)\n\n\n\n\n\nClusters: If grains are touching, draw a separate box for each individual grain. Do not draw one big box around a clump.\nCut-off Grains: If &gt;50% of the grain is visible at the image edge, label it. If &lt;50% is visible, ignore it.\nDebris: Do not label dirt, bubbles, or stain blobs. Only label clear pollen grains.",
     "crumbs": [
+      "Home",
       "Home & Overview"
     ]
   },
@@ -198,6 +216,7 @@
     "section": "",
     "text": "Training is now fully automated using Kubernetes jobs managed by deploy_training.sh.\nWorkflow: 1. Script: src/train_model.py handles the entire pipeline. 2. Data: Automatically syncs datasets and staging areas from S3. 3. Configuration: * Epochs: 300 * Image Size: 640px * Batch Size: 16 * Augmentations: Full rotation (180°), flips, and Mosaic (1.0). 4. Process: Merges new staged data, generates synthetic negatives, and trains YOLOv8x. 5. Backup: Results (weights, logs, visualizations) are automatically uploaded back to S3.\nTo Run:\nsudo ./deploy_training.sh",
     "crumbs": [
+      "Home",
       "Home & Overview"
     ]
   },
@@ -208,6 +227,7 @@
     "section": "",
     "text": "Detection is handled by src/run_detection.py and deployed via deploy_pollen.sh.\n👉 Routine Detection Manual\nQuickstart Pipeline: 1. Upload images via Cyberduck to the S3 Bucket detect_images/ folder. 2. Deploy the job:\nsudo ./deploy_pollen.sh\n\nSync results locally (automatic or manual):\n\npython3 src/sync_results.py\n\nLicense: MIT",
     "crumbs": [
+      "Home",
       "Home & Overview"
     ]
   },
@@ -218,6 +238,7 @@
     "section": "",
     "text": "This guide documents the automated workflow for deploying Pollen Viability detection and training jobs to the CERIT-SC Kubernetes cluster.\n\n\nThe system runs as ephemeral Kubernetes Jobs. It follows this data flow:\n\nInput: Data (images/datasets) is read from S3 Storage.\nProcessing: A Docker container crashes processing logic (YOLOv8 + Custom Scripts).\nOutput: Results (CSV, Annotated Images, Trained Models) are uploaded back to S3.\n\n\n\n\n\n\n\nKubeconfig: You must have a valid kubeconfig.yaml in the project root. &gt; How to obtain: &gt; 1. Log in to Rancher Dashboard. &gt; 2. Open your assigned cluster. &gt; 3. Click “Download Kubeconfig” (Top Right) or “Kubeconfig File” icon. &gt; 4. Save as kubeconfig.yaml in this project folder. &gt; 5. Security: Run chmod 600 kubeconfig.yaml to secure the file.\nDocker: Must be installed locally to build images.\nkubectl: auto-downloaded by the scripts if missing.\n\n\n\n\nTo detect viable pollen in new images:\n\nEnsure input images are in S3: Ostatni/Pollen_viability/detect_images.\nRun the deployment script: bash     ./deploy_pollen.sh\nWhat happens?\n\nThe script builds a Docker image.\nPushes it to ttl.sh (ephemeral registry).\nLaunches a K8s Job (pollen-detector-job) in namespace stenc-ns.\nStreams logs until completion.\n\nResults: Check S3: Ostatni/Pollen_viability/detected_images.\n\n\n\n\nTo retrain the YOLOv8 model:\n\nEnsure datasets are in S3 (datasets/pollen_v1).\nRun the training deployment: bash     ./deploy_training.sh\nProcess:\n\nSyncs datasets and staging area from S3.\nMerges new labelled data.\nGenerates synthetic negative samples.\nTrains the model (approx 2-4 hours).\nUploads the best model (best.pt) and charts to S3.\n\n\n\n\n\n\n\n\n\n\n\n\n\nFile\nPurpose\n\n\n\n\ndeploy_pollen.sh\nOrchestrates the detection workflow. Builds Docker -&gt; Deploys Job.\n\n\ndeploy_training.sh\nOrchestrates the training workflow.\n\n\npollen-job.yaml\nKubernetes Manifest for detection. Defines resources (GPU/RAM) and env vars.\n\n\npollen-train-job.yaml\nKubernetes Manifest for training.\n\n\nDockerfile\nDefines the environment (Python, YOLOv8, non-root user).\n\n\nrun_detection.py\nCore script for detection logic + S3 sync.\n\n\ntrain_model.py\nCore script for training logic + S3 sync.\n\n\n\n\n\n\n\nNamespace: stenc-ns (Your isolated environment).\nUsers: Pods run as appuser (UID 1000) for security compliance.\nSecrets: AWS credentials are injected via Environment Variables in the YAML files.\n\n\n\n\n\n“Forbidden” errors: Ensure kubeconfig.yaml is correct and you are deploying to stenc-ns.\n“ImagePullBackOff”: The ttl.sh image might have expired (they last 24h). Re-run the deploy script to rebuild and push.\nEmpty Output: Check S3 paths in run_detection.py. Verify source images exist.",
     "crumbs": [
+      "Home",
       "Guides",
       "Kubernetes Workflow"
     ]
@@ -229,6 +250,7 @@
     "section": "",
     "text": "The system runs as ephemeral Kubernetes Jobs. It follows this data flow:\n\nInput: Data (images/datasets) is read from S3 Storage.\nProcessing: A Docker container crashes processing logic (YOLOv8 + Custom Scripts).\nOutput: Results (CSV, Annotated Images, Trained Models) are uploaded back to S3.",
     "crumbs": [
+      "Home",
       "Guides",
       "Kubernetes Workflow"
     ]
@@ -240,6 +262,7 @@
     "section": "",
     "text": "Kubeconfig: You must have a valid kubeconfig.yaml in the project root. &gt; How to obtain: &gt; 1. Log in to Rancher Dashboard. &gt; 2. Open your assigned cluster. &gt; 3. Click “Download Kubeconfig” (Top Right) or “Kubeconfig File” icon. &gt; 4. Save as kubeconfig.yaml in this project folder. &gt; 5. Security: Run chmod 600 kubeconfig.yaml to secure the file.\nDocker: Must be installed locally to build images.\nkubectl: auto-downloaded by the scripts if missing.\n\n\n\n\nTo detect viable pollen in new images:\n\nEnsure input images are in S3: Ostatni/Pollen_viability/detect_images.\nRun the deployment script: bash     ./deploy_pollen.sh\nWhat happens?\n\nThe script builds a Docker image.\nPushes it to ttl.sh (ephemeral registry).\nLaunches a K8s Job (pollen-detector-job) in namespace stenc-ns.\nStreams logs until completion.\n\nResults: Check S3: Ostatni/Pollen_viability/detected_images.\n\n\n\n\nTo retrain the YOLOv8 model:\n\nEnsure datasets are in S3 (datasets/pollen_v1).\nRun the training deployment: bash     ./deploy_training.sh\nProcess:\n\nSyncs datasets and staging area from S3.\nMerges new labelled data.\nGenerates synthetic negative samples.\nTrains the model (approx 2-4 hours).\nUploads the best model (best.pt) and charts to S3.",
     "crumbs": [
+      "Home",
       "Guides",
       "Kubernetes Workflow"
     ]
@@ -251,6 +274,7 @@
     "section": "",
     "text": "File\nPurpose\n\n\n\n\ndeploy_pollen.sh\nOrchestrates the detection workflow. Builds Docker -&gt; Deploys Job.\n\n\ndeploy_training.sh\nOrchestrates the training workflow.\n\n\npollen-job.yaml\nKubernetes Manifest for detection. Defines resources (GPU/RAM) and env vars.\n\n\npollen-train-job.yaml\nKubernetes Manifest for training.\n\n\nDockerfile\nDefines the environment (Python, YOLOv8, non-root user).\n\n\nrun_detection.py\nCore script for detection logic + S3 sync.\n\n\ntrain_model.py\nCore script for training logic + S3 sync.",
     "crumbs": [
+      "Home",
       "Guides",
       "Kubernetes Workflow"
     ]
@@ -262,6 +286,7 @@
     "section": "",
     "text": "Namespace: stenc-ns (Your isolated environment).\nUsers: Pods run as appuser (UID 1000) for security compliance.\nSecrets: AWS credentials are injected via Environment Variables in the YAML files.",
     "crumbs": [
+      "Home",
       "Guides",
       "Kubernetes Workflow"
     ]
@@ -273,6 +298,7 @@
     "section": "",
     "text": "“Forbidden” errors: Ensure kubeconfig.yaml is correct and you are deploying to stenc-ns.\n“ImagePullBackOff”: The ttl.sh image might have expired (they last 24h). Re-run the deploy script to rebuild and push.\nEmpty Output: Check S3 paths in run_detection.py. Verify source images exist.",
     "crumbs": [
+      "Home",
       "Guides",
       "Kubernetes Workflow"
     ]
