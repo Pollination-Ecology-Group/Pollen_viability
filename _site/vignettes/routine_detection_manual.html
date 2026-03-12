@@ -188,14 +188,18 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
   <ul>
   <li><a href="#routine-pollen-detection-manual" id="toc-routine-pollen-detection-manual" class="nav-link active" data-scroll-target="#routine-pollen-detection-manual">Routine Pollen Detection Manual</a>
   <ul class="collapse">
-  <li><a href="#accessing-the-cesnet-s3-storage" id="toc-accessing-the-cesnet-s3-storage" class="nav-link" data-scroll-target="#accessing-the-cesnet-s3-storage">1. Accessing the CESNET S3 Storage</a></li>
-  <li><a href="#routine-detection-workflow" id="toc-routine-detection-workflow" class="nav-link" data-scroll-target="#routine-detection-workflow">2. Routine Detection Workflow</a>
+  <li><a href="#before-you-start-one-time-setup" id="toc-before-you-start-one-time-setup" class="nav-link" data-scroll-target="#before-you-start-one-time-setup">Before You Start: One-Time Setup</a>
   <ul class="collapse">
-  <li><a href="#step-1-upload-images" id="toc-step-1-upload-images" class="nav-link" data-scroll-target="#step-1-upload-images">Step 1: Upload Images</a></li>
-  <li><a href="#step-2-run-the-kubernetes-job" id="toc-step-2-run-the-kubernetes-job" class="nav-link" data-scroll-target="#step-2-run-the-kubernetes-job">Step 2: Run the Kubernetes Job</a></li>
-  <li><a href="#step-3-retrieve-the-results" id="toc-step-3-retrieve-the-results" class="nav-link" data-scroll-target="#step-3-retrieve-the-results">Step 3: Retrieve the Results</a></li>
-  <li><a href="#troubleshooting" id="toc-troubleshooting" class="nav-link" data-scroll-target="#troubleshooting">Troubleshooting</a></li>
+  <li><a href="#step-0.1-get-access-to-the-cloud-storage-s3" id="toc-step-0.1-get-access-to-the-cloud-storage-s3" class="nav-link" data-scroll-target="#step-0.1-get-access-to-the-cloud-storage-s3">Step 0.1 — Get Access to the Cloud Storage (S3)</a></li>
+  <li><a href="#step-0.2-set-up-the-detection-script-on-your-computer" id="toc-step-0.2-set-up-the-detection-script-on-your-computer" class="nav-link" data-scroll-target="#step-0.2-set-up-the-detection-script-on-your-computer">Step 0.2 — Set Up the Detection Script on Your Computer</a></li>
   </ul></li>
+  <li><a href="#routine-detection-step-by-step" id="toc-routine-detection-step-by-step" class="nav-link" data-scroll-target="#routine-detection-step-by-step">Routine Detection — Step by Step</a>
+  <ul class="collapse">
+  <li><a href="#step-1-upload-your-images" id="toc-step-1-upload-your-images" class="nav-link" data-scroll-target="#step-1-upload-your-images">Step 1 — Upload Your Images</a></li>
+  <li><a href="#step-2-launch-the-detection-job" id="toc-step-2-launch-the-detection-job" class="nav-link" data-scroll-target="#step-2-launch-the-detection-job">Step 2 — Launch the Detection Job</a></li>
+  <li><a href="#step-3-download-your-results" id="toc-step-3-download-your-results" class="nav-link" data-scroll-target="#step-3-download-your-results">Step 3 — Download Your Results</a></li>
+  </ul></li>
+  <li><a href="#troubleshooting" id="toc-troubleshooting" class="nav-link" data-scroll-target="#troubleshooting">Troubleshooting</a></li>
   </ul></li>
   </ul>
 </nav>
@@ -208,41 +212,151 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 
 <section id="routine-pollen-detection-manual" class="level1">
 <h1>Routine Pollen Detection Manual</h1>
-<p>This guide covers the complete workflow for conducting routine pollen detection using the automated Kubernetes pipeline.</p>
-<section id="accessing-the-cesnet-s3-storage" class="level2">
-<h2 class="anchored" data-anchor-id="accessing-the-cesnet-s3-storage">1. Accessing the CESNET S3 Storage</h2>
-<p>Before running the detection pipeline, you need access to the Faculty’s CESNET S3 storage to upload images and download results.</p>
-<p>👉 <strong><a href="../vignettes/CESNET_connection_guide.html">CESNET S3 Connection Guide</a></strong> — Follow this guide to apply for access, generate your API keys via Gatekeeper, and connect using Cyberduck (or Rclone for advanced users).</p>
+<p>This guide walks you through the full process of running an automated pollen viability analysis — from preparing your images to downloading your results. <strong>No programming experience is required.</strong></p>
+<blockquote class="blockquote">
+<p>[!NOTE] This pipeline runs the heavy computation on a remote university server (CESNET cluster), so it works even on modest laptops. You only need to start the job from your computer — the actual image analysis happens remotely.</p>
+</blockquote>
+<hr>
+<section id="before-you-start-one-time-setup" class="level2">
+<h2 class="anchored" data-anchor-id="before-you-start-one-time-setup">Before You Start: One-Time Setup</h2>
+<p>You only need to do these steps once when setting up the workflow for the first time.</p>
+<section id="step-0.1-get-access-to-the-cloud-storage-s3" class="level3">
+<h3 class="anchored" data-anchor-id="step-0.1-get-access-to-the-cloud-storage-s3">Step 0.1 — Get Access to the Cloud Storage (S3)</h3>
+<p>All images and results are stored in the CESNET S3 cloud. You need access before anything else.</p>
+<p>👉 <strong><a href="../vignettes/CESNET_connection_guide.html">Follow the CESNET S3 Connection Guide</a></strong></p>
+<p>This will take you through applying for access, generating your personal keys, and installing <strong>Cyberduck</strong> (the tool you will use to upload and download files).</p>
 <hr>
 </section>
-<section id="routine-detection-workflow" class="level2">
-<h2 class="anchored" data-anchor-id="routine-detection-workflow">2. Routine Detection Workflow</h2>
-<p>Once your S3 access is configured, you can run the routine pollen detection pipeline.</p>
-<section id="step-1-upload-images" class="level3">
-<h3 class="anchored" data-anchor-id="step-1-upload-images">Step 1: Upload Images</h3>
-<p>Using Cyberduck, upload the high-resolution microscope images (TIF or JPG format) you want to analyze into the corresponding input directory on the S3 storage (typically <code>Ostatni/Pollen_viability/detect_images/</code>, depending on your specific prefix structure).</p>
+<section id="step-0.2-set-up-the-detection-script-on-your-computer" class="level3">
+<h3 class="anchored" data-anchor-id="step-0.2-set-up-the-detection-script-on-your-computer">Step 0.2 — Set Up the Detection Script on Your Computer</h3>
+<p>The detection pipeline is run via a script. You need to have the project code and its required tools installed <strong>once</strong> on the computer you’ll use to launch jobs.</p>
+<section id="a-install-required-software" class="level4">
+<h4 class="anchored" data-anchor-id="a-install-required-software">0.2a — Install Required Software</h4>
+<p>You will need three programs installed:</p>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Program</th>
+<th>What it does</th>
+<th>Download</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><strong>Git</strong></td>
+<td>Downloads the project code</td>
+<td><a href="https://git-scm.com/downloads">git-scm.com</a></td>
+</tr>
+<tr class="even">
+<td><strong>Docker Desktop</strong></td>
+<td>Packages the detection code to run on the cluster</td>
+<td><a href="https://www.docker.com/get-started/">docker.com/get-started</a></td>
+</tr>
+<tr class="odd">
+<td><strong>WSL 2</strong> <em>(Windows only)</em></td>
+<td>Lets Windows run Linux-style scripts</td>
+<td><a href="https://learn.microsoft.com/en-us/windows/wsl/install">Microsoft Docs</a></td>
+</tr>
+</tbody>
+</table>
+<blockquote class="blockquote">
+<p>[!IMPORTANT] On <strong>Windows</strong>: After installing WSL 2, open <strong>Docker Desktop → Settings → Resources → WSL Integration</strong> and enable it for your Linux distribution. On <strong>Linux</strong>: After installing Docker, run <code>sudo usermod -aG docker $USER</code> and log out and back in.</p>
+</blockquote>
 </section>
-<section id="step-2-run-the-kubernetes-job" class="level3">
-<h3 class="anchored" data-anchor-id="step-2-run-the-kubernetes-job">Step 2: Run the Kubernetes Job</h3>
-<p>On your local machine (or the designated VM where the project repository <code>Pollen_viability</code> is set up), open a terminal and run the deployment script:</p>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb1"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> Pollen_viability</span>
-<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="ex">./deploy_pollen.sh</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
-<p><em>(Note: If you encounter Docker permission issues on a fresh machine, you may need to run it with <code>sudo ./deploy_pollen.sh</code> or configure your user group with <code>sg docker</code>).</em></p>
-<p>This script will: 1. Build a temporary Docker container with the latest detection code. 2. Push the container to a temporary registry (<code>ttl.sh</code>). 3. Deploy a Kubernetes job (<code>pollen-detector-job</code>) to the CESNET cluster. 4. Stream the live logs so you can monitor the progress.</p>
+<section id="b-download-the-project-code" class="level4">
+<h4 class="anchored" data-anchor-id="b-download-the-project-code">0.2b — Download the Project Code</h4>
+<p>Open a terminal (on Windows: search for <strong>“Ubuntu”</strong> or <strong>“WSL”</strong> in the Start menu) and type:</p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb1"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="fu">git</span> clone https://github.com/Pollination-Ecology-Group/Pollen_viability.git</span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> Pollen_viability</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>This downloads all the scripts you need into a folder called <code>Pollen_viability</code>.</p>
 </section>
-<section id="step-3-retrieve-the-results" class="level3">
-<h3 class="anchored" data-anchor-id="step-3-retrieve-the-results">Step 3: Retrieve the Results</h3>
-<p>The detection script will automatically process the images in chunks, utilizing the cluster’s GPU.</p>
-<p>Once the job finishes: * <strong>Annotated Images:</strong> The images with overlaid prediction bounding boxes/polygons will be uploaded back to the S3 bucket (typically into <code>detected_images/</code>). You can download these using Cyberduck. * <strong>Counts and Statistics:</strong> A summary CSV file (<code>pollen_counts.csv</code>) containing the total counts of viable and non-viable grains, as well as calculated viability percentages, will be generated. * The <code>deploy_pollen.sh</code> script automatically limits syncing your local <code>pollen_counting_results/</code> directory using the <code>src/sync_results.py</code> sync script right after detection finishes.</p>
-<p>If you ever need to manually download the latest CSVs without re-running the detection pipeline, you can run:</p>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb2"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="ex">python3</span> src/sync_results.py</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<section id="c-download-the-cluster-access-file" class="level4">
+<h4 class="anchored" data-anchor-id="c-download-the-cluster-access-file">0.2c — Download the Cluster Access File</h4>
+<p>You will also need the <strong><code>kubeconfig.yaml</code></strong> file — this is the key that lets your computer talk to the CESNET cluster. Ask the project lead to send you this file, then place it inside the <code>Pollen_viability</code> folder you just downloaded.</p>
+<hr>
 </section>
-<section id="troubleshooting" class="level3">
-<h3 class="anchored" data-anchor-id="troubleshooting">Troubleshooting</h3>
-<p>If you encounter any issues setting up the connection or running the pipeline, please reach out or schedule a meeting for assistance.</p>
+</section>
+</section>
+<section id="routine-detection-step-by-step" class="level2">
+<h2 class="anchored" data-anchor-id="routine-detection-step-by-step">Routine Detection — Step by Step</h2>
+<p>Once setup is complete, running detection every time takes just 3 steps.</p>
+<section id="step-1-upload-your-images" class="level3">
+<h3 class="anchored" data-anchor-id="step-1-upload-your-images">Step 1 — Upload Your Images</h3>
+<p>Using <strong>Cyberduck</strong>, navigate to the <code>Ostatni/Pollen_viability/detect_images/</code> folder in the S3 bucket and drag your microscope images (TIF or JPG format) into it.</p>
+<blockquote class="blockquote">
+<p>[!TIP] You can upload a whole folder at once. Just drag it into the Cyberduck window.</p>
+</blockquote>
+<hr>
+</section>
+<section id="step-2-launch-the-detection-job" class="level3">
+<h3 class="anchored" data-anchor-id="step-2-launch-the-detection-job">Step 2 — Launch the Detection Job</h3>
+<p>Open a terminal (on Windows: <strong>Ubuntu / WSL</strong>) and navigate to the project folder:</p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb2"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="bu">cd</span> Pollen_viability</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<p>Then run:</p>
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb3"><pre class="sourceCode bash code-with-copy"><code class="sourceCode bash"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="ex">./deploy_pollen.sh</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<blockquote class="blockquote">
+<p>[!NOTE] The first time you run this, Docker will download several components. This may take 5–15 minutes depending on your internet speed. Subsequent runs are much faster.</p>
+</blockquote>
+<p>You will see output in the terminal that looks like this:</p>
+<pre><code>🌸 Pollen Detector Deployment Script
+🚀 1. Building Docker image...
+☁️ 2. Pushing image...
+🚀 4. Deploying Job to Cluster...
+👀 6. Streaming logs...</code></pre>
+<p>The terminal will then show live progress from the cluster. <strong>You don’t need to do anything</strong> — just wait.</p>
+<blockquote class="blockquote">
+<p>[!TIP] If you see a <code>permission denied</code> error when running <code>./deploy_pollen.sh</code>, try:</p>
+<p><strong>Linux:</strong> <code>sg docker -c ./deploy_pollen.sh</code></p>
+<p><strong>Windows (WSL):</strong> Make sure Docker Desktop is running and WSL integration is enabled.</p>
+</blockquote>
+<hr>
+</section>
+<section id="step-3-download-your-results" class="level3">
+<h3 class="anchored" data-anchor-id="step-3-download-your-results">Step 3 — Download Your Results</h3>
+<p>Once the detection finishes (the terminal shows it has completed), your results are automatically uploaded to the S3 bucket.</p>
+<p>Open <strong>Cyberduck</strong> and navigate to: - <code>Ostatni/Pollen_viability/detected_images/</code> — <strong>Annotated images</strong> with coloured bounding boxes showing which pollen grains are viable (green) and non-viable (red). - <code>Ostatni/Pollen_viability/pollen_counting_results/</code> — <strong>CSV summary files</strong> (<code>pollen_counts.csv</code>) with counts and viability percentages per image.</p>
+<p>Download these files to your computer by right-clicking → <strong>Download</strong> in Cyberduck.</p>
+<hr>
+</section>
+</section>
+<section id="troubleshooting" class="level2">
+<h2 class="anchored" data-anchor-id="troubleshooting">Troubleshooting</h2>
+<table class="caption-top table">
+<colgroup>
+<col style="width: 50%">
+<col style="width: 50%">
+</colgroup>
+<thead>
+<tr class="header">
+<th>Problem</th>
+<th>Solution</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>permission denied</code> when running script</td>
+<td>See the tip in Step 2 above</td>
+</tr>
+<tr class="even">
+<td>Docker Desktop not starting</td>
+<td>Make sure WSL 2 is installed and enabled</td>
+</tr>
+<tr class="odd">
+<td>Script says “cannot connect to cluster”</td>
+<td>Check that <code>kubeconfig.yaml</code> is in the <code>Pollen_viability</code> folder</td>
+</tr>
+<tr class="even">
+<td>No files appear in S3 after job finishes</td>
+<td>Wait a few minutes; large jobs can take time to upload results</td>
+</tr>
+<tr class="odd">
+<td>Any other issue</td>
+<td>Contact the project lead or schedule a meeting</td>
+</tr>
+</tbody>
+</table>
 
 
-</section>
 </section>
 </section>
 
