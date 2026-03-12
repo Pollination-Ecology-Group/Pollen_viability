@@ -126,22 +126,16 @@ sudo ./deploy_training.sh
 
 Detection is handled by `src/run_detection.py` and deployed via `deploy_pollen.sh`.
 
-**Workflow:**
-1.  **Input:** Downloads images from `detect_images/` on S3.
-2.  **Processing:** 
-    *   Auto-tiles large microscope slides.
-    *   Detects minimal pollen grains.
-    *   Calculates viability statistics.
-3.  **Output:** 
-    *   Annotated images uploaded to `detected_images/`.
-    *   Summary CSV (`pollen_counts.csv`) generated and synced locally.
+👉 **[Routine Detection Manual](/vignettes/routine_detection_manual.md)**
 
-**To Run:**
+**Quickstart Pipeline:**
+1.  Upload images via Cyberduck to the S3 Bucket `detect_images/` folder.
+2.  Deploy the job:
 ```bash
-# 1. Deploy the job
 sudo ./deploy_pollen.sh
-
-# 2. Sync results locally (automatic or manual)
+```
+3.  Sync results locally (automatic or manual):
+```bash
 python3 src/sync_results.py
 ```
 
