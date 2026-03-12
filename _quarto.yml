@@ -7,6 +7,21 @@ project:
 
 website:
   title: "🌸 Pollen Viability Detector"
+  navbar:
+    left:
+      - href: index.qmd
+        text: Home
+      - text: Guides
+        menu:
+          - href: vignettes/routine_detection_manual.md
+            text: "Routine Detection Manual"
+          - href: vignettes/kubernetes_workflow.md
+            text: "Kubernetes Workflow"
+          - href: vignettes/CESNET_connection_guide.md
+            text: "CESNET Connection Guide"
+    right:
+      - icon: github
+        href: https://github.com/Pollination-Ecology-Group/Pollen_viability
   sidebar:
     style: "docked"
     search: true
