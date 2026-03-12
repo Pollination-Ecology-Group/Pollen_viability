@@ -188,12 +188,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
   <ul>
   <li><a href="#routine-pollen-detection-manual" id="toc-routine-pollen-detection-manual" class="nav-link active" data-scroll-target="#routine-pollen-detection-manual">Routine Pollen Detection Manual</a>
   <ul class="collapse">
-  <li><a href="#accessing-the-cesnet-s3-storage" id="toc-accessing-the-cesnet-s3-storage" class="nav-link" data-scroll-target="#accessing-the-cesnet-s3-storage">1. Accessing the CESNET S3 Storage</a>
-  <ul class="collapse">
-  <li><a href="#applying-for-access" id="toc-applying-for-access" class="nav-link" data-scroll-target="#applying-for-access">1.1 Applying for Access</a></li>
-  <li><a href="#generating-access-keys" id="toc-generating-access-keys" class="nav-link" data-scroll-target="#generating-access-keys">1.2 Generating Access Keys</a></li>
-  <li><a href="#setting-up-cyberduck" id="toc-setting-up-cyberduck" class="nav-link" data-scroll-target="#setting-up-cyberduck">1.3 Setting up Cyberduck</a></li>
-  </ul></li>
+  <li><a href="#accessing-the-cesnet-s3-storage" id="toc-accessing-the-cesnet-s3-storage" class="nav-link" data-scroll-target="#accessing-the-cesnet-s3-storage">1. Accessing the CESNET S3 Storage</a></li>
   <li><a href="#routine-detection-workflow" id="toc-routine-detection-workflow" class="nav-link" data-scroll-target="#routine-detection-workflow">2. Routine Detection Workflow</a>
   <ul class="collapse">
   <li><a href="#step-1-upload-images" id="toc-step-1-upload-images" class="nav-link" data-scroll-target="#step-1-upload-images">Step 1: Upload Images</a></li>
@@ -216,24 +211,9 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <p>This guide covers the complete workflow for conducting routine pollen detection using the automated Kubernetes pipeline.</p>
 <section id="accessing-the-cesnet-s3-storage" class="level2">
 <h2 class="anchored" data-anchor-id="accessing-the-cesnet-s3-storage">1. Accessing the CESNET S3 Storage</h2>
-<p>To upload your microscope images and retrieve the final results, you first need access to the Faculty’s CESNET S3 storage.</p>
-<section id="applying-for-access" class="level3">
-<h3 class="anchored" data-anchor-id="applying-for-access">1.1 Applying for Access</h3>
-<ol type="1">
-<li><strong>Fill out the application</strong> for our Virtual Organization (VO) at: <a href="https://einfra.cesnet.cz/fed/registrar/?vo=VO_prfuk">https://einfra.cesnet.cz/fed/registrar/?vo=VO_prfuk</a></li>
-<li>Once your application is approved, an administrator will add you to the appropriate group.</li>
-</ol>
-</section>
-<section id="generating-access-keys" class="level3">
-<h3 class="anchored" data-anchor-id="generating-access-keys">1.2 Generating Access Keys</h3>
-<p>Next, you must generate access credentials in the Gatekeeper system. 1. Go to the <strong>Gatekeeper application</strong>: <a href="https://access.du.cesnet.cz/">https://access.du.cesnet.cz/</a> 2. Click the blue <strong>LOG IN</strong> button. 3. From the list of institutions, select <strong>Univerzita Karlova</strong> (Charles University) and log in using your university CAS credentials (e.g., <code>matouse3</code> + password). 4. In the left menu, select the virtual organization <strong><code>VO_prfuk</code></strong>, and then select the group <strong><code>VO_prfuk_1200:FEG</code></strong>. 5. Click the blue <strong>+ New key</strong> button to create a new key pair. You can name it anything you like. 6. <strong>Important:</strong> Note down your <strong>Access Key</strong> and <strong>Secret Key</strong>. Once you close the window, the Secret Key will never be shown again. If you lose it, you will need to generate a new pair of keys.</p>
-</section>
-<section id="setting-up-cyberduck" class="level3">
-<h3 class="anchored" data-anchor-id="setting-up-cyberduck">1.3 Setting up Cyberduck</h3>
-<p>We recommend using Cyberduck to transfer files between your computer and the S3 storage. 1. <strong>Download and install</strong> Cyberduck: <a href="https://cyberduck.io/download/">https://cyberduck.io/download/</a> 2. Open the program and click <strong>Open Connection</strong> (Nové spojení). 3. Select <strong>Amazon S3</strong> from the protocol dropdown menu. 4. Fill in the connection details: * <strong>Server:</strong> <code>s3.cl4.du.cesnet.cz</code> * <strong>Access Key:</strong> Enter the Access Key you generated. * <strong>Secret Key:</strong> Enter the Secret Key you generated. 5. Expand <strong>More Options</strong> (Více voleb) and in the <strong>Path</strong> field, enter <code>/feg</code> (or the specific path to your project bucket). 6. Click <strong>Connect</strong> (Připojit). 7. <em>Tip:</em> For faster access in the future, save this connection as a bookmark. Click the bookmark panel icon, click the <strong>“+”</strong> button at the bottom, and enter a name in the “Nickname” field. Leave the other settings as they are. 8. You can now use the File menu to create folders, upload images, and download results.</p>
-<p><em>(For detailed official guides, see the <a href="https://du.cesnet.cz/cs/navody/object_storage/gatekeeper/start">CESNET Gatekeeper guide</a> and <a href="https://du.cesnet.cz/cs/navody/object_storage/cyberduck/start">Cyberduck guide</a>.)</em></p>
+<p>Before running the detection pipeline, you need access to the Faculty’s CESNET S3 storage to upload images and download results.</p>
+<p>👉 <strong><a href="../vignettes/CESNET_connection_guide.html">CESNET S3 Connection Guide</a></strong> — Follow this guide to apply for access, generate your API keys via Gatekeeper, and connect using Cyberduck (or Rclone for advanced users).</p>
 <hr>
-</section>
 </section>
 <section id="routine-detection-workflow" class="level2">
 <h2 class="anchored" data-anchor-id="routine-detection-workflow">2. Routine Detection Workflow</h2>

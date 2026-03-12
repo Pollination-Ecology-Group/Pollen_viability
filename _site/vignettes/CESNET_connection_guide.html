@@ -188,6 +188,10 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
   <ul>
   <li><a href="#cesnet-s3-cloud-storage-connection-protocol" id="toc-cesnet-s3-cloud-storage-connection-protocol" class="nav-link active" data-scroll-target="#cesnet-s3-cloud-storage-connection-protocol">☁️ CESNET S3 Cloud Storage Connection Protocol</a>
   <ul class="collapse">
+  <li><a href="#applying-for-access" id="toc-applying-for-access" class="nav-link" data-scroll-target="#applying-for-access">1. Applying for Access</a></li>
+  <li><a href="#generating-access-keys-gatekeeper" id="toc-generating-access-keys-gatekeeper" class="nav-link" data-scroll-target="#generating-access-keys-gatekeeper">2. Generating Access Keys (Gatekeeper)</a></li>
+  <li><a href="#option-a-file-manager-access-via-cyberduck-recommended-for-most-users" id="toc-option-a-file-manager-access-via-cyberduck-recommended-for-most-users" class="nav-link" data-scroll-target="#option-a-file-manager-access-via-cyberduck-recommended-for-most-users">3. Option A: File Manager Access via Cyberduck (Recommended for most users)</a></li>
+  <li><a href="#option-b-mount-as-a-local-drive-via-rclone-advanced" id="toc-option-b-mount-as-a-local-drive-via-rclone-advanced" class="nav-link" data-scroll-target="#option-b-mount-as-a-local-drive-via-rclone-advanced">4. Option B: Mount as a Local Drive via Rclone (Advanced)</a></li>
   <li><a href="#step-0-prerequisites-install-first" id="toc-step-0-prerequisites-install-first" class="nav-link" data-scroll-target="#step-0-prerequisites-install-first">🛑 Step 0: Prerequisites (Install First)</a>
   <ul class="collapse">
   <li><a href="#linux" id="toc-linux" class="nav-link" data-scroll-target="#linux"><strong>Linux</strong></a></li>
@@ -213,8 +217,53 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 
 <section id="cesnet-s3-cloud-storage-connection-protocol" class="level1">
 <h1>☁️ CESNET S3 Cloud Storage Connection Protocol</h1>
+<hr>
+<section id="applying-for-access" class="level2">
+<h2 class="anchored" data-anchor-id="applying-for-access">1. Applying for Access</h2>
+<ol type="1">
+<li><strong>Fill out the application</strong> for our Virtual Organization (VO) at: <a href="https://einfra.cesnet.cz/fed/registrar/?vo=VO_prfuk">https://einfra.cesnet.cz/fed/registrar/?vo=VO_prfuk</a></li>
+<li>Once your application has been approved, an administrator will add you to the appropriate group.</li>
+</ol>
+<hr>
+</section>
+<section id="generating-access-keys-gatekeeper" class="level2">
+<h2 class="anchored" data-anchor-id="generating-access-keys-gatekeeper">2. Generating Access Keys (Gatekeeper)</h2>
+<p>Next, you must generate personal S3 credentials in the Gatekeeper system.</p>
+<ol type="1">
+<li>Go to the <strong>Gatekeeper application</strong>: <a href="https://access.du.cesnet.cz/">https://access.du.cesnet.cz/</a></li>
+<li>Click the blue <strong>LOG IN</strong> button.</li>
+<li>From the list of institutions, select <strong>Univerzita Karlova</strong> (Charles University) and log in using your university CAS credentials.</li>
+<li>In the left menu, select the virtual organization <strong><code>VO_prfuk</code></strong>, then select the group <strong><code>VO_prfuk_1200:FEG</code></strong>.</li>
+<li>Click the blue <strong>+ New key</strong> button. You can name it anything you like.</li>
+<li><strong>Important:</strong> Note down your <strong>Access Key</strong> and <strong>Secret Key</strong>. Once you close the window, the Secret Key <strong>will never be shown again</strong>. If you lose it, you must generate a new key pair.</li>
+</ol>
+<hr>
+</section>
+<section id="option-a-file-manager-access-via-cyberduck-recommended-for-most-users" class="level2">
+<h2 class="anchored" data-anchor-id="option-a-file-manager-access-via-cyberduck-recommended-for-most-users">3. Option A: File Manager Access via Cyberduck (Recommended for most users)</h2>
+<p>Cyberduck provides a graphical file browser — easiest for uploading images and downloading results.</p>
+<ol type="1">
+<li><strong>Download and install</strong> Cyberduck: <a href="https://cyberduck.io/download/">https://cyberduck.io/download/</a></li>
+<li>Open the program and click <strong>Open Connection</strong> (Nové spojení).</li>
+<li>Select <strong>Amazon S3</strong> from the protocol dropdown.</li>
+<li>Fill in the connection details:
+<ul>
+<li><strong>Server:</strong> <code>s3.cl4.du.cesnet.cz</code></li>
+<li><strong>Access Key:</strong> <em>(from step 2 above)</em></li>
+<li><strong>Secret Key:</strong> <em>(from step 2 above)</em></li>
+</ul></li>
+<li>Expand <strong>More Options</strong> (Více voleb) and in the <strong>Path</strong> field, enter <code>/feg</code>.</li>
+<li>Click <strong>Connect</strong> (Připojit).</li>
+<li><em>Tip:</em> Save this as a bookmark for quick access — click the bookmark panel icon, then <strong>“+”</strong> at the bottom and give it a name.</li>
+</ol>
+<p><em>(Official guides: <a href="https://du.cesnet.cz/cs/navody/object_storage/gatekeeper/start">CESNET Gatekeeper</a> · <a href="https://du.cesnet.cz/cs/navody/object_storage/cyberduck/start">Cyberduck</a>)</em></p>
+<hr>
+</section>
+<section id="option-b-mount-as-a-local-drive-via-rclone-advanced" class="level2">
+<h2 class="anchored" data-anchor-id="option-b-mount-as-a-local-drive-via-rclone-advanced">4. Option B: Mount as a Local Drive via Rclone (Advanced)</h2>
 <p><strong>Goal:</strong> Connect our team’s cloud storage (CESNET S3) to your local computer so it appears as a regular folder. This allows you to drag-and-drop files from tools like Fiji, Excel, or RStudio directly to the cloud without using the browser.</p>
 <hr>
+</section>
 <section id="step-0-prerequisites-install-first" class="level2">
 <h2 class="anchored" data-anchor-id="step-0-prerequisites-install-first">🛑 Step 0: Prerequisites (Install First)</h2>
 <p>Before you start, you need two things: <strong>Rclone</strong> (the connector software) and a <strong>FUSE driver</strong> (which lets Rclone “talk” to your file system).</p>
