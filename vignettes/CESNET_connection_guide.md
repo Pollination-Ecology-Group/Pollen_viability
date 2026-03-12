@@ -1,5 +1,48 @@
 # ☁️ CESNET S3 Cloud Storage Connection Protocol
 
+---
+
+## 1. Applying for Access
+
+1. **Fill out the application** for our Virtual Organization (VO) at: [https://einfra.cesnet.cz/fed/registrar/?vo=VO_prfuk](https://einfra.cesnet.cz/fed/registrar/?vo=VO_prfuk)
+2. Once your application has been approved, an administrator will add you to the appropriate group.
+
+---
+
+## 2. Generating Access Keys (Gatekeeper)
+
+Next, you must generate personal S3 credentials in the Gatekeeper system.
+
+1. Go to the **Gatekeeper application**: [https://access.du.cesnet.cz/](https://access.du.cesnet.cz/)
+2. Click the blue **LOG IN** button.
+3. From the list of institutions, select **Univerzita Karlova** (Charles University) and log in using your university CAS credentials.
+4. In the left menu, select the virtual organization **`VO_prfuk`**, then select the group **`VO_prfuk_1200:FEG`**.
+5. Click the blue **+ New key** button. You can name it anything you like.
+6. **Important:** Note down your **Access Key** and **Secret Key**. Once you close the window, the Secret Key **will never be shown again**. If you lose it, you must generate a new key pair.
+
+---
+
+## 3. Option A: File Manager Access via Cyberduck (Recommended for most users)
+
+Cyberduck provides a graphical file browser — easiest for uploading images and downloading results.
+
+1. **Download and install** Cyberduck: [https://cyberduck.io/download/](https://cyberduck.io/download/)
+2. Open the program and click **Open Connection** (Nové spojení).
+3. Select **Amazon S3** from the protocol dropdown.
+4. Fill in the connection details:
+   * **Server:** `s3.cl4.du.cesnet.cz`
+   * **Access Key:** *(from step 2 above)*
+   * **Secret Key:** *(from step 2 above)*
+5. Expand **More Options** (Více voleb) and in the **Path** field, enter `/feg`.
+6. Click **Connect** (Připojit).
+7. *Tip:* Save this as a bookmark for quick access — click the bookmark panel icon, then **"+"** at the bottom and give it a name.
+
+*(Official guides: [CESNET Gatekeeper](https://du.cesnet.cz/cs/navody/object_storage/gatekeeper/start) · [Cyberduck](https://du.cesnet.cz/cs/navody/object_storage/cyberduck/start))*
+
+---
+
+## 4. Option B: Mount as a Local Drive via Rclone (Advanced)
+
 **Goal:** Connect our team's cloud storage (CESNET S3) to your local computer so it appears as a regular folder. This allows you to drag-and-drop files from tools like Fiji, Excel, or RStudio directly to the cloud without using the browser.
 
 ---
