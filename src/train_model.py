@@ -235,19 +235,18 @@ def visualize_predictions(model, split='val', num_samples=None):
         cv2.imwrite(os.path.join(save_dir, f"pred_{img_file}"), res_plotted)
     print("✅ Prediction viz complete.")
 
-def upload_results(s3, train_name):
+def upload_results(s3, local_dir, train_name):
     bucket = s3.Bucket(S3_BUCKET)
     
     # 1. Weights & Metrics
-    local_run_dir = os.path.join('runs/detect', train_name)
     s3_prefix_run = f"Ostatni/Pollen_viability/trained_models/{train_name}"
     
-    print(f"⬆️ Uploading training results to {s3_prefix_run}...")
-    if os.path.exists(local_run_dir):
-        for root, _, files in os.walk(local_run_dir):
+    print(f"⬆️ Uploading training results from {local_dir} to {s3_prefix_run}...")
+    if os.path.exists(local_dir):
+        for root, _, files in os.walk(local_dir):
             for file in files:
                 local_path = os.path.join(root, file)
-                rel_path = os.path.relpath(local_path, local_run_dir)
+                rel_path = os.path.relpath(local_path, local_dir)
                 with open(local_path, "rb") as data:
                     bucket.put_object(Key=f"{s3_prefix_run}/{rel_path}", Body=data.read())
 
@@ -327,6 +326,10 @@ def main():
             close_mosaic=20
         )
         
+        # Capture the actual directory where YOLO saved the results
+        actual_save_dir = results.save_dir
+        print(f"📂 YOLO saved results to: {actual_save_dir}")
+        
         # 4. Independent Evaluation
         print("📊 Running Evaluation...")
         metrics = model.val(split='val') # or 'test' if available
@@ -336,7 +339,7 @@ def main():
         visualize_predictions(model, split='val', num_samples=None)        
         # 5. Backup
         if s3:
-            upload_results(s3, run_name)
+            upload_results(s3, actual_save_dir, run_name)
     else:
         print("⚠️ Dry run mode: Skipping actual training.")
 

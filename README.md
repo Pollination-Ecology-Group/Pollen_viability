@@ -114,6 +114,7 @@ Training is now fully automated using Kubernetes jobs managed by `deploy_trainin
     *   **Augmentations:** Full rotation (180°), flips, and Mosaic (1.0).
 4.  **Process:** Merges new staged data, generates synthetic negatives, and trains YOLOv8x.
 5.  **Backup:** Results (weights, logs, visualizations) are automatically uploaded back to S3.
+6.  **Dynamic Save Directory Handling:** The script automatically captures the exact location where YOLOv8 saves training outputs (e.g., `runs/detect` vs `runs/segment`), ensuring that S3 backups always find the correct files regardless of YOLO version or task defaults.
 
 **To Run:**
 ```bash
