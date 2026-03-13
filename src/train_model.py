@@ -15,6 +15,8 @@ import argparse
 from botocore.client import Config
 from ultralytics import YOLO, settings
 from datetime import datetime
+import smtplib
+from email.message import EmailMessage
 
 # Update global settings to prevent "Permission denied" in /ultralytics/runs
 # This fixes the AMP check crash
@@ -29,6 +31,8 @@ S3_ENDPOINT = os.environ.get('S3_ENDPOINT', 'https://s3.cl4.du.cesnet.cz')
 S3_BUCKET = os.environ.get('S3_BUCKET')
 AWS_ACCESS_KEY_ID = os.environ.get('AWS_ACCESS_KEY_ID')
 AWS_SECRET_ACCESS_KEY = os.environ.get('AWS_SECRET_ACCESS_KEY')
+GMAIL_APP_PASSWORD = os.environ.get('GMAIL_APP_PASSWORD')
+RECEIVER_EMAIL = "jakubstenc@gmail.com"
 
 # Paths
 LOCAL_ROOT = 'Pollen_viability'
@@ -263,6 +267,26 @@ def upload_results(s3, local_dir, train_name):
                 
     print("✅ Upload complete.")
 
+def send_notification(subject, body):
+    if not GMAIL_APP_PASSWORD:
+        print("⚠️ Skipping email notification: GMAIL_APP_PASSWORD not set.")
+        return
+
+    msg = EmailMessage()
+    msg.set_content(body)
+    msg["Subject"] = subject
+    msg["From"] = RECEIVER_EMAIL
+    msg["To"] = RECEIVER_EMAIL
+
+    try:
+        print(f"📧 Sending notification to {RECEIVER_EMAIL}...")
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+            server.login(RECEIVER_EMAIL, GMAIL_APP_PASSWORD)
+            server.send_message(msg)
+        print("✅ Notification sent!")
+    except Exception as e:
+        print(f"❌ Failed to send notification: {e}")
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--epochs', type=int, default=300)
@@ -340,6 +364,12 @@ def main():
         # 5. Backup
         if s3:
             upload_results(s3, actual_save_dir, run_name)
+            
+            # 6. Notify
+            send_notification(
+                subject=f"🚀 Training Complete: {run_name}",
+                body=f"Hello Jakub,\n\nYour training run '{run_name}' has finished successfully.\nResults have been uploaded to S3."
+            )
     else:
         print("⚠️ Dry run mode: Skipping actual training.")
 

@@ -38,6 +38,8 @@ spec:
               value: "1Y920BKC0SAWPNDE8RD6" # Pre-filled from previous context
             - name: AWS_SECRET_ACCESS_KEY
               value: "SnKMQbJ8mRKVboPDymkYFaFTz7VBxysrsWwJRoMD" # Pre-filled
+            - name: GMAIL_APP_PASSWORD
+              value: "mbqu rhgz yycc jcfx"
           volumeMounts:
             - mountPath: /dev/shm
               name: dshm
