@@ -15,8 +15,10 @@ AWS_SECRET_ACCESS_KEY = os.environ.get('AWS_SECRET_ACCESS_KEY')
 
 # S3 Paths
 S3_CSV_KEY = 'Ostatni/Pollen_viability/detected_images/pollen_counts.csv'
+S3_MEASUREMENTS_KEY = 'Ostatni/Pollen_viability/detected_images/particle_measurements.csv'
 LOCAL_RESULT_DIR = 'pollen_counting_results'
 LOCAL_CSV_PATH = os.path.join(LOCAL_RESULT_DIR, 'pollen_counts.csv')
+LOCAL_MEASUREMENTS_PATH = os.path.join(LOCAL_RESULT_DIR, 'particle_measurements.csv')
 
 def setup_s3():
     if not all([S3_BUCKET, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY]):
@@ -43,14 +45,21 @@ def sync_results():
     bucket = s3.Bucket(S3_BUCKET)
 
     try:
+        # 1. Sync Summary
         print(f"⬇️  Downloading {S3_CSV_KEY}...")
         bucket.download_file(S3_CSV_KEY, LOCAL_CSV_PATH)
-        print(f"✅ Downloaded to {LOCAL_CSV_PATH}")
+        print(f"✅ Downloaded summary to {LOCAL_CSV_PATH}")
+        
+        # 2. Sync Detailed Measurements
+        print(f"⬇️  Downloading {S3_MEASUREMENTS_KEY}...")
+        bucket.download_file(S3_MEASUREMENTS_KEY, LOCAL_MEASUREMENTS_PATH)
+        print(f"✅ Downloaded measurements to {LOCAL_MEASUREMENTS_PATH}")
+        
     except Exception as e:
         print(f"❌ Failed to download results: {e}")
         # Check if 404
         if "404" in str(e):
-             print("   (The file might not verify exist yet if no detection job has run successfully.)")
+             print("   (Files might not exist yet if no detection job has run successfully.)")
 
 if __name__ == "__main__":
     sync_results()

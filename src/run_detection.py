@@ -1,4 +1,5 @@
 import cv2
+import math
 import boto3
 import pandas as pd
 import torch
@@ -26,6 +27,53 @@ CONF_THRESHOLD = 0.25
 IOU_MERGE_THRESHOLD = 0.45
 TILE_SIZE = 1600
 BORDER_MARGIN = 10
+EXCLUSION_COLOR = (128, 128, 128) # Grey for excluded particles
+
+def is_touching_edge(mask, img_shape, margin=5):
+    """Checks if any point of the mask is too close to the image edge."""
+    h, w = img_shape[:2]
+    # mask is a numpy array of [x, y] coordinates
+    if len(mask) == 0: return False
+    
+    xs = mask[:, 0]
+    ys = mask[:, 1]
+    
+    if np.any(xs < margin) or np.any(xs > w - margin) or \
+       np.any(ys < margin) or np.any(ys > h - margin):
+        return True
+    return False
+
+def calculate_measurements(mask):
+    """Calculates area and equivalent diameter from a polygon mask."""
+    # Convert to integer points for cv2
+    pts = np.array(mask, np.int32).reshape((-1, 1, 2))
+    area = cv2.contourArea(pts)
+    # Equivalent diameter: d = 2 * sqrt(area / pi)
+    diameter = 2 * math.sqrt(area / math.pi) if area > 0 else 0
+    return area, diameter
+
+def check_overlap(mask, other_masks, img_shape, threshold=0.05):
+    """
+    Checks if a mask overlaps significantly with any other mask.
+    Returns True if overlap area > threshold * mask_area.
+    """
+    h, w = img_shape[:2]
+    m_img = np.zeros((h, w), dtype=np.uint8)
+    cv2.fillPoly(m_img, [np.array(mask, np.int32)], 1)
+    
+    mask_area = np.sum(m_img)
+    if mask_area == 0: return False
+    
+    for other in other_masks:
+        o_img = np.zeros((h, w), dtype=np.uint8)
+        cv2.fillPoly(o_img, [np.array(other, np.int32)], 1)
+        
+        intersection = cv2.bitwise_and(m_img, o_img)
+        overlap_area = np.sum(intersection)
+        
+        if overlap_area > threshold * mask_area:
+            return True
+    return False
 
 def setup_s3():
     if not all([S3_BUCKET, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY]):
@@ -192,34 +240,13 @@ def run_detection():
                 final_masks = [all_masks[idx] for idx in keep]
 
                 # --- NEW: Robust Visualization for Tiled Results ---
-                # We create a Results object manually or just draw standard boxes
-                for j in range(len(final_boxes)):
-                    box = final_boxes[j]
-                    cls_id = int(final_cls[j])
-                    conf = final_scores[j]
-                    mask = final_masks[j]
-                    
-                    color = (0, 255, 0) if cls_id == 0 else (0, 0, 255) # G=V, R=NV
-                    pts = np.array(mask, np.int32).reshape((-1, 1, 2))
-                    
-                    # Thicker borders and semi-transparent fill
-                    overlay = original_img.copy()
-                    cv2.fillPoly(overlay, [pts], color)
-                    cv2.addWeighted(overlay, 0.4, original_img, 0.6, 0, original_img)
-                    cv2.polylines(original_img, [pts], True, color, 4) # Extra thick border
-                    
-                    # Clearer Label
-                    label = f"{'V' if cls_id == 0 else 'NV'} {conf:.2f}"
-                    font_scale = max(0.8, w_orig / 3000.0) # Scale with image size
-                    thickness = max(2, int(font_scale * 2))
-                    cv2.putText(original_img, label, (int(box[0]), int(box[1])-10), 
-                               cv2.FONT_HERSHEY_SIMPLEX, font_scale, color, thickness)
+                # Handled in the unified block below
+                pass
             else:
                  final_boxes, final_scores, final_cls, final_masks = [], [], [], []
         else:
             # For small images, use standard plotting which is very reliable
-            results = model(img_path, verbose=False, imgsz=1280, conf=CONF_THRESHOLD, project='/app/runs', name='predict')
-            original_img = results[0].plot(line_width=4, font_size=20) # Overwrite with plotted image
+            results = model(img_path, verbose=False, imgsz=1280, conf=CONF_THRESHOLD)
             
             if results[0].masks is not None:
                 final_boxes = results[0].boxes.xyxy.cpu().numpy()
@@ -229,11 +256,73 @@ def run_detection():
             else:
                 final_boxes, final_scores, final_cls, final_masks = [], [], [], []
 
+        # --- UNIFIED PARTICLE PROCESSING ---
         v_count, nv_count = 0, 0
-        for cls_id in final_cls:
-            if int(cls_id) == 0: v_count += 1
-            else: nv_count += 1
+        particle_data = []
         
+        # Pre-calculate areas and identify exclusions
+        for j in range(len(final_masks)):
+            mask = final_masks[j]
+            box = final_boxes[j]
+            cls_id = int(final_cls[j])
+            conf = float(final_scores[j])
+            
+            is_edge = is_touching_edge(mask, original_img.shape, margin=BORDER_MARGIN)
+            
+            # Efficient overlap check: only check against other masks
+            # We use a simple intersection check if masks are close (based on boxes)
+            is_overlap = False
+            for k in range(len(final_masks)):
+                if j == k: continue
+                # Bbox overlap check first
+                b1, b2 = box, final_boxes[k]
+                if not (b1[2] < b2[0] or b1[0] > b2[2] or b1[3] < b2[1] or b1[1] > b2[3]):
+                    # Potential mask overlap
+                    # For simplicity and speed in this context, we'll use a slightly cheaper check
+                    # but check_overlap is more accurate. Let's use it for now.
+                    if check_overlap(mask, [final_masks[k]], original_img.shape):
+                        is_overlap = True
+                        break
+            
+            is_excluded = is_edge or is_overlap
+            reason = []
+            if is_edge: reason.append("edge")
+            if is_overlap: reason.append("overlap")
+            
+            area, diameter = calculate_measurements(mask)
+            
+            color = EXCLUSION_COLOR if is_excluded else ((0, 255, 0) if cls_id == 0 else (0, 0, 255))
+            
+            if not is_excluded:
+                if cls_id == 0: v_count += 1
+                else: nv_count += 1
+            
+            # Visualization
+            pts = np.array(mask, np.int32).reshape((-1, 1, 2))
+            overlay = original_img.copy()
+            cv2.fillPoly(overlay, [pts], color)
+            cv2.addWeighted(overlay, 0.4, original_img, 0.6, 0, original_img)
+            cv2.polylines(original_img, [pts], True, color, 4)
+            
+            label = f"{'V' if cls_id == 0 else 'NV'} {conf:.2f}"
+            if is_excluded: label += f" ({'+'.join(reason)})"
+            
+            font_scale = max(0.8, w_orig / 3000.0)
+            thickness = max(2, int(font_scale * 2))
+            cv2.putText(original_img, label, (int(box[0]), int(box[1])-10), 
+                       cv2.FONT_HERSHEY_SIMPLEX, font_scale, color, thickness)
+            
+            particle_data.append({
+                'filename': img_file,
+                'particle_id': j,
+                'class': 'viable' if cls_id == 0 else 'non_viable',
+                'conf': conf,
+                'area_px': area,
+                'diameter_px': diameter,
+                'is_excluded': is_excluded,
+                'exclusion_reason': "+".join(reason) if reason else ""
+            })
+
         out_path = os.path.join(LOCAL_DETECTED, img_file)
         cv2.imwrite(out_path, original_img)
         
@@ -246,19 +335,31 @@ def run_detection():
             'filename': img_file,
             'viable': v_count,
             'non_viable': nv_count,
-            'total': v_count + nv_count
+            'total_counted': v_count + nv_count,
+            'total_detected': len(final_masks)
         })
+        
+        # Write detailed measurements per image to a list we'll concat later
+        if not hasattr(run_detection, 'all_particle_data'):
+            run_detection.all_particle_data = []
+        run_detection.all_particle_data.extend(particle_data)
 
-    # Save CSV
+    # Save Summaries and Detailed Measurements
     if data_rows:
         df = pd.DataFrame(data_rows)
         csv_path = os.path.join(LOCAL_DETECTED, 'pollen_counts.csv')
         df.to_csv(csv_path, index=False)
-        print("✅ Detection done.")
         
-        # Upload Results (CSV)
+        details_df = pd.DataFrame(run_detection.all_particle_data)
+        details_path = os.path.join(LOCAL_DETECTED, 'particle_measurements.csv')
+        details_df.to_csv(details_path, index=False)
+        
+        print(f"✅ Detection done. Saved summary to {csv_path} and details to {details_path}")
+        
+        # Upload Results
         if s3_client:
              upload_file_robust(s3_client, csv_path, S3_BUCKET, 'Ostatni/Pollen_viability/detected_images/pollen_counts.csv')
+             upload_file_robust(s3_client, details_path, S3_BUCKET, 'Ostatni/Pollen_viability/detected_images/particle_measurements.csv')
 
 if __name__ == "__main__":
     run_detection()
