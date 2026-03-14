@@ -17,6 +17,8 @@ from ultralytics import YOLO, settings
 from datetime import datetime
 import smtplib
 from email.message import EmailMessage
+import urllib.request
+import ssl
 
 # Update global settings to prevent "Permission denied" in /ultralytics/runs
 # This fixes the AMP check crash
@@ -239,8 +241,44 @@ def visualize_predictions(model, split='val', num_samples=None):
         cv2.imwrite(os.path.join(save_dir, f"pred_{img_file}"), res_plotted)
     print("✅ Prediction viz complete.")
 
+    print("✅ Upload complete.")
+
+def upload_file_robust(s3_client, local_path, bucket, key):
+    """
+    Robust upload using Presigned URL + urllib PUT to bypass
+    MissingContentLength / SSL issues with CESNET S3.
+    """
+    try:
+        # 1. Generate Presigned URL
+        url = s3_client.generate_presigned_url('put_object', 
+                                             Params={'Bucket': bucket, 'Key': key}, 
+                                             ExpiresIn=3600)
+        
+        # 2. Get file size
+        size = os.path.getsize(local_path)
+        
+        # 3. Create Request with Explicit Content-Length
+        with open(local_path, 'rb') as data:
+            req = urllib.request.Request(url, data=data, method='PUT')
+            req.add_header('Content-Length', str(size))
+            
+            # 4. Context to ignore SSL
+            ctx = ssl.create_default_context()
+            ctx.check_hostname = False
+            ctx.verify_mode = ssl.CERT_NONE
+            
+            with urllib.request.urlopen(req, context=ctx) as f:
+                if f.status == 200:
+                    print(f"   -> Uploaded {os.path.basename(local_path)} ✅")
+                else:
+                    print(f"   -> ⚠️ Upload rejected {os.path.basename(local_path)}: Status {f.status}")
+                    
+    except Exception as e:
+        print(f"❌ Failed to upload {local_path}: {e}")
+        pass
+
 def upload_results(s3, local_dir, train_name):
-    bucket = s3.Bucket(S3_BUCKET)
+    s3_client = s3.meta.client
     
     # 1. Weights & Metrics
     s3_prefix_run = f"Ostatni/Pollen_viability/trained_models/{train_name}"
@@ -251,8 +289,8 @@ def upload_results(s3, local_dir, train_name):
             for file in files:
                 local_path = os.path.join(root, file)
                 rel_path = os.path.relpath(local_path, local_dir)
-                with open(local_path, "rb") as data:
-                    bucket.put_object(Key=f"{s3_prefix_run}/{rel_path}", Body=data.read())
+                s3_key = f"{s3_prefix_run}/{rel_path}"
+                upload_file_robust(s3_client, local_path, S3_BUCKET, s3_key)
 
     # 2. Visualizations
     s3_prefix_vis = f"Ostatni/Pollen_viability/trained_models/{train_name}/visualizations"
@@ -262,10 +300,8 @@ def upload_results(s3, local_dir, train_name):
             for file in files:
                 local_path = os.path.join(root, file)
                 rel_path = os.path.relpath(local_path, VIS_DIR)
-                with open(local_path, "rb") as data:
-                    bucket.put_object(Key=f"{s3_prefix_vis}/{rel_path}", Body=data.read())
-                
-    print("✅ Upload complete.")
+                s3_key = f"{s3_prefix_vis}/{rel_path}"
+                upload_file_robust(s3_client, local_path, S3_BUCKET, s3_key)
 
 def send_notification(subject, body):
     if not GMAIL_APP_PASSWORD:
@@ -334,7 +370,7 @@ def main():
         results = model.train(
             data=yaml_path,
             epochs=args.epochs,
-           # patience=50,
+            patience=0, # Disable early stopping to ensure fixed epoch count
             batch=args.batch,
             imgsz=640,
             device=device,

@@ -6,6 +6,7 @@ import glob
 import os
 import urllib.request
 import ssl
+import numpy as np
 from ultralytics import YOLO
 from torchvision.ops import nms
 from botocore.client import Config
@@ -19,6 +20,7 @@ AWS_SECRET_ACCESS_KEY = os.environ.get('AWS_SECRET_ACCESS_KEY')
 LOCAL_DETECT_IMAGES = 'detect_images'
 LOCAL_DETECTED = 'detected'
 LOCAL_MODEL = 'best.pt'
+S3_MODEL_KEY = os.environ.get('S3_MODEL_KEY', 'Ostatni/Pollen_viability/trained_models/pollen_v1_27/weights/best.ptrom')
 
 CONF_THRESHOLD = 0.25
 IOU_MERGE_THRESHOLD = 0.45
@@ -111,8 +113,8 @@ def run_detection():
         except Exception as e:
              print(f"⚠️ S3 Download Failed (Partial?), processing what we have... Error: {e}")
         
-        # Download Model - USER PROVIDED (Note: .ptrom extension found on S3)
-        S3_MODEL_KEY = 'Ostatni/Pollen_viability/trained_models/pollen_v1_27/weights/best.ptrom'
+        # Download Model - Now using environment variable
+        print(f"⬇️ Downloading Model from S3: {S3_MODEL_KEY}...")
         
         if not os.path.exists(LOCAL_MODEL):
             print(f"⬇️ Downloading Model from S3: {S3_MODEL_KEY}...")
@@ -188,10 +190,37 @@ def run_detection():
                 final_scores = scores_t[keep].numpy()
                 final_cls = torch.tensor(all_cls)[keep].numpy()
                 final_masks = [all_masks[idx] for idx in keep]
+
+                # --- NEW: Robust Visualization for Tiled Results ---
+                # We create a Results object manually or just draw standard boxes
+                for j in range(len(final_boxes)):
+                    box = final_boxes[j]
+                    cls_id = int(final_cls[j])
+                    conf = final_scores[j]
+                    mask = final_masks[j]
+                    
+                    color = (0, 255, 0) if cls_id == 0 else (0, 0, 255) # G=V, R=NV
+                    pts = np.array(mask, np.int32).reshape((-1, 1, 2))
+                    
+                    # Thicker borders and semi-transparent fill
+                    overlay = original_img.copy()
+                    cv2.fillPoly(overlay, [pts], color)
+                    cv2.addWeighted(overlay, 0.4, original_img, 0.6, 0, original_img)
+                    cv2.polylines(original_img, [pts], True, color, 4) # Extra thick border
+                    
+                    # Clearer Label
+                    label = f"{'V' if cls_id == 0 else 'NV'} {conf:.2f}"
+                    font_scale = max(0.8, w_orig / 3000.0) # Scale with image size
+                    thickness = max(2, int(font_scale * 2))
+                    cv2.putText(original_img, label, (int(box[0]), int(box[1])-10), 
+                               cv2.FONT_HERSHEY_SIMPLEX, font_scale, color, thickness)
             else:
                  final_boxes, final_scores, final_cls, final_masks = [], [], [], []
         else:
+            # For small images, use standard plotting which is very reliable
             results = model(img_path, verbose=False, imgsz=1280, conf=CONF_THRESHOLD, project='/app/runs', name='predict')
+            original_img = results[0].plot(line_width=4, font_size=20) # Overwrite with plotted image
+            
             if results[0].masks is not None:
                 final_boxes = results[0].boxes.xyxy.cpu().numpy()
                 final_scores = results[0].boxes.conf.cpu().numpy()
@@ -201,40 +230,9 @@ def run_detection():
                 final_boxes, final_scores, final_cls, final_masks = [], [], [], []
 
         v_count, nv_count = 0, 0
-        COLOR_VIABLE = (0, 200, 0)
-        COLOR_NON_VIABLE = (0, 0, 255)
-
-        # Create overlay for transparent fill
-        overlay = original_img.copy()
-
-        for j in range(len(final_boxes)):
-            cls_id = int(final_cls[j])
-            conf = final_scores[j]
-            mask = final_masks[j]
-            
-            if len(mask) == 0: continue
-            
-            color = COLOR_VIABLE if cls_id == 0 else COLOR_NON_VIABLE
-            
-            if cls_id == 0: v_count += 1
+        for cls_id in final_cls:
+            if int(cls_id) == 0: v_count += 1
             else: nv_count += 1
-            
-            pts = np.array(mask, np.int32).reshape((-1, 1, 2))
-            
-            # Fill Polygon
-            cv2.fillPoly(overlay, [pts], color)
-            # Draw Border
-            cv2.polylines(original_img, [pts], True, color, 3)
-            
-            # Draw confidence text near the top point of the polygon
-            top_pt = min(pts, key=lambda p: p[0][1])[0]
-            if w_orig < 5000:
-                label = f"{'V' if cls_id == 0 else 'NV'} {conf:.2f}"
-                cv2.putText(original_img, label, (int(top_pt[0]), max(0, int(top_pt[1])-10)), 
-                           cv2.FONT_HERSHEY_SIMPLEX, 0.9, color, 2)
-                           
-        # Blend overlay for transparent fill effect (opacity 0.3)
-        cv2.addWeighted(overlay, 0.3, original_img, 0.7, 0, original_img)
         
         out_path = os.path.join(LOCAL_DETECTED, img_file)
         cv2.imwrite(out_path, original_img)

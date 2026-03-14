@@ -37,5 +37,7 @@ spec:
               value: "1Y920BKC0SAWPNDE8RD6"
             - name: AWS_SECRET_ACCESS_KEY
               value: "SnKMQbJ8mRKVboPDymkYFaFTz7VBxysrsWwJRoMD"
+            - name: S3_MODEL_KEY
+              value: "Ostatni/Pollen_viability/trained_models/pollen_train_20260313_2153/weights/best.pt"
       restartPolicy: Never
   backoffLimit: 2
