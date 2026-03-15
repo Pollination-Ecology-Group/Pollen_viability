@@ -53,34 +53,30 @@ sed "s|image: .*|image: $IMAGE_NAME|g" k8s/pollen-job.yaml | $KUBECTL apply -f -
 
 echo "⏳ 5. Waiting for Pod to start..."
 # Wait for the pod to be created and reach a loggable state
-max_retries=30
+max_retries=300 # 10 minutes (300 * 2s)
 count=0
-echo -n "   Waiting for pod..."
+echo -n "   Waiting for pod to start (max 10m)..."
 while : ; do
-    # Get Pod Phase and Container State
-    POD_JSON=$($KUBECTL get pods -n $NAMESPACE -l job-name=pollen-detector-job -o json 2>/dev/null | python3 -c "import sys, json; data=json.load(sys.stdin); print(json.dumps(data['items'][0] if data.get('items') else {}))" 2>/dev/null || echo "{}")
-    POD_PHASE=$(echo "$POD_JSON" | python3 -c "import sys, json; print(json.load(sys.stdin).get('status', {}).get('phase', 'NotFound'))" 2>/dev/null || echo "NotFound")
+    # Get the name of the most recent pod for this job
+    POD_NAME=$($KUBECTL get pods -n $NAMESPACE -l job-name=pollen-detector-job --sort-by=.metadata.creationTimestamp -o jsonpath='{.items[-1:].metadata.name}' 2>/dev/null || echo "")
     
-    # Check if container is actually running or finished (not in ContainerCreating)
-    CONTAINER_STATE=$(echo "$POD_JSON" | python3 -c "import sys, json; 
-try:
-    s = json.load(sys.stdin).get('status', {}).get('containerStatuses', [{}])[0].get('state', {})
-    if 'waiting' in s: print(s['waiting'].get('reason', 'Waiting'))
-    elif 'running' in s: print('Running')
-    elif 'terminated' in s: print('Terminated')
-    else: print('Unknown')
-except: print('NotFound')
-" 2>/dev/null || echo "NotFound")
+    if [ -n "$POD_NAME" ]; then
+        # Get Pod Phase and Container State
+        POD_INFO=$($KUBECTL get pod "$POD_NAME" -n $NAMESPACE -o jsonpath='{.status.phase} {.status.containerStatuses[0].state}' 2>/dev/null || echo "NotFound {}")
+        PHASE=$(echo "$POD_INFO" | cut -d' ' -f1)
+        STATE=$(echo "$POD_INFO" | cut -d' ' -f2-)
 
-    if [ "$POD_PHASE" = "Running" ] || [ "$POD_PHASE" = "Succeeded" ] || [ "$POD_PHASE" = "Failed" ]; then
-        if [ "$CONTAINER_STATE" != "ContainerCreating" ] && [ "$CONTAINER_STATE" != "PodInitializing" ] && [ "$CONTAINER_STATE" != "Waiting" ]; then
-             echo " ✅ ($POD_PHASE/$CONTAINER_STATE)"
-             break
+        if [ "$PHASE" = "Running" ] || [ "$PHASE" = "Succeeded" ] || [ "$PHASE" = "Failed" ]; then
+            # Ensure container is not still creating
+            if echo "$STATE" | grep -qvE "waiting|ContainerCreating|PodInitializing"; then
+                echo " ✅ ($PHASE)"
+                break
+            fi
         fi
     fi
     
     if [ $count -gt $max_retries ]; then
-        echo " ❌ Timeout waiting for pod."
+        echo " ❌ Timeout waiting for pod. pod=$POD_NAME phase=$PHASE state=$STATE"
         exit 1
     fi
     

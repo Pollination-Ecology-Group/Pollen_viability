@@ -1,50 +1,186 @@
 [
   {
-    "objectID": "vignettes/routine_detection_manual.html",
-    "href": "vignettes/routine_detection_manual.html",
-    "title": "Routine Pollen Detection Manual",
+    "objectID": "outcomes/pollen_viability_report.html",
+    "href": "outcomes/pollen_viability_report.html",
+    "title": "Pollen viability - summary",
     "section": "",
-    "text": "This guide walks you through the full process of running an automated pollen viability analysis — from preparing your images to downloading your results. No programming experience is required.\n\n[!NOTE] This pipeline runs the heavy computation on a remote university server (CESNET cluster), so it works even on modest laptops. You only need to start the job from your computer — the actual image analysis happens remotely.\n\n\n\n\nYou only need to do these steps once when setting up the workflow for the first time.\n\n\nAll images and results are stored in the CESNET S3 cloud. You need access before anything else.\n👉 Follow the CESNET S3 Connection Guide\nThis will take you through applying for access, generating your personal keys, and installing Cyberduck (the tool you will use to upload and download files).\n\n\n\n\nThe detection pipeline is run via a script. You need to have the project code and its required tools installed once on the computer you’ll use to launch jobs.\n\n\nYou will need three programs installed:\n\n\n\nProgram\nWhat it does\nDownload\n\n\n\n\nGit\nDownloads the project code\ngit-scm.com\n\n\nDocker Desktop\nPackages the detection code to run on the cluster\ndocker.com/get-started\n\n\nWSL 2 (Windows only)\nLets Windows run Linux-style scripts\nMicrosoft Docs\n\n\n\n\n[!IMPORTANT] On Windows: After installing WSL 2, open Docker Desktop → Settings → Resources → WSL Integration and enable it for your Linux distribution. On Linux: After installing Docker, run sudo usermod -aG docker $USER and log out and back in.\n\n\n\n\nOpen a terminal (on Windows: search for “Ubuntu” or “WSL” in the Start menu) and type:\ngit clone https://github.com/Pollination-Ecology-Group/Pollen_viability.git\ncd Pollen_viability\nThis downloads all the scripts you need into a folder called Pollen_viability.\n\n\n\nYou will also need the kubeconfig.yaml file — this is the key that lets your computer talk to the CESNET cluster. Ask the project lead to send you this file, then place it inside the Pollen_viability folder you just downloaded.\n\n\n\n\n\n\nOnce setup is complete, running detection every time takes just 3 steps.\n\n\nUsing Cyberduck, navigate to the Ostatni/Pollen_viability/detect_images/ folder in the S3 bucket and drag your microscope images (TIF or JPG format) into it.\n\n[!TIP] You can upload a whole folder at once. Just drag it into the Cyberduck window.\n\n\n\n\n\nOpen a terminal (on Windows: Ubuntu / WSL) and navigate to the project folder:\ncd Pollen_viability\nThen run:\n./deploy_pollen.sh\n\n[!NOTE] The first time you run this, Docker will download several components. This may take 5–15 minutes depending on your internet speed. Subsequent runs are much faster.\n\nYou will see output in the terminal that looks like this:\n🌸 Pollen Detector Deployment Script\n🚀 1. Building Docker image...\n☁️ 2. Pushing image...\n🚀 4. Deploying Job to Cluster...\n👀 6. Streaming logs...\nThe terminal will then show live progress from the cluster. You don’t need to do anything — just wait.\n\n[!TIP] If you see a permission denied error when running ./deploy_pollen.sh, try:\nLinux: sg docker -c ./deploy_pollen.sh\nWindows (WSL): Make sure Docker Desktop is running and WSL integration is enabled.\n\n\n\n\n\nOnce the detection finishes (the terminal shows it has completed), your results are automatically uploaded to the S3 bucket.\nOpen Cyberduck and navigate to: - Ostatni/Pollen_viability/detected_images/ — Annotated images with coloured bounding boxes showing which pollen grains are viable (green) and non-viable (red). - Ostatni/Pollen_viability/pollen_counting_results/ — CSV summary files (pollen_counts.csv) with counts and viability percentages per image.\nDownload these files to your computer by right-clicking → Download in Cyberduck.\n\n\n\n\n\n\n\n\n\n\n\n\nProblem\nSolution\n\n\n\n\npermission denied when running script\nSee the tip in Step 2 above\n\n\nDocker Desktop not starting\nMake sure WSL 2 is installed and enabled\n\n\nScript says “cannot connect to cluster”\nCheck that kubeconfig.yaml is in the Pollen_viability folder\n\n\nNo files appear in S3 after job finishes\nWait a few minutes; large jobs can take time to upload results\n\n\nAny other issue\nContact the project lead or schedule a meeting",
+    "text": "library(ggplot2)\npollen_viability &lt;- read.csv(\"pollen_counting_results/pollen_counts.csv\")\n\n\n# Define the pattern\n# Matches ([Ss]?\\d+x) or (\\d+x) potentially without leading S\npattern &lt;- \"([Ss]?\\\\d+x)_([A-Z0-9])\"\n\n# Find matches\nmatches &lt;- regexec(pattern, pollen_viability$filename)\nmatch_list &lt;- regmatches(pollen_viability$filename, matches)\n\n# Handle cases where match failed (e.g. empty match)\nploidy_level &lt;- sapply(match_list, function(x) if(length(x) &gt;= 2) x[2] else \"Unknown\")\nreplication &lt;- sapply(match_list, function(x) if(length(x) &gt;= 3) x[3] else \"Unknown\")\n\n# Calculate viability percent (column was renamed from total to total_counted)\n# We handle both cases just in case\ntotal_col &lt;- if(\"total_counted\" %in% names(pollen_viability)) \"total_counted\" else \"total\"\npollen_viability$viability_percent &lt;- (pollen_viability$viable / pollen_viability[[total_col]]) * 100\n\n# Create the final dataframe\npollen_viability2 &lt;- data.frame(\n    filename = pollen_viability$filename,\n    viability_percent = pollen_viability$viability_percent,\n    ploidy_level = ploidy_level,\n    replication = replication\n)\n\n# cheking ploidy level\ntable(pollen_viability2$ploidy_level)\n\n\n 2x  4x S2x s4x S4x \n166 170  99   3 114 \n\n# repairing ploidy level naming typo to ensure consistency (2x, S2x, 4x, S4x)\npollen_viability2$ploidy_level[pollen_viability2$ploidy_level == \"s2x\"] &lt;- \"S2x\"\npollen_viability2$ploidy_level[pollen_viability2$ploidy_level == \"s4x\"] &lt;- \"S4x\"\n# Note: 2x and 4x are kept as distinct levels\n\nThe echo: false option disables the printing of code (only output is displayed).\n\nplot(as.factor(pollen_viability2$ploidy_level), as.numeric(pollen_viability2$viability_percent), ylim = c(0, 100), xlim = c(0, 5))\n\n\n\n\n\n\n\n# zkusit biomodial?\n\np &lt;- ggplot(pollen_viability2, aes(ploidy_level, viability_percent))\np + geom_boxplot(outlier.shape = NA) + geom_jitter(width = 0.2, alpha = 0.5) +\n    theme_classic()\n\n\n\n\n\n\n\np + geom_violin() + geom_jitter(height = 0, width = 0.1, alpha = 0.5) +\n    theme_classic() + labs(x = \"Ploidy level\", y = \"Pollen viability (%)\") + ggtitle(\"Pollen viability\", subtitle = \"Before excluding weird images\")",
     "crumbs": [
       "Home",
-      "Guides",
-      "Routine Detection Manual"
+      "Results",
+      "Pollen Viability Report"
     ]
   },
   {
-    "objectID": "vignettes/routine_detection_manual.html#before-you-start-one-time-setup",
-    "href": "vignettes/routine_detection_manual.html#before-you-start-one-time-setup",
-    "title": "Routine Pollen Detection Manual",
-    "section": "",
-    "text": "You only need to do these steps once when setting up the workflow for the first time.\n\n\nAll images and results are stored in the CESNET S3 cloud. You need access before anything else.\n👉 Follow the CESNET S3 Connection Guide\nThis will take you through applying for access, generating your personal keys, and installing Cyberduck (the tool you will use to upload and download files).\n\n\n\n\nThe detection pipeline is run via a script. You need to have the project code and its required tools installed once on the computer you’ll use to launch jobs.\n\n\nYou will need three programs installed:\n\n\n\nProgram\nWhat it does\nDownload\n\n\n\n\nGit\nDownloads the project code\ngit-scm.com\n\n\nDocker Desktop\nPackages the detection code to run on the cluster\ndocker.com/get-started\n\n\nWSL 2 (Windows only)\nLets Windows run Linux-style scripts\nMicrosoft Docs\n\n\n\n\n[!IMPORTANT] On Windows: After installing WSL 2, open Docker Desktop → Settings → Resources → WSL Integration and enable it for your Linux distribution. On Linux: After installing Docker, run sudo usermod -aG docker $USER and log out and back in.\n\n\n\n\nOpen a terminal (on Windows: search for “Ubuntu” or “WSL” in the Start menu) and type:\ngit clone https://github.com/Pollination-Ecology-Group/Pollen_viability.git\ncd Pollen_viability\nThis downloads all the scripts you need into a folder called Pollen_viability.\n\n\n\nYou will also need the kubeconfig.yaml file — this is the key that lets your computer talk to the CESNET cluster. Ask the project lead to send you this file, then place it inside the Pollen_viability folder you just downloaded.",
+    "objectID": "outcomes/pollen_viability_report.html#low-pollen-viability-samples",
+    "href": "outcomes/pollen_viability_report.html#low-pollen-viability-samples",
+    "title": "Pollen viability - summary",
+    "section": "Low pollen viability samples",
+    "text": "Low pollen viability samples\n\n# Filter for samples with less than 10% viability\nlow_viability &lt;- pollen_viability2[pollen_viability2$viability_percent &lt; 10, ]\nlow_viability &lt;- low_viability[order(low_viability$viability_percent), ]\n\n# Display as a table\nknitr::kable(low_viability[, c(\"filename\", \"viability_percent\", \"ploidy_level\")],\n    caption = \"Samples with &lt;10% Viability\",\n    row.names = FALSE\n)\n\n\nSamples with &lt;10% Viability\n\n\nfilename\nviability_percent\nploidy_level\n\n\n\n\n1-6-J_4x_C.jpg\n7.98722\n4x",
     "crumbs": [
       "Home",
-      "Guides",
-      "Routine Detection Manual"
+      "Results",
+      "Pollen Viability Report"
     ]
   },
   {
-    "objectID": "vignettes/routine_detection_manual.html#routine-detection-step-by-step",
-    "href": "vignettes/routine_detection_manual.html#routine-detection-step-by-step",
-    "title": "Routine Pollen Detection Manual",
+    "objectID": "vignettes/kubernetes_workflow.html",
+    "href": "vignettes/kubernetes_workflow.html",
+    "title": "Kubernetes Workflow Guide for Pollen Viability",
     "section": "",
-    "text": "Once setup is complete, running detection every time takes just 3 steps.\n\n\nUsing Cyberduck, navigate to the Ostatni/Pollen_viability/detect_images/ folder in the S3 bucket and drag your microscope images (TIF or JPG format) into it.\n\n[!TIP] You can upload a whole folder at once. Just drag it into the Cyberduck window.\n\n\n\n\n\nOpen a terminal (on Windows: Ubuntu / WSL) and navigate to the project folder:\ncd Pollen_viability\nThen run:\n./deploy_pollen.sh\n\n[!NOTE] The first time you run this, Docker will download several components. This may take 5–15 minutes depending on your internet speed. Subsequent runs are much faster.\n\nYou will see output in the terminal that looks like this:\n🌸 Pollen Detector Deployment Script\n🚀 1. Building Docker image...\n☁️ 2. Pushing image...\n🚀 4. Deploying Job to Cluster...\n👀 6. Streaming logs...\nThe terminal will then show live progress from the cluster. You don’t need to do anything — just wait.\n\n[!TIP] If you see a permission denied error when running ./deploy_pollen.sh, try:\nLinux: sg docker -c ./deploy_pollen.sh\nWindows (WSL): Make sure Docker Desktop is running and WSL integration is enabled.\n\n\n\n\n\nOnce the detection finishes (the terminal shows it has completed), your results are automatically uploaded to the S3 bucket.\nOpen Cyberduck and navigate to: - Ostatni/Pollen_viability/detected_images/ — Annotated images with coloured bounding boxes showing which pollen grains are viable (green) and non-viable (red). - Ostatni/Pollen_viability/pollen_counting_results/ — CSV summary files (pollen_counts.csv) with counts and viability percentages per image.\nDownload these files to your computer by right-clicking → Download in Cyberduck.",
+    "text": "This guide documents the automated workflow for deploying Pollen Viability detection and training jobs to the CERIT-SC Kubernetes cluster.\n\n\nThe system runs as ephemeral Kubernetes Jobs. It follows this data flow:\n\nInput: Data (images/datasets) is read from S3 Storage.\nProcessing: A Docker container crashes processing logic (YOLOv8 + Custom Scripts).\nOutput: Results (CSV, Annotated Images, Trained Models) are uploaded back to S3.\n\n\n\n\n\n\n\nKubeconfig: You must have a valid kubeconfig.yaml in the project root. &gt; How to obtain: &gt; 1. Log in to Rancher Dashboard. &gt; 2. Open your assigned cluster. &gt; 3. Click “Download Kubeconfig” (Top Right) or “Kubeconfig File” icon. &gt; 4. Save as kubeconfig.yaml in this project folder. &gt; 5. Security: Run chmod 600 kubeconfig.yaml to secure the file.\nDocker: Must be installed locally to build images.\nkubectl: auto-downloaded by the scripts if missing.\n\n\n\n\nTo detect viable pollen in new images:\n\nEnsure input images are in S3: Ostatni/Pollen_viability/detect_images.\nRun the deployment script: bash     ./deploy_pollen.sh\nWhat happens?\n\nThe script builds a Docker image.\nPushes it to ttl.sh (ephemeral registry).\nLaunches a K8s Job (pollen-detector-job) in namespace stenc-ns.\nStreams logs until completion.\n\nResults: Check S3: Ostatni/Pollen_viability/detected_images.\n\n\n\n\nTo retrain the YOLOv8 model:\n\nEnsure datasets are in S3 (datasets/pollen_v1).\nRun the training deployment: bash     ./deploy_training.sh\nProcess:\n\nSyncs datasets and staging area from S3.\nMerges new labelled data.\nGenerates synthetic negative samples.\nTrains the model (approx 2-4 hours).\nUploads the best model (best.pt) and charts to S3.\n\n\n\n\n\n\n\n\n\n\n\n\n\nFile\nPurpose\n\n\n\n\ndeploy_pollen.sh\nOrchestrates the detection workflow. Builds Docker -&gt; Deploys Job.\n\n\ndeploy_training.sh\nOrchestrates the training workflow.\n\n\npollen-job.yaml\nKubernetes Manifest for detection. Defines resources (GPU/RAM) and env vars.\n\n\npollen-train-job.yaml\nKubernetes Manifest for training.\n\n\nDockerfile\nDefines the environment (Python, YOLOv8, non-root user).\n\n\nrun_detection.py\nCore script for detection logic + S3 sync.\n\n\ntrain_model.py\nCore script for training logic + S3 sync.\n\n\n\n\n\n\n\nNamespace: stenc-ns (Your isolated environment).\nUsers: Pods run as appuser (UID 1000) for security compliance.\nSecrets: AWS credentials are injected via Environment Variables in the YAML files.\n\n\n\n\n\n“Forbidden” errors: Ensure kubeconfig.yaml is correct and you are deploying to stenc-ns.\n“ImagePullBackOff”: The ttl.sh image might have expired (they last 24h). Re-run the deploy script to rebuild and push.\nEmpty Output: Check S3 paths in run_detection.py. Verify source images exist.",
     "crumbs": [
       "Home",
       "Guides",
-      "Routine Detection Manual"
+      "Kubernetes Workflow"
     ]
   },
   {
-    "objectID": "vignettes/routine_detection_manual.html#troubleshooting",
-    "href": "vignettes/routine_detection_manual.html#troubleshooting",
-    "title": "Routine Pollen Detection Manual",
+    "objectID": "vignettes/kubernetes_workflow.html#architecture-overview",
+    "href": "vignettes/kubernetes_workflow.html#architecture-overview",
+    "title": "Kubernetes Workflow Guide for Pollen Viability",
     "section": "",
-    "text": "Problem\nSolution\n\n\n\n\npermission denied when running script\nSee the tip in Step 2 above\n\n\nDocker Desktop not starting\nMake sure WSL 2 is installed and enabled\n\n\nScript says “cannot connect to cluster”\nCheck that kubeconfig.yaml is in the Pollen_viability folder\n\n\nNo files appear in S3 after job finishes\nWait a few minutes; large jobs can take time to upload results\n\n\nAny other issue\nContact the project lead or schedule a meeting",
+    "text": "The system runs as ephemeral Kubernetes Jobs. It follows this data flow:\n\nInput: Data (images/datasets) is read from S3 Storage.\nProcessing: A Docker container crashes processing logic (YOLOv8 + Custom Scripts).\nOutput: Results (CSV, Annotated Images, Trained Models) are uploaded back to S3.",
     "crumbs": [
       "Home",
       "Guides",
-      "Routine Detection Manual"
+      "Kubernetes Workflow"
+    ]
+  },
+  {
+    "objectID": "vignettes/kubernetes_workflow.html#quick-start",
+    "href": "vignettes/kubernetes_workflow.html#quick-start",
+    "title": "Kubernetes Workflow Guide for Pollen Viability",
+    "section": "",
+    "text": "Kubeconfig: You must have a valid kubeconfig.yaml in the project root. &gt; How to obtain: &gt; 1. Log in to Rancher Dashboard. &gt; 2. Open your assigned cluster. &gt; 3. Click “Download Kubeconfig” (Top Right) or “Kubeconfig File” icon. &gt; 4. Save as kubeconfig.yaml in this project folder. &gt; 5. Security: Run chmod 600 kubeconfig.yaml to secure the file.\nDocker: Must be installed locally to build images.\nkubectl: auto-downloaded by the scripts if missing.\n\n\n\n\nTo detect viable pollen in new images:\n\nEnsure input images are in S3: Ostatni/Pollen_viability/detect_images.\nRun the deployment script: bash     ./deploy_pollen.sh\nWhat happens?\n\nThe script builds a Docker image.\nPushes it to ttl.sh (ephemeral registry).\nLaunches a K8s Job (pollen-detector-job) in namespace stenc-ns.\nStreams logs until completion.\n\nResults: Check S3: Ostatni/Pollen_viability/detected_images.\n\n\n\n\nTo retrain the YOLOv8 model:\n\nEnsure datasets are in S3 (datasets/pollen_v1).\nRun the training deployment: bash     ./deploy_training.sh\nProcess:\n\nSyncs datasets and staging area from S3.\nMerges new labelled data.\nGenerates synthetic negative samples.\nTrains the model (approx 2-4 hours).\nUploads the best model (best.pt) and charts to S3.",
+    "crumbs": [
+      "Home",
+      "Guides",
+      "Kubernetes Workflow"
+    ]
+  },
+  {
+    "objectID": "vignettes/kubernetes_workflow.html#file-structure",
+    "href": "vignettes/kubernetes_workflow.html#file-structure",
+    "title": "Kubernetes Workflow Guide for Pollen Viability",
+    "section": "",
+    "text": "File\nPurpose\n\n\n\n\ndeploy_pollen.sh\nOrchestrates the detection workflow. Builds Docker -&gt; Deploys Job.\n\n\ndeploy_training.sh\nOrchestrates the training workflow.\n\n\npollen-job.yaml\nKubernetes Manifest for detection. Defines resources (GPU/RAM) and env vars.\n\n\npollen-train-job.yaml\nKubernetes Manifest for training.\n\n\nDockerfile\nDefines the environment (Python, YOLOv8, non-root user).\n\n\nrun_detection.py\nCore script for detection logic + S3 sync.\n\n\ntrain_model.py\nCore script for training logic + S3 sync.",
+    "crumbs": [
+      "Home",
+      "Guides",
+      "Kubernetes Workflow"
+    ]
+  },
+  {
+    "objectID": "vignettes/kubernetes_workflow.html#access-security",
+    "href": "vignettes/kubernetes_workflow.html#access-security",
+    "title": "Kubernetes Workflow Guide for Pollen Viability",
+    "section": "",
+    "text": "Namespace: stenc-ns (Your isolated environment).\nUsers: Pods run as appuser (UID 1000) for security compliance.\nSecrets: AWS credentials are injected via Environment Variables in the YAML files.",
+    "crumbs": [
+      "Home",
+      "Guides",
+      "Kubernetes Workflow"
+    ]
+  },
+  {
+    "objectID": "vignettes/kubernetes_workflow.html#troubleshooting",
+    "href": "vignettes/kubernetes_workflow.html#troubleshooting",
+    "title": "Kubernetes Workflow Guide for Pollen Viability",
+    "section": "",
+    "text": "“Forbidden” errors: Ensure kubeconfig.yaml is correct and you are deploying to stenc-ns.\n“ImagePullBackOff”: The ttl.sh image might have expired (they last 24h). Re-run the deploy script to rebuild and push.\nEmpty Output: Check S3 paths in run_detection.py. Verify source images exist.",
+    "crumbs": [
+      "Home",
+      "Guides",
+      "Kubernetes Workflow"
+    ]
+  },
+  {
+    "objectID": "index.html",
+    "href": "index.html",
+    "title": "🌸 Pollen Viability Detector (YOLOv8)",
+    "section": "",
+    "text": "An automated computer vision pipeline for assessing pollen viability using the Alexander Stain technique. This project leverages YOLOv8 to detect and classify pollen grains as either Viable (Magenta/Purple) or Non-Viable (Green/Shriveled) from high-resolution microscope images.\n\n\n\n🌸 Pollen Viability Detector (YOLOv8)\n\n📌 Table of Contents\n🔭 Project Overview\n🔬 Methodology\n\nKey Strategies used in this model:\n\n⚙️ Workflow Setup\n\n1. Connecting to CESNET\n2. Kubernetes Workflow\n2. Environment Installation\n\n🏷️ Labeling Guide (Roboflow)\n\n1. Class: viable (Target)\n2. Class: non_viable (Target)\n3. Edge Cases & Rules\n\n🏋️ Training (CESNET Cluster)\n🔍 Routine Detection\n\n\n\n\n\n\nThis tool automates the tedious process of counting pollen grains on microscope slides. It uses deep learning to replicate the judgment of a biologist following the Alexander Stain protocol.\n\nInput: High-resolution microscope images (TIF/JPG).\nOutput: Annotated images with bounding boxes, CSV summaries of counts, and viability percentages.\nPerformance: Optimized for large, crowded scans using tiling and global Non-Maximum Suppression (NMS).\n\n\n\n\n\nThe project runs on the CESNET MetaCentrum high-performance computing cluster, utilizing NVIDIA A40/A100 GPUs for rapid training and inference.\n\n\n\nMosaic Disabling: We disable mosaic augmentation for the final 10 epochs of training. This stabilizes the training loss and prevents the model from hallucinating pollen in empty space (ghost detections).\nHigh-Res Tiling: For inference, large microscope scans (&gt;2000px) are sliced into overlapping tiles (1600x1600px). This prevents the “Squish Effect,” ensuring small grains retain their texture and are not lost during resizing.\nBorder Patrol: To prevent double-counting grains on tile edges, we implement a custom logic that ignores edge detections, relying on the neighboring tile to capture the grain centrally.\n\n\n\n\n\n\nThis project has migrated from Google Colab to the CESNET Cluster for better performance and data privacy.\n\n\nDetailed instructions on how to set up your environment, connect via SSH, and manage files can be found in our connection guide:\n👉 CESNET Connection Guide\n\n\n\nFor instructions on running detection and training jobs: 👉 Kubernetes Workflow Guide\n\n\n\nThe environment uses a custom Jupyter kernel. Dependencies include ultralytics, opencv-python-headless, and pandas. (See the setup_environment.py script in the repo for automated dependency handling).\n\n\n\n\n\nWe use Roboflow for annotating datasets. If you are contributing to the dataset, please adhere to strict Alexander Stain criteria.\nSource: Pollen Viability Staining Guide (Alexander Stain)\n\n\nDefinition: Pollen grains that contain healthy, full cytoplasm and are capable of fertilization.\n\nColor: Must be Magenta-Red or Dark Purple.\nContent: The grain appears “full” and dense, indicating the presence of cytoplasm.\nShape: Typically regular, round, or plump.\nRule of Thumb: If it is dark red/purple and looks “full,” label it Viable.\n\n\nExample:  (Add your example image here)\n\n\n\n\nDefinition: Pollen grains that are aborted, empty, or dead. They lack the cytoplasm required for fertilization.\n\nColor: Primarily Pale.\nContent: Appears empty; only the outer cell wall is visible.\nShape: Often shrivelled, collapsed, or significantly smaller than viable grains.\nIntermediate Cases:\n\nPale Pink / Orange: Grains that are very pale or only partially stained red are likely aborted. Label as Non-Viable unless they are fully dark.\nEmpty Shells: Transparent or faint outlines with no colour.\n\n\n\nExample:  (Add your example image here)\n\n\n\n\n\nClusters: If grains are touching, draw a separate box for each individual grain. Do not draw one big box around a clump.\nCut-off Grains: If &gt;50% of the grain is visible at the image edge, label it. If &lt;50% is visible, ignore it.\nDebris: Do not label dirt, bubbles, or stain blobs. Only label clear pollen grains.\n\n\n\n\n\n\nTraining is now fully automated using Kubernetes jobs managed by deploy_training.sh.\nWorkflow: 1. Script: src/train_model.py handles the entire pipeline. 2. Data: Automatically syncs datasets and staging areas from S3. 3. Configuration: * Epochs: 300 * Image Size: 640px * Batch Size: 16 * Augmentations: Full rotation (180°), flips, and Mosaic (1.0). 4. Process: Merges new staged data, generates synthetic negatives, and trains YOLOv8x. 5. Backup: Results (weights, logs, visualizations) are automatically uploaded back to S3.\nTo Run:\nsudo ./deploy_training.sh\n\n\n\n\nDetection is handled by src/run_detection.py and deployed via deploy_pollen.sh.\n👉 Routine Detection Manual\nQuickstart Pipeline: 1. Upload images via Cyberduck to the S3 Bucket detect_images/ folder. 2. Deploy the job:\nsudo ./deploy_pollen.sh\n\nSync results locally (automatic or manual):\n\npython3 src/sync_results.py\n\nLicense: MIT",
+    "crumbs": [
+      "Home",
+      "Home & Overview"
+    ]
+  },
+  {
+    "objectID": "index.html#table-of-contents",
+    "href": "index.html#table-of-contents",
+    "title": "🌸 Pollen Viability Detector (YOLOv8)",
+    "section": "",
+    "text": "🌸 Pollen Viability Detector (YOLOv8)\n\n📌 Table of Contents\n🔭 Project Overview\n🔬 Methodology\n\nKey Strategies used in this model:\n\n⚙️ Workflow Setup\n\n1. Connecting to CESNET\n2. Kubernetes Workflow\n2. Environment Installation\n\n🏷️ Labeling Guide (Roboflow)\n\n1. Class: viable (Target)\n2. Class: non_viable (Target)\n3. Edge Cases & Rules\n\n🏋️ Training (CESNET Cluster)\n🔍 Routine Detection",
+    "crumbs": [
+      "Home",
+      "Home & Overview"
+    ]
+  },
+  {
+    "objectID": "index.html#project-overview",
+    "href": "index.html#project-overview",
+    "title": "🌸 Pollen Viability Detector (YOLOv8)",
+    "section": "",
+    "text": "This tool automates the tedious process of counting pollen grains on microscope slides. It uses deep learning to replicate the judgment of a biologist following the Alexander Stain protocol.\n\nInput: High-resolution microscope images (TIF/JPG).\nOutput: Annotated images with bounding boxes, CSV summaries of counts, and viability percentages.\nPerformance: Optimized for large, crowded scans using tiling and global Non-Maximum Suppression (NMS).",
+    "crumbs": [
+      "Home",
+      "Home & Overview"
+    ]
+  },
+  {
+    "objectID": "index.html#methodology",
+    "href": "index.html#methodology",
+    "title": "🌸 Pollen Viability Detector (YOLOv8)",
+    "section": "",
+    "text": "The project runs on the CESNET MetaCentrum high-performance computing cluster, utilizing NVIDIA A40/A100 GPUs for rapid training and inference.\n\n\n\nMosaic Disabling: We disable mosaic augmentation for the final 10 epochs of training. This stabilizes the training loss and prevents the model from hallucinating pollen in empty space (ghost detections).\nHigh-Res Tiling: For inference, large microscope scans (&gt;2000px) are sliced into overlapping tiles (1600x1600px). This prevents the “Squish Effect,” ensuring small grains retain their texture and are not lost during resizing.\nBorder Patrol: To prevent double-counting grains on tile edges, we implement a custom logic that ignores edge detections, relying on the neighboring tile to capture the grain centrally.",
+    "crumbs": [
+      "Home",
+      "Home & Overview"
+    ]
+  },
+  {
+    "objectID": "index.html#workflow-setup",
+    "href": "index.html#workflow-setup",
+    "title": "🌸 Pollen Viability Detector (YOLOv8)",
+    "section": "",
+    "text": "This project has migrated from Google Colab to the CESNET Cluster for better performance and data privacy.\n\n\nDetailed instructions on how to set up your environment, connect via SSH, and manage files can be found in our connection guide:\n👉 CESNET Connection Guide\n\n\n\nFor instructions on running detection and training jobs: 👉 Kubernetes Workflow Guide\n\n\n\nThe environment uses a custom Jupyter kernel. Dependencies include ultralytics, opencv-python-headless, and pandas. (See the setup_environment.py script in the repo for automated dependency handling).",
+    "crumbs": [
+      "Home",
+      "Home & Overview"
+    ]
+  },
+  {
+    "objectID": "index.html#labeling-guide-roboflow",
+    "href": "index.html#labeling-guide-roboflow",
+    "title": "🌸 Pollen Viability Detector (YOLOv8)",
+    "section": "",
+    "text": "We use Roboflow for annotating datasets. If you are contributing to the dataset, please adhere to strict Alexander Stain criteria.\nSource: Pollen Viability Staining Guide (Alexander Stain)\n\n\nDefinition: Pollen grains that contain healthy, full cytoplasm and are capable of fertilization.\n\nColor: Must be Magenta-Red or Dark Purple.\nContent: The grain appears “full” and dense, indicating the presence of cytoplasm.\nShape: Typically regular, round, or plump.\nRule of Thumb: If it is dark red/purple and looks “full,” label it Viable.\n\n\nExample:  (Add your example image here)\n\n\n\n\nDefinition: Pollen grains that are aborted, empty, or dead. They lack the cytoplasm required for fertilization.\n\nColor: Primarily Pale.\nContent: Appears empty; only the outer cell wall is visible.\nShape: Often shrivelled, collapsed, or significantly smaller than viable grains.\nIntermediate Cases:\n\nPale Pink / Orange: Grains that are very pale or only partially stained red are likely aborted. Label as Non-Viable unless they are fully dark.\nEmpty Shells: Transparent or faint outlines with no colour.\n\n\n\nExample:  (Add your example image here)\n\n\n\n\n\nClusters: If grains are touching, draw a separate box for each individual grain. Do not draw one big box around a clump.\nCut-off Grains: If &gt;50% of the grain is visible at the image edge, label it. If &lt;50% is visible, ignore it.\nDebris: Do not label dirt, bubbles, or stain blobs. Only label clear pollen grains.",
+    "crumbs": [
+      "Home",
+      "Home & Overview"
+    ]
+  },
+  {
+    "objectID": "index.html#training-cesnet-cluster",
+    "href": "index.html#training-cesnet-cluster",
+    "title": "🌸 Pollen Viability Detector (YOLOv8)",
+    "section": "",
+    "text": "Training is now fully automated using Kubernetes jobs managed by deploy_training.sh.\nWorkflow: 1. Script: src/train_model.py handles the entire pipeline. 2. Data: Automatically syncs datasets and staging areas from S3. 3. Configuration: * Epochs: 300 * Image Size: 640px * Batch Size: 16 * Augmentations: Full rotation (180°), flips, and Mosaic (1.0). 4. Process: Merges new staged data, generates synthetic negatives, and trains YOLOv8x. 5. Backup: Results (weights, logs, visualizations) are automatically uploaded back to S3.\nTo Run:\nsudo ./deploy_training.sh",
+    "crumbs": [
+      "Home",
+      "Home & Overview"
+    ]
+  },
+  {
+    "objectID": "index.html#routine-detection",
+    "href": "index.html#routine-detection",
+    "title": "🌸 Pollen Viability Detector (YOLOv8)",
+    "section": "",
+    "text": "Detection is handled by src/run_detection.py and deployed via deploy_pollen.sh.\n👉 Routine Detection Manual\nQuickstart Pipeline: 1. Upload images via Cyberduck to the S3 Bucket detect_images/ folder. 2. Deploy the job:\nsudo ./deploy_pollen.sh\n\nSync results locally (automatic or manual):\n\npython3 src/sync_results.py\n\nLicense: MIT",
+    "crumbs": [
+      "Home",
+      "Home & Overview"
     ]
   },
   {
@@ -144,163 +280,51 @@
     ]
   },
   {
-    "objectID": "index.html",
-    "href": "index.html",
-    "title": "🌸 Pollen Viability Detector (YOLOv8)",
+    "objectID": "vignettes/routine_detection_manual.html",
+    "href": "vignettes/routine_detection_manual.html",
+    "title": "Routine Pollen Detection Manual",
     "section": "",
-    "text": "An automated computer vision pipeline for assessing pollen viability using the Alexander Stain technique. This project leverages YOLOv8 to detect and classify pollen grains as either Viable (Magenta/Purple) or Non-Viable (Green/Shriveled) from high-resolution microscope images.\n\n\n\n🌸 Pollen Viability Detector (YOLOv8)\n\n📌 Table of Contents\n🔭 Project Overview\n🔬 Methodology\n\nKey Strategies used in this model:\n\n⚙️ Workflow Setup\n\n1. Connecting to CESNET\n2. Kubernetes Workflow\n2. Environment Installation\n\n🏷️ Labeling Guide (Roboflow)\n\n1. Class: viable (Target)\n2. Class: non_viable (Target)\n3. Edge Cases & Rules\n\n🏋️ Training (CESNET Cluster)\n🔍 Routine Detection\n\n\n\n\n\n\nThis tool automates the tedious process of counting pollen grains on microscope slides. It uses deep learning to replicate the judgment of a biologist following the Alexander Stain protocol.\n\nInput: High-resolution microscope images (TIF/JPG).\nOutput: Annotated images with bounding boxes, CSV summaries of counts, and viability percentages.\nPerformance: Optimized for large, crowded scans using tiling and global Non-Maximum Suppression (NMS).\n\n\n\n\n\nThe project runs on the CESNET MetaCentrum high-performance computing cluster, utilizing NVIDIA A40/A100 GPUs for rapid training and inference.\n\n\n\nMosaic Disabling: We disable mosaic augmentation for the final 10 epochs of training. This stabilizes the training loss and prevents the model from hallucinating pollen in empty space (ghost detections).\nHigh-Res Tiling: For inference, large microscope scans (&gt;2000px) are sliced into overlapping tiles (1600x1600px). This prevents the “Squish Effect,” ensuring small grains retain their texture and are not lost during resizing.\nBorder Patrol: To prevent double-counting grains on tile edges, we implement a custom logic that ignores edge detections, relying on the neighboring tile to capture the grain centrally.\n\n\n\n\n\n\nThis project has migrated from Google Colab to the CESNET Cluster for better performance and data privacy.\n\n\nDetailed instructions on how to set up your environment, connect via SSH, and manage files can be found in our connection guide:\n👉 CESNET Connection Guide\n\n\n\nFor instructions on running detection and training jobs: 👉 Kubernetes Workflow Guide\n\n\n\nThe environment uses a custom Jupyter kernel. Dependencies include ultralytics, opencv-python-headless, and pandas. (See the setup_environment.py script in the repo for automated dependency handling).\n\n\n\n\n\nWe use Roboflow for annotating datasets. If you are contributing to the dataset, please adhere to strict Alexander Stain criteria.\nSource: Pollen Viability Staining Guide (Alexander Stain)\n\n\nDefinition: Pollen grains that contain healthy, full cytoplasm and are capable of fertilization.\n\nColor: Must be Magenta-Red or Dark Purple.\nContent: The grain appears “full” and dense, indicating the presence of cytoplasm.\nShape: Typically regular, round, or plump.\nRule of Thumb: If it is dark red/purple and looks “full,” label it Viable.\n\n\nExample:  (Add your example image here)\n\n\n\n\nDefinition: Pollen grains that are aborted, empty, or dead. They lack the cytoplasm required for fertilization.\n\nColor: Primarily Pale.\nContent: Appears empty; only the outer cell wall is visible.\nShape: Often shrivelled, collapsed, or significantly smaller than viable grains.\nIntermediate Cases:\n\nPale Pink / Orange: Grains that are very pale or only partially stained red are likely aborted. Label as Non-Viable unless they are fully dark.\nEmpty Shells: Transparent or faint outlines with no colour.\n\n\n\nExample:  (Add your example image here)\n\n\n\n\n\nClusters: If grains are touching, draw a separate box for each individual grain. Do not draw one big box around a clump.\nCut-off Grains: If &gt;50% of the grain is visible at the image edge, label it. If &lt;50% is visible, ignore it.\nDebris: Do not label dirt, bubbles, or stain blobs. Only label clear pollen grains.\n\n\n\n\n\n\nTraining is now fully automated using Kubernetes jobs managed by deploy_training.sh.\nWorkflow: 1. Script: src/train_model.py handles the entire pipeline. 2. Data: Automatically syncs datasets and staging areas from S3. 3. Configuration: * Epochs: 300 * Image Size: 640px * Batch Size: 16 * Augmentations: Full rotation (180°), flips, and Mosaic (1.0). 4. Process: Merges new staged data, generates synthetic negatives, and trains YOLOv8x. 5. Backup: Results (weights, logs, visualizations) are automatically uploaded back to S3.\nTo Run:\nsudo ./deploy_training.sh\n\n\n\n\nDetection is handled by src/run_detection.py and deployed via deploy_pollen.sh.\n👉 Routine Detection Manual\nQuickstart Pipeline: 1. Upload images via Cyberduck to the S3 Bucket detect_images/ folder. 2. Deploy the job:\nsudo ./deploy_pollen.sh\n\nSync results locally (automatic or manual):\n\npython3 src/sync_results.py\n\nLicense: MIT",
-    "crumbs": [
-      "Home",
-      "Home & Overview"
-    ]
-  },
-  {
-    "objectID": "index.html#table-of-contents",
-    "href": "index.html#table-of-contents",
-    "title": "🌸 Pollen Viability Detector (YOLOv8)",
-    "section": "",
-    "text": "🌸 Pollen Viability Detector (YOLOv8)\n\n📌 Table of Contents\n🔭 Project Overview\n🔬 Methodology\n\nKey Strategies used in this model:\n\n⚙️ Workflow Setup\n\n1. Connecting to CESNET\n2. Kubernetes Workflow\n2. Environment Installation\n\n🏷️ Labeling Guide (Roboflow)\n\n1. Class: viable (Target)\n2. Class: non_viable (Target)\n3. Edge Cases & Rules\n\n🏋️ Training (CESNET Cluster)\n🔍 Routine Detection",
-    "crumbs": [
-      "Home",
-      "Home & Overview"
-    ]
-  },
-  {
-    "objectID": "index.html#project-overview",
-    "href": "index.html#project-overview",
-    "title": "🌸 Pollen Viability Detector (YOLOv8)",
-    "section": "",
-    "text": "This tool automates the tedious process of counting pollen grains on microscope slides. It uses deep learning to replicate the judgment of a biologist following the Alexander Stain protocol.\n\nInput: High-resolution microscope images (TIF/JPG).\nOutput: Annotated images with bounding boxes, CSV summaries of counts, and viability percentages.\nPerformance: Optimized for large, crowded scans using tiling and global Non-Maximum Suppression (NMS).",
-    "crumbs": [
-      "Home",
-      "Home & Overview"
-    ]
-  },
-  {
-    "objectID": "index.html#methodology",
-    "href": "index.html#methodology",
-    "title": "🌸 Pollen Viability Detector (YOLOv8)",
-    "section": "",
-    "text": "The project runs on the CESNET MetaCentrum high-performance computing cluster, utilizing NVIDIA A40/A100 GPUs for rapid training and inference.\n\n\n\nMosaic Disabling: We disable mosaic augmentation for the final 10 epochs of training. This stabilizes the training loss and prevents the model from hallucinating pollen in empty space (ghost detections).\nHigh-Res Tiling: For inference, large microscope scans (&gt;2000px) are sliced into overlapping tiles (1600x1600px). This prevents the “Squish Effect,” ensuring small grains retain their texture and are not lost during resizing.\nBorder Patrol: To prevent double-counting grains on tile edges, we implement a custom logic that ignores edge detections, relying on the neighboring tile to capture the grain centrally.",
-    "crumbs": [
-      "Home",
-      "Home & Overview"
-    ]
-  },
-  {
-    "objectID": "index.html#workflow-setup",
-    "href": "index.html#workflow-setup",
-    "title": "🌸 Pollen Viability Detector (YOLOv8)",
-    "section": "",
-    "text": "This project has migrated from Google Colab to the CESNET Cluster for better performance and data privacy.\n\n\nDetailed instructions on how to set up your environment, connect via SSH, and manage files can be found in our connection guide:\n👉 CESNET Connection Guide\n\n\n\nFor instructions on running detection and training jobs: 👉 Kubernetes Workflow Guide\n\n\n\nThe environment uses a custom Jupyter kernel. Dependencies include ultralytics, opencv-python-headless, and pandas. (See the setup_environment.py script in the repo for automated dependency handling).",
-    "crumbs": [
-      "Home",
-      "Home & Overview"
-    ]
-  },
-  {
-    "objectID": "index.html#labeling-guide-roboflow",
-    "href": "index.html#labeling-guide-roboflow",
-    "title": "🌸 Pollen Viability Detector (YOLOv8)",
-    "section": "",
-    "text": "We use Roboflow for annotating datasets. If you are contributing to the dataset, please adhere to strict Alexander Stain criteria.\nSource: Pollen Viability Staining Guide (Alexander Stain)\n\n\nDefinition: Pollen grains that contain healthy, full cytoplasm and are capable of fertilization.\n\nColor: Must be Magenta-Red or Dark Purple.\nContent: The grain appears “full” and dense, indicating the presence of cytoplasm.\nShape: Typically regular, round, or plump.\nRule of Thumb: If it is dark red/purple and looks “full,” label it Viable.\n\n\nExample:  (Add your example image here)\n\n\n\n\nDefinition: Pollen grains that are aborted, empty, or dead. They lack the cytoplasm required for fertilization.\n\nColor: Primarily Pale.\nContent: Appears empty; only the outer cell wall is visible.\nShape: Often shrivelled, collapsed, or significantly smaller than viable grains.\nIntermediate Cases:\n\nPale Pink / Orange: Grains that are very pale or only partially stained red are likely aborted. Label as Non-Viable unless they are fully dark.\nEmpty Shells: Transparent or faint outlines with no colour.\n\n\n\nExample:  (Add your example image here)\n\n\n\n\n\nClusters: If grains are touching, draw a separate box for each individual grain. Do not draw one big box around a clump.\nCut-off Grains: If &gt;50% of the grain is visible at the image edge, label it. If &lt;50% is visible, ignore it.\nDebris: Do not label dirt, bubbles, or stain blobs. Only label clear pollen grains.",
-    "crumbs": [
-      "Home",
-      "Home & Overview"
-    ]
-  },
-  {
-    "objectID": "index.html#training-cesnet-cluster",
-    "href": "index.html#training-cesnet-cluster",
-    "title": "🌸 Pollen Viability Detector (YOLOv8)",
-    "section": "",
-    "text": "Training is now fully automated using Kubernetes jobs managed by deploy_training.sh.\nWorkflow: 1. Script: src/train_model.py handles the entire pipeline. 2. Data: Automatically syncs datasets and staging areas from S3. 3. Configuration: * Epochs: 300 * Image Size: 640px * Batch Size: 16 * Augmentations: Full rotation (180°), flips, and Mosaic (1.0). 4. Process: Merges new staged data, generates synthetic negatives, and trains YOLOv8x. 5. Backup: Results (weights, logs, visualizations) are automatically uploaded back to S3.\nTo Run:\nsudo ./deploy_training.sh",
-    "crumbs": [
-      "Home",
-      "Home & Overview"
-    ]
-  },
-  {
-    "objectID": "index.html#routine-detection",
-    "href": "index.html#routine-detection",
-    "title": "🌸 Pollen Viability Detector (YOLOv8)",
-    "section": "",
-    "text": "Detection is handled by src/run_detection.py and deployed via deploy_pollen.sh.\n👉 Routine Detection Manual\nQuickstart Pipeline: 1. Upload images via Cyberduck to the S3 Bucket detect_images/ folder. 2. Deploy the job:\nsudo ./deploy_pollen.sh\n\nSync results locally (automatic or manual):\n\npython3 src/sync_results.py\n\nLicense: MIT",
-    "crumbs": [
-      "Home",
-      "Home & Overview"
-    ]
-  },
-  {
-    "objectID": "vignettes/kubernetes_workflow.html",
-    "href": "vignettes/kubernetes_workflow.html",
-    "title": "Kubernetes Workflow Guide for Pollen Viability",
-    "section": "",
-    "text": "This guide documents the automated workflow for deploying Pollen Viability detection and training jobs to the CERIT-SC Kubernetes cluster.\n\n\nThe system runs as ephemeral Kubernetes Jobs. It follows this data flow:\n\nInput: Data (images/datasets) is read from S3 Storage.\nProcessing: A Docker container crashes processing logic (YOLOv8 + Custom Scripts).\nOutput: Results (CSV, Annotated Images, Trained Models) are uploaded back to S3.\n\n\n\n\n\n\n\nKubeconfig: You must have a valid kubeconfig.yaml in the project root. &gt; How to obtain: &gt; 1. Log in to Rancher Dashboard. &gt; 2. Open your assigned cluster. &gt; 3. Click “Download Kubeconfig” (Top Right) or “Kubeconfig File” icon. &gt; 4. Save as kubeconfig.yaml in this project folder. &gt; 5. Security: Run chmod 600 kubeconfig.yaml to secure the file.\nDocker: Must be installed locally to build images.\nkubectl: auto-downloaded by the scripts if missing.\n\n\n\n\nTo detect viable pollen in new images:\n\nEnsure input images are in S3: Ostatni/Pollen_viability/detect_images.\nRun the deployment script: bash     ./deploy_pollen.sh\nWhat happens?\n\nThe script builds a Docker image.\nPushes it to ttl.sh (ephemeral registry).\nLaunches a K8s Job (pollen-detector-job) in namespace stenc-ns.\nStreams logs until completion.\n\nResults: Check S3: Ostatni/Pollen_viability/detected_images.\n\n\n\n\nTo retrain the YOLOv8 model:\n\nEnsure datasets are in S3 (datasets/pollen_v1).\nRun the training deployment: bash     ./deploy_training.sh\nProcess:\n\nSyncs datasets and staging area from S3.\nMerges new labelled data.\nGenerates synthetic negative samples.\nTrains the model (approx 2-4 hours).\nUploads the best model (best.pt) and charts to S3.\n\n\n\n\n\n\n\n\n\n\n\n\n\nFile\nPurpose\n\n\n\n\ndeploy_pollen.sh\nOrchestrates the detection workflow. Builds Docker -&gt; Deploys Job.\n\n\ndeploy_training.sh\nOrchestrates the training workflow.\n\n\npollen-job.yaml\nKubernetes Manifest for detection. Defines resources (GPU/RAM) and env vars.\n\n\npollen-train-job.yaml\nKubernetes Manifest for training.\n\n\nDockerfile\nDefines the environment (Python, YOLOv8, non-root user).\n\n\nrun_detection.py\nCore script for detection logic + S3 sync.\n\n\ntrain_model.py\nCore script for training logic + S3 sync.\n\n\n\n\n\n\n\nNamespace: stenc-ns (Your isolated environment).\nUsers: Pods run as appuser (UID 1000) for security compliance.\nSecrets: AWS credentials are injected via Environment Variables in the YAML files.\n\n\n\n\n\n“Forbidden” errors: Ensure kubeconfig.yaml is correct and you are deploying to stenc-ns.\n“ImagePullBackOff”: The ttl.sh image might have expired (they last 24h). Re-run the deploy script to rebuild and push.\nEmpty Output: Check S3 paths in run_detection.py. Verify source images exist.",
+    "text": "This guide walks you through the full process of running an automated pollen viability analysis — from preparing your images to downloading your results. No programming experience is required.\n\n[!NOTE] This pipeline runs the heavy computation on a remote university server (CESNET cluster), so it works even on modest laptops. You only need to start the job from your computer — the actual image analysis happens remotely.\n\n\n\n\nYou only need to do these steps once when setting up the workflow for the first time.\n\n\nAll images and results are stored in the CESNET S3 cloud. You need access before anything else.\n👉 Follow the CESNET S3 Connection Guide\nThis will take you through applying for access, generating your personal keys, and installing Cyberduck (the tool you will use to upload and download files).\n\n\n\n\nThe detection pipeline is run via a script. You need to have the project code and its required tools installed once on the computer you’ll use to launch jobs.\n\n\nYou will need three programs installed:\n\n\n\nProgram\nWhat it does\nDownload\n\n\n\n\nGit\nDownloads the project code\ngit-scm.com\n\n\nDocker Desktop\nPackages the detection code to run on the cluster\ndocker.com/get-started\n\n\nWSL 2 (Windows only)\nLets Windows run Linux-style scripts\nMicrosoft Docs\n\n\n\n\n[!IMPORTANT] On Windows: After installing WSL 2, open Docker Desktop → Settings → Resources → WSL Integration and enable it for your Linux distribution. On Linux: After installing Docker, run sudo usermod -aG docker $USER and log out and back in.\n\n\n\n\nOpen a terminal (on Windows: search for “Ubuntu” or “WSL” in the Start menu) and type:\ngit clone https://github.com/Pollination-Ecology-Group/Pollen_viability.git\ncd Pollen_viability\nThis downloads all the scripts you need into a folder called Pollen_viability.\n\n\n\nYou will also need the kubeconfig.yaml file — this is the key that lets your computer talk to the CESNET cluster. Ask the project lead to send you this file, then place it inside the Pollen_viability folder you just downloaded.\n\n\n\n\n\n\nOnce setup is complete, running detection every time takes just 3 steps.\n\n\nUsing Cyberduck, navigate to the Ostatni/Pollen_viability/detect_images/ folder in the S3 bucket and drag your microscope images (TIF or JPG format) into it.\n\n[!TIP] You can upload a whole folder at once. Just drag it into the Cyberduck window.\n\n\n\n\n\nOpen a terminal (on Windows: Ubuntu / WSL) and navigate to the project folder:\ncd Pollen_viability\nThen run:\n./deploy_pollen.sh\n\n[!NOTE] The first time you run this, Docker will download several components. This may take 5–15 minutes depending on your internet speed. Subsequent runs are much faster.\n\nYou will see output in the terminal that looks like this:\n🌸 Pollen Detector Deployment Script\n🚀 1. Building Docker image...\n☁️ 2. Pushing image...\n🚀 4. Deploying Job to Cluster...\n👀 6. Streaming logs...\nThe terminal will then show live progress from the cluster. You don’t need to do anything — just wait.\n\n[!TIP] If you see a permission denied error when running ./deploy_pollen.sh, try:\nLinux: sg docker -c ./deploy_pollen.sh\nWindows (WSL): Make sure Docker Desktop is running and WSL integration is enabled.\n\n\n\n\n\nOnce the detection finishes (the terminal shows it has completed), your results are automatically uploaded to the S3 bucket.\nOpen Cyberduck and navigate to: - Ostatni/Pollen_viability/detected_images/ — Annotated images with coloured bounding boxes showing which pollen grains are viable (green) and non-viable (red). - Ostatni/Pollen_viability/pollen_counting_results/ — CSV summary files (pollen_counts.csv) with counts and viability percentages per image.\nDownload these files to your computer by right-clicking → Download in Cyberduck.\n\n\n\n\n\n\n\n\n\n\n\n\nProblem\nSolution\n\n\n\n\npermission denied when running script\nSee the tip in Step 2 above\n\n\nDocker Desktop not starting\nMake sure WSL 2 is installed and enabled\n\n\nScript says “cannot connect to cluster”\nCheck that kubeconfig.yaml is in the Pollen_viability folder\n\n\nNo files appear in S3 after job finishes\nWait a few minutes; large jobs can take time to upload results\n\n\nAny other issue\nContact the project lead or schedule a meeting",
     "crumbs": [
       "Home",
       "Guides",
-      "Kubernetes Workflow"
+      "Routine Detection Manual"
     ]
   },
   {
-    "objectID": "vignettes/kubernetes_workflow.html#architecture-overview",
-    "href": "vignettes/kubernetes_workflow.html#architecture-overview",
-    "title": "Kubernetes Workflow Guide for Pollen Viability",
+    "objectID": "vignettes/routine_detection_manual.html#before-you-start-one-time-setup",
+    "href": "vignettes/routine_detection_manual.html#before-you-start-one-time-setup",
+    "title": "Routine Pollen Detection Manual",
     "section": "",
-    "text": "The system runs as ephemeral Kubernetes Jobs. It follows this data flow:\n\nInput: Data (images/datasets) is read from S3 Storage.\nProcessing: A Docker container crashes processing logic (YOLOv8 + Custom Scripts).\nOutput: Results (CSV, Annotated Images, Trained Models) are uploaded back to S3.",
+    "text": "You only need to do these steps once when setting up the workflow for the first time.\n\n\nAll images and results are stored in the CESNET S3 cloud. You need access before anything else.\n👉 Follow the CESNET S3 Connection Guide\nThis will take you through applying for access, generating your personal keys, and installing Cyberduck (the tool you will use to upload and download files).\n\n\n\n\nThe detection pipeline is run via a script. You need to have the project code and its required tools installed once on the computer you’ll use to launch jobs.\n\n\nYou will need three programs installed:\n\n\n\nProgram\nWhat it does\nDownload\n\n\n\n\nGit\nDownloads the project code\ngit-scm.com\n\n\nDocker Desktop\nPackages the detection code to run on the cluster\ndocker.com/get-started\n\n\nWSL 2 (Windows only)\nLets Windows run Linux-style scripts\nMicrosoft Docs\n\n\n\n\n[!IMPORTANT] On Windows: After installing WSL 2, open Docker Desktop → Settings → Resources → WSL Integration and enable it for your Linux distribution. On Linux: After installing Docker, run sudo usermod -aG docker $USER and log out and back in.\n\n\n\n\nOpen a terminal (on Windows: search for “Ubuntu” or “WSL” in the Start menu) and type:\ngit clone https://github.com/Pollination-Ecology-Group/Pollen_viability.git\ncd Pollen_viability\nThis downloads all the scripts you need into a folder called Pollen_viability.\n\n\n\nYou will also need the kubeconfig.yaml file — this is the key that lets your computer talk to the CESNET cluster. Ask the project lead to send you this file, then place it inside the Pollen_viability folder you just downloaded.",
     "crumbs": [
       "Home",
       "Guides",
-      "Kubernetes Workflow"
+      "Routine Detection Manual"
     ]
   },
   {
-    "objectID": "vignettes/kubernetes_workflow.html#quick-start",
-    "href": "vignettes/kubernetes_workflow.html#quick-start",
-    "title": "Kubernetes Workflow Guide for Pollen Viability",
+    "objectID": "vignettes/routine_detection_manual.html#routine-detection-step-by-step",
+    "href": "vignettes/routine_detection_manual.html#routine-detection-step-by-step",
+    "title": "Routine Pollen Detection Manual",
     "section": "",
-    "text": "Kubeconfig: You must have a valid kubeconfig.yaml in the project root. &gt; How to obtain: &gt; 1. Log in to Rancher Dashboard. &gt; 2. Open your assigned cluster. &gt; 3. Click “Download Kubeconfig” (Top Right) or “Kubeconfig File” icon. &gt; 4. Save as kubeconfig.yaml in this project folder. &gt; 5. Security: Run chmod 600 kubeconfig.yaml to secure the file.\nDocker: Must be installed locally to build images.\nkubectl: auto-downloaded by the scripts if missing.\n\n\n\n\nTo detect viable pollen in new images:\n\nEnsure input images are in S3: Ostatni/Pollen_viability/detect_images.\nRun the deployment script: bash     ./deploy_pollen.sh\nWhat happens?\n\nThe script builds a Docker image.\nPushes it to ttl.sh (ephemeral registry).\nLaunches a K8s Job (pollen-detector-job) in namespace stenc-ns.\nStreams logs until completion.\n\nResults: Check S3: Ostatni/Pollen_viability/detected_images.\n\n\n\n\nTo retrain the YOLOv8 model:\n\nEnsure datasets are in S3 (datasets/pollen_v1).\nRun the training deployment: bash     ./deploy_training.sh\nProcess:\n\nSyncs datasets and staging area from S3.\nMerges new labelled data.\nGenerates synthetic negative samples.\nTrains the model (approx 2-4 hours).\nUploads the best model (best.pt) and charts to S3.",
+    "text": "Once setup is complete, running detection every time takes just 3 steps.\n\n\nUsing Cyberduck, navigate to the Ostatni/Pollen_viability/detect_images/ folder in the S3 bucket and drag your microscope images (TIF or JPG format) into it.\n\n[!TIP] You can upload a whole folder at once. Just drag it into the Cyberduck window.\n\n\n\n\n\nOpen a terminal (on Windows: Ubuntu / WSL) and navigate to the project folder:\ncd Pollen_viability\nThen run:\n./deploy_pollen.sh\n\n[!NOTE] The first time you run this, Docker will download several components. This may take 5–15 minutes depending on your internet speed. Subsequent runs are much faster.\n\nYou will see output in the terminal that looks like this:\n🌸 Pollen Detector Deployment Script\n🚀 1. Building Docker image...\n☁️ 2. Pushing image...\n🚀 4. Deploying Job to Cluster...\n👀 6. Streaming logs...\nThe terminal will then show live progress from the cluster. You don’t need to do anything — just wait.\n\n[!TIP] If you see a permission denied error when running ./deploy_pollen.sh, try:\nLinux: sg docker -c ./deploy_pollen.sh\nWindows (WSL): Make sure Docker Desktop is running and WSL integration is enabled.\n\n\n\n\n\nOnce the detection finishes (the terminal shows it has completed), your results are automatically uploaded to the S3 bucket.\nOpen Cyberduck and navigate to: - Ostatni/Pollen_viability/detected_images/ — Annotated images with coloured bounding boxes showing which pollen grains are viable (green) and non-viable (red). - Ostatni/Pollen_viability/pollen_counting_results/ — CSV summary files (pollen_counts.csv) with counts and viability percentages per image.\nDownload these files to your computer by right-clicking → Download in Cyberduck.",
     "crumbs": [
       "Home",
       "Guides",
-      "Kubernetes Workflow"
+      "Routine Detection Manual"
     ]
   },
   {
-    "objectID": "vignettes/kubernetes_workflow.html#file-structure",
-    "href": "vignettes/kubernetes_workflow.html#file-structure",
-    "title": "Kubernetes Workflow Guide for Pollen Viability",
+    "objectID": "vignettes/routine_detection_manual.html#troubleshooting",
+    "href": "vignettes/routine_detection_manual.html#troubleshooting",
+    "title": "Routine Pollen Detection Manual",
     "section": "",
-    "text": "File\nPurpose\n\n\n\n\ndeploy_pollen.sh\nOrchestrates the detection workflow. Builds Docker -&gt; Deploys Job.\n\n\ndeploy_training.sh\nOrchestrates the training workflow.\n\n\npollen-job.yaml\nKubernetes Manifest for detection. Defines resources (GPU/RAM) and env vars.\n\n\npollen-train-job.yaml\nKubernetes Manifest for training.\n\n\nDockerfile\nDefines the environment (Python, YOLOv8, non-root user).\n\n\nrun_detection.py\nCore script for detection logic + S3 sync.\n\n\ntrain_model.py\nCore script for training logic + S3 sync.",
+    "text": "Problem\nSolution\n\n\n\n\npermission denied when running script\nSee the tip in Step 2 above\n\n\nDocker Desktop not starting\nMake sure WSL 2 is installed and enabled\n\n\nScript says “cannot connect to cluster”\nCheck that kubeconfig.yaml is in the Pollen_viability folder\n\n\nNo files appear in S3 after job finishes\nWait a few minutes; large jobs can take time to upload results\n\n\nAny other issue\nContact the project lead or schedule a meeting",
     "crumbs": [
       "Home",
       "Guides",
-      "Kubernetes Workflow"
-    ]
-  },
-  {
-    "objectID": "vignettes/kubernetes_workflow.html#access-security",
-    "href": "vignettes/kubernetes_workflow.html#access-security",
-    "title": "Kubernetes Workflow Guide for Pollen Viability",
-    "section": "",
-    "text": "Namespace: stenc-ns (Your isolated environment).\nUsers: Pods run as appuser (UID 1000) for security compliance.\nSecrets: AWS credentials are injected via Environment Variables in the YAML files.",
-    "crumbs": [
-      "Home",
-      "Guides",
-      "Kubernetes Workflow"
-    ]
-  },
-  {
-    "objectID": "vignettes/kubernetes_workflow.html#troubleshooting",
-    "href": "vignettes/kubernetes_workflow.html#troubleshooting",
-    "title": "Kubernetes Workflow Guide for Pollen Viability",
-    "section": "",
-    "text": "“Forbidden” errors: Ensure kubeconfig.yaml is correct and you are deploying to stenc-ns.\n“ImagePullBackOff”: The ttl.sh image might have expired (they last 24h). Re-run the deploy script to rebuild and push.\nEmpty Output: Check S3 paths in run_detection.py. Verify source images exist.",
-    "crumbs": [
-      "Home",
-      "Guides",
-      "Kubernetes Workflow"
+      "Routine Detection Manual"
     ]
   }
 ]

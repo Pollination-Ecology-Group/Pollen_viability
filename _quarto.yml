@@ -4,6 +4,7 @@ project:
   render:
     - index.qmd
     - "vignettes/*.md"
+    - outcomes/pollen_viability_report.qmd
 
 website:
   title: "🌸 Pollen Viability Detector"
@@ -19,6 +20,8 @@ website:
             text: "Kubernetes Workflow"
           - href: vignettes/CESNET_connection_guide.md
             text: "CESNET Connection Guide"
+      - href: outcomes/pollen_viability_report.qmd
+        text: Results
     right:
       - icon: github
         href: https://github.com/Pollination-Ecology-Group/Pollen_viability
@@ -36,6 +39,10 @@ website:
             text: "Kubernetes Workflow"
           - href: vignettes/CESNET_connection_guide.md
             text: "CESNET Connection Guide"
+      - section: "Results"
+        contents:
+          - href: outcomes/pollen_viability_report.qmd
+            text: "Pollen Viability Report"
 
 format:
   html:
