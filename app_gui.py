@@ -662,13 +662,11 @@ def fetch_single_image(key):
 # Iteratively scan s3_keys up to MAX_SCAN_TILES (24) to prevent Streamlit Cloud OOM
 matching_keys = []
 candidate_chunk_size = 12
-scan_offset = st.session_state.get("scan_offset", 0)
 scanned_count = 0
 MAX_SCAN_TILES = 24
 
 while len(matching_keys) < BATCH_SIZE and scanned_count < min(MAX_SCAN_TILES, len(st.session_state.s3_keys)):
-    start_idx = scan_offset + scanned_count
-    chunk_keys = st.session_state.s3_keys[start_idx : start_idx + candidate_chunk_size]
+    chunk_keys = st.session_state.s3_keys[scanned_count : scanned_count + candidate_chunk_size]
     scanned_count += candidate_chunk_size
     if not chunk_keys:
         break
@@ -945,13 +943,9 @@ elif mode == "📋 Grid Mode":
             st.rerun()
     with g_ctrl3:
         if st.button("⏭️ Skip Batch", use_container_width=True, key="btn_skip_batch"):
-            # Advance scan offset to skip past current tiles
-            offset = st.session_state.get("scan_offset", 0)
-            st.session_state.scan_offset = offset + MAX_SCAN_TILES
-            # Wrap around if we've gone past the end
-            if st.session_state.scan_offset >= len(st.session_state.s3_keys):
-                st.session_state.scan_offset = 0
-                fetch_keys_from_s3()  # Re-fetch for fresh keys
+            # Rotate s3_keys: move current batch to the back so next scan gets fresh tiles
+            skip_count = min(MAX_SCAN_TILES, len(st.session_state.s3_keys))
+            st.session_state.s3_keys = st.session_state.s3_keys[skip_count:] + st.session_state.s3_keys[:skip_count]
             st.session_state.batch_images = {}
             st.session_state.batch_results = {}
             st.session_state.assignments = {}
