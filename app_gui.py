@@ -2,7 +2,7 @@ import streamlit as st
 import os
 import cv2
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageEnhance
 from ultralytics import YOLO
 import boto3
 from botocore.client import Config
@@ -458,6 +458,13 @@ elif mode == "👀 Review & Submit":
 elif mode == "📱 Swipe Mode":
     st.markdown("### 📱 Swipe Mode (Individual Pollen Grains)")
     
+    with st.expander("☀️ Adjust Image Brightness & Contrast", expanded=False):
+        b_col, c_col = st.columns(2)
+        with b_col:
+            brightness = st.slider("☀️ Brightness Boost", 0.8, 3.0, 1.4, 0.1, key="swipe_brightness")
+        with c_col:
+            contrast = st.slider("🔍 Contrast Boost", 0.8, 2.5, 1.2, 0.1, key="swipe_contrast")
+    
     if "swipe_tile_idx" not in st.session_state:
         st.session_state.swipe_tile_idx = 0
     if "swipe_grain_idx" not in st.session_state:
@@ -552,8 +559,15 @@ elif mode == "📱 Swipe Mode":
                 current_grain = grains[st.session_state.swipe_grain_idx]
                 st.progress((st.session_state.swipe_grain_idx) / len(grains), text=f"Grain {st.session_state.swipe_grain_idx + 1} of {len(grains)}")
                 
+                # Apply brightness & contrast enhancements
+                img_to_show = current_grain["image"]
+                if brightness != 1.0:
+                    img_to_show = ImageEnhance.Brightness(img_to_show).enhance(brightness)
+                if contrast != 1.0:
+                    img_to_show = ImageEnhance.Contrast(img_to_show).enhance(contrast)
+                
                 # Big centered image
-                st.image(current_grain["image"], use_container_width=True)
+                st.image(img_to_show, use_container_width=True)
                 
                 st.markdown("<br>", unsafe_allow_html=True)
                 
