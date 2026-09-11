@@ -620,11 +620,14 @@ def fetch_single_image(key):
     except Exception:
         return key, None
 
-# Iteratively scan s3_keys up to MAX_SCAN_TILES (36) to prevent Streamlit Cloud timeout/OOM
+import gc
+import torch
+
+# Iteratively scan s3_keys up to MAX_SCAN_TILES (24) to prevent Streamlit Cloud OOM
 matching_keys = []
-candidate_chunk_size = 18
+candidate_chunk_size = 12
 scanned_count = 0
-MAX_SCAN_TILES = 36
+MAX_SCAN_TILES = 24
 
 while len(matching_keys) < BATCH_SIZE and scanned_count < min(MAX_SCAN_TILES, len(st.session_state.s3_keys)):
     chunk_keys = st.session_state.s3_keys[scanned_count : scanned_count + candidate_chunk_size]
@@ -634,7 +637,7 @@ while len(matching_keys) < BATCH_SIZE and scanned_count < min(MAX_SCAN_TILES, le
         
     keys_to_fetch = [k for k in chunk_keys if k not in st.session_state.batch_images]
     if keys_to_fetch:
-        with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
             fetched_results = executor.map(fetch_single_image, keys_to_fetch)
             for k, img_bytes in fetched_results:
                 if img_bytes:
@@ -650,9 +653,10 @@ while len(matching_keys) < BATCH_SIZE and scanned_count < min(MAX_SCAN_TILES, le
                 pil_img = Image.open(BytesIO(img_bytes)).convert("RGB")
                 cv_img = cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2BGR)
                 
-                results = model(cv_img, conf=0.25, iou=0.3, agnostic_nms=True, verbose=False)
-                if hasattr(model, 'task') and getattr(model, 'task', '') == 'segment' or type(model).__name__ == "FastSAM":
-                     results = filter_sam_results(results, cv_img)
+                with torch.no_grad():
+                    results = model(cv_img, conf=0.25, iou=0.3, agnostic_nms=True, verbose=False)
+                    if hasattr(model, 'task') and getattr(model, 'task', '') == 'segment' or type(model).__name__ == "FastSAM":
+                         results = filter_sam_results(results, cv_img)
                      
                 st.session_state.batch_results[key] = results
                 if results and len(results[0].boxes) > 0:
