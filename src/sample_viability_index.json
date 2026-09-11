@@ -1,0 +1,1164 @@
+{
+  "1-1-B": {
+    "file_count": 3,
+    "viable": 116,
+    "non_viable": 0,
+    "total_grains": 116,
+    "non_viable_rate": 0.0
+  },
+  "1-1-D": {
+    "file_count": 3,
+    "viable": 255,
+    "non_viable": 0,
+    "total_grains": 255,
+    "non_viable_rate": 0.0
+  },
+  "1-10-H": {
+    "file_count": 3,
+    "viable": 519,
+    "non_viable": 0,
+    "total_grains": 519,
+    "non_viable_rate": 0.0
+  },
+  "1-11-I": {
+    "file_count": 3,
+    "viable": 312,
+    "non_viable": 53,
+    "total_grains": 365,
+    "non_viable_rate": 0.1452
+  },
+  "1-12-A": {
+    "file_count": 3,
+    "viable": 165,
+    "non_viable": 1,
+    "total_grains": 166,
+    "non_viable_rate": 0.006
+  },
+  "1-12-I": {
+    "file_count": 3,
+    "viable": 397,
+    "non_viable": 12,
+    "total_grains": 409,
+    "non_viable_rate": 0.0293
+  },
+  "1-12-J": {
+    "file_count": 4,
+    "viable": 386,
+    "non_viable": 4,
+    "total_grains": 390,
+    "non_viable_rate": 0.0103
+  },
+  "1-2-B": {
+    "file_count": 4,
+    "viable": 412,
+    "non_viable": 1,
+    "total_grains": 413,
+    "non_viable_rate": 0.0024
+  },
+  "1-2-I": {
+    "file_count": 3,
+    "viable": 376,
+    "non_viable": 0,
+    "total_grains": 376,
+    "non_viable_rate": 0.0
+  },
+  "1-3-F": {
+    "file_count": 3,
+    "viable": 354,
+    "non_viable": 1,
+    "total_grains": 355,
+    "non_viable_rate": 0.0028
+  },
+  "1-4-D": {
+    "file_count": 3,
+    "viable": 512,
+    "non_viable": 5,
+    "total_grains": 517,
+    "non_viable_rate": 0.0097
+  },
+  "1-4-E": {
+    "file_count": 7,
+    "viable": 386,
+    "non_viable": 6,
+    "total_grains": 392,
+    "non_viable_rate": 0.0153
+  },
+  "1-5-C": {
+    "file_count": 3,
+    "viable": 557,
+    "non_viable": 2,
+    "total_grains": 559,
+    "non_viable_rate": 0.0036
+  },
+  "1-6-J": {
+    "file_count": 3,
+    "viable": 128,
+    "non_viable": 975,
+    "total_grains": 1103,
+    "non_viable_rate": 0.884
+  },
+  "1-7-E": {
+    "file_count": 3,
+    "viable": 367,
+    "non_viable": 1,
+    "total_grains": 368,
+    "non_viable_rate": 0.0027
+  },
+  "1-8-H": {
+    "file_count": 4,
+    "viable": 264,
+    "non_viable": 0,
+    "total_grains": 264,
+    "non_viable_rate": 0.0
+  },
+  "1-9-A": {
+    "file_count": 4,
+    "viable": 241,
+    "non_viable": 2,
+    "total_grains": 243,
+    "non_viable_rate": 0.0082
+  },
+  "1-9-B": {
+    "file_count": 3,
+    "viable": 333,
+    "non_viable": 2,
+    "total_grains": 335,
+    "non_viable_rate": 0.006
+  },
+  "2-1-B": {
+    "file_count": 3,
+    "viable": 333,
+    "non_viable": 1,
+    "total_grains": 334,
+    "non_viable_rate": 0.003
+  },
+  "2-2-A": {
+    "file_count": 3,
+    "viable": 225,
+    "non_viable": 2,
+    "total_grains": 227,
+    "non_viable_rate": 0.0088
+  },
+  "2-2-F": {
+    "file_count": 4,
+    "viable": 292,
+    "non_viable": 2,
+    "total_grains": 294,
+    "non_viable_rate": 0.0068
+  },
+  "2-3-D": {
+    "file_count": 3,
+    "viable": 294,
+    "non_viable": 1,
+    "total_grains": 295,
+    "non_viable_rate": 0.0034
+  },
+  "2-3-H": {
+    "file_count": 3,
+    "viable": 273,
+    "non_viable": 1,
+    "total_grains": 274,
+    "non_viable_rate": 0.0036
+  },
+  "2-4-C": {
+    "file_count": 3,
+    "viable": 231,
+    "non_viable": 0,
+    "total_grains": 231,
+    "non_viable_rate": 0.0
+  },
+  "2-5-D": {
+    "file_count": 3,
+    "viable": 205,
+    "non_viable": 3,
+    "total_grains": 208,
+    "non_viable_rate": 0.0144
+  },
+  "2-5-J": {
+    "file_count": 3,
+    "viable": 1305,
+    "non_viable": 1,
+    "total_grains": 1306,
+    "non_viable_rate": 0.0008
+  },
+  "2-6-G": {
+    "file_count": 3,
+    "viable": 359,
+    "non_viable": 4,
+    "total_grains": 363,
+    "non_viable_rate": 0.011
+  },
+  "2-7-E": {
+    "file_count": 3,
+    "viable": 241,
+    "non_viable": 3,
+    "total_grains": 244,
+    "non_viable_rate": 0.0123
+  },
+  "2-8-D": {
+    "file_count": 3,
+    "viable": 453,
+    "non_viable": 1,
+    "total_grains": 454,
+    "non_viable_rate": 0.0022
+  },
+  "2-9-A": {
+    "file_count": 4,
+    "viable": 350,
+    "non_viable": 0,
+    "total_grains": 350,
+    "non_viable_rate": 0.0
+  },
+  "2-9-B": {
+    "file_count": 1,
+    "viable": 102,
+    "non_viable": 0,
+    "total_grains": 102,
+    "non_viable_rate": 0.0
+  },
+  "3-2-J": {
+    "file_count": 3,
+    "viable": 409,
+    "non_viable": 0,
+    "total_grains": 409,
+    "non_viable_rate": 0.0
+  },
+  "3-3-G": {
+    "file_count": 4,
+    "viable": 155,
+    "non_viable": 0,
+    "total_grains": 155,
+    "non_viable_rate": 0.0
+  },
+  "3-4-D": {
+    "file_count": 3,
+    "viable": 250,
+    "non_viable": 1,
+    "total_grains": 251,
+    "non_viable_rate": 0.004
+  },
+  "3-4-F": {
+    "file_count": 3,
+    "viable": 293,
+    "non_viable": 7,
+    "total_grains": 300,
+    "non_viable_rate": 0.0233
+  },
+  "3-6-B": {
+    "file_count": 3,
+    "viable": 222,
+    "non_viable": 2,
+    "total_grains": 224,
+    "non_viable_rate": 0.0089
+  },
+  "3-6-D": {
+    "file_count": 3,
+    "viable": 338,
+    "non_viable": 3,
+    "total_grains": 341,
+    "non_viable_rate": 0.0088
+  },
+  "3-8-D": {
+    "file_count": 3,
+    "viable": 283,
+    "non_viable": 0,
+    "total_grains": 283,
+    "non_viable_rate": 0.0
+  },
+  "3-8-F": {
+    "file_count": 4,
+    "viable": 311,
+    "non_viable": 9,
+    "total_grains": 320,
+    "non_viable_rate": 0.0281
+  },
+  "4-1-B": {
+    "file_count": 4,
+    "viable": 302,
+    "non_viable": 1,
+    "total_grains": 303,
+    "non_viable_rate": 0.0033
+  },
+  "4-1-H": {
+    "file_count": 4,
+    "viable": 461,
+    "non_viable": 1,
+    "total_grains": 462,
+    "non_viable_rate": 0.0022
+  },
+  "4-10-B": {
+    "file_count": 3,
+    "viable": 384,
+    "non_viable": 2,
+    "total_grains": 386,
+    "non_viable_rate": 0.0052
+  },
+  "4-10-D": {
+    "file_count": 3,
+    "viable": 337,
+    "non_viable": 17,
+    "total_grains": 354,
+    "non_viable_rate": 0.048
+  },
+  "4-10-G": {
+    "file_count": 3,
+    "viable": 388,
+    "non_viable": 0,
+    "total_grains": 388,
+    "non_viable_rate": 0.0
+  },
+  "4-11-A": {
+    "file_count": 3,
+    "viable": 611,
+    "non_viable": 1,
+    "total_grains": 612,
+    "non_viable_rate": 0.0016
+  },
+  "4-11-C": {
+    "file_count": 4,
+    "viable": 181,
+    "non_viable": 0,
+    "total_grains": 181,
+    "non_viable_rate": 0.0
+  },
+  "4-11-G": {
+    "file_count": 3,
+    "viable": 410,
+    "non_viable": 16,
+    "total_grains": 426,
+    "non_viable_rate": 0.0376
+  },
+  "4-12-A": {
+    "file_count": 4,
+    "viable": 390,
+    "non_viable": 4,
+    "total_grains": 394,
+    "non_viable_rate": 0.0102
+  },
+  "4-12-D": {
+    "file_count": 3,
+    "viable": 633,
+    "non_viable": 2,
+    "total_grains": 635,
+    "non_viable_rate": 0.0031
+  },
+  "4-12-E": {
+    "file_count": 3,
+    "viable": 650,
+    "non_viable": 0,
+    "total_grains": 650,
+    "non_viable_rate": 0.0
+  },
+  "4-12-H": {
+    "file_count": 3,
+    "viable": 534,
+    "non_viable": 5,
+    "total_grains": 539,
+    "non_viable_rate": 0.0093
+  },
+  "4-2-H": {
+    "file_count": 3,
+    "viable": 528,
+    "non_viable": 5,
+    "total_grains": 533,
+    "non_viable_rate": 0.0094
+  },
+  "4-3-A": {
+    "file_count": 3,
+    "viable": 280,
+    "non_viable": 5,
+    "total_grains": 285,
+    "non_viable_rate": 0.0175
+  },
+  "4-3-B": {
+    "file_count": 3,
+    "viable": 330,
+    "non_viable": 1,
+    "total_grains": 331,
+    "non_viable_rate": 0.003
+  },
+  "4-3-E": {
+    "file_count": 3,
+    "viable": 433,
+    "non_viable": 1,
+    "total_grains": 434,
+    "non_viable_rate": 0.0023
+  },
+  "4-3-J": {
+    "file_count": 4,
+    "viable": 146,
+    "non_viable": 8,
+    "total_grains": 154,
+    "non_viable_rate": 0.0519
+  },
+  "4-4-B": {
+    "file_count": 3,
+    "viable": 399,
+    "non_viable": 0,
+    "total_grains": 399,
+    "non_viable_rate": 0.0
+  },
+  "4-4-D": {
+    "file_count": 4,
+    "viable": 207,
+    "non_viable": 0,
+    "total_grains": 207,
+    "non_viable_rate": 0.0
+  },
+  "4-4-J": {
+    "file_count": 3,
+    "viable": 401,
+    "non_viable": 1,
+    "total_grains": 402,
+    "non_viable_rate": 0.0025
+  },
+  "4-5-D": {
+    "file_count": 3,
+    "viable": 327,
+    "non_viable": 1,
+    "total_grains": 328,
+    "non_viable_rate": 0.003
+  },
+  "4-5-G": {
+    "file_count": 3,
+    "viable": 408,
+    "non_viable": 2,
+    "total_grains": 410,
+    "non_viable_rate": 0.0049
+  },
+  "4-5-J": {
+    "file_count": 3,
+    "viable": 413,
+    "non_viable": 6,
+    "total_grains": 419,
+    "non_viable_rate": 0.0143
+  },
+  "4-6-F": {
+    "file_count": 3,
+    "viable": 224,
+    "non_viable": 0,
+    "total_grains": 224,
+    "non_viable_rate": 0.0
+  },
+  "4-6-J": {
+    "file_count": 3,
+    "viable": 357,
+    "non_viable": 1,
+    "total_grains": 358,
+    "non_viable_rate": 0.0028
+  },
+  "4-7-B": {
+    "file_count": 5,
+    "viable": 136,
+    "non_viable": 0,
+    "total_grains": 136,
+    "non_viable_rate": 0.0
+  },
+  "4-7-E": {
+    "file_count": 3,
+    "viable": 427,
+    "non_viable": 6,
+    "total_grains": 433,
+    "non_viable_rate": 0.0139
+  },
+  "4-7-G": {
+    "file_count": 4,
+    "viable": 493,
+    "non_viable": 0,
+    "total_grains": 493,
+    "non_viable_rate": 0.0
+  },
+  "4-8-I": {
+    "file_count": 3,
+    "viable": 232,
+    "non_viable": 7,
+    "total_grains": 239,
+    "non_viable_rate": 0.0293
+  },
+  "4-9-E": {
+    "file_count": 3,
+    "viable": 470,
+    "non_viable": 2,
+    "total_grains": 472,
+    "non_viable_rate": 0.0042
+  },
+  "5-1-G": {
+    "file_count": 3,
+    "viable": 304,
+    "non_viable": 1,
+    "total_grains": 305,
+    "non_viable_rate": 0.0033
+  },
+  "5-1-I": {
+    "file_count": 3,
+    "viable": 666,
+    "non_viable": 3,
+    "total_grains": 669,
+    "non_viable_rate": 0.0045
+  },
+  "5-11-B": {
+    "file_count": 3,
+    "viable": 1065,
+    "non_viable": 2,
+    "total_grains": 1067,
+    "non_viable_rate": 0.0019
+  },
+  "5-11-D": {
+    "file_count": 4,
+    "viable": 256,
+    "non_viable": 0,
+    "total_grains": 256,
+    "non_viable_rate": 0.0
+  },
+  "5-11-F": {
+    "file_count": 3,
+    "viable": 821,
+    "non_viable": 5,
+    "total_grains": 826,
+    "non_viable_rate": 0.0061
+  },
+  "5-12-J": {
+    "file_count": 3,
+    "viable": 604,
+    "non_viable": 3,
+    "total_grains": 607,
+    "non_viable_rate": 0.0049
+  },
+  "5-14-E": {
+    "file_count": 4,
+    "viable": 329,
+    "non_viable": 1,
+    "total_grains": 330,
+    "non_viable_rate": 0.003
+  },
+  "5-14-I": {
+    "file_count": 3,
+    "viable": 282,
+    "non_viable": 2,
+    "total_grains": 284,
+    "non_viable_rate": 0.007
+  },
+  "5-2-J": {
+    "file_count": 4,
+    "viable": 384,
+    "non_viable": 1,
+    "total_grains": 385,
+    "non_viable_rate": 0.0026
+  },
+  "5-3-A": {
+    "file_count": 3,
+    "viable": 334,
+    "non_viable": 13,
+    "total_grains": 347,
+    "non_viable_rate": 0.0375
+  },
+  "5-3-F": {
+    "file_count": 4,
+    "viable": 395,
+    "non_viable": 0,
+    "total_grains": 395,
+    "non_viable_rate": 0.0
+  },
+  "5-4-A": {
+    "file_count": 3,
+    "viable": 565,
+    "non_viable": 2,
+    "total_grains": 567,
+    "non_viable_rate": 0.0035
+  },
+  "5-4-E": {
+    "file_count": 3,
+    "viable": 361,
+    "non_viable": 4,
+    "total_grains": 365,
+    "non_viable_rate": 0.011
+  },
+  "5-4-J": {
+    "file_count": 3,
+    "viable": 322,
+    "non_viable": 3,
+    "total_grains": 325,
+    "non_viable_rate": 0.0092
+  },
+  "5-5-C": {
+    "file_count": 3,
+    "viable": 339,
+    "non_viable": 0,
+    "total_grains": 339,
+    "non_viable_rate": 0.0
+  },
+  "5-5-G": {
+    "file_count": 4,
+    "viable": 178,
+    "non_viable": 2,
+    "total_grains": 180,
+    "non_viable_rate": 0.0111
+  },
+  "5-5-J": {
+    "file_count": 4,
+    "viable": 341,
+    "non_viable": 3,
+    "total_grains": 344,
+    "non_viable_rate": 0.0087
+  },
+  "5-6-E": {
+    "file_count": 3,
+    "viable": 244,
+    "non_viable": 0,
+    "total_grains": 244,
+    "non_viable_rate": 0.0
+  },
+  "5-7-F": {
+    "file_count": 4,
+    "viable": 374,
+    "non_viable": 0,
+    "total_grains": 374,
+    "non_viable_rate": 0.0
+  },
+  "5-7-J": {
+    "file_count": 3,
+    "viable": 479,
+    "non_viable": 13,
+    "total_grains": 492,
+    "non_viable_rate": 0.0264
+  },
+  "5-8-D": {
+    "file_count": 3,
+    "viable": 535,
+    "non_viable": 2,
+    "total_grains": 537,
+    "non_viable_rate": 0.0037
+  },
+  "5-8-H": {
+    "file_count": 4,
+    "viable": 431,
+    "non_viable": 29,
+    "total_grains": 460,
+    "non_viable_rate": 0.063
+  },
+  "5-8-J": {
+    "file_count": 3,
+    "viable": 384,
+    "non_viable": 74,
+    "total_grains": 458,
+    "non_viable_rate": 0.1616
+  },
+  "5-9-A": {
+    "file_count": 3,
+    "viable": 312,
+    "non_viable": 0,
+    "total_grains": 312,
+    "non_viable_rate": 0.0
+  },
+  "5-9-F": {
+    "file_count": 4,
+    "viable": 233,
+    "non_viable": 3,
+    "total_grains": 236,
+    "non_viable_rate": 0.0127
+  },
+  "5-9-H": {
+    "file_count": 3,
+    "viable": 232,
+    "non_viable": 3,
+    "total_grains": 235,
+    "non_viable_rate": 0.0128
+  },
+  "6-1-F": {
+    "file_count": 5,
+    "viable": 132,
+    "non_viable": 154,
+    "total_grains": 286,
+    "non_viable_rate": 0.5385
+  },
+  "6-1-J": {
+    "file_count": 3,
+    "viable": 817,
+    "non_viable": 0,
+    "total_grains": 817,
+    "non_viable_rate": 0.0
+  },
+  "6-10-G": {
+    "file_count": 4,
+    "viable": 210,
+    "non_viable": 0,
+    "total_grains": 210,
+    "non_viable_rate": 0.0
+  },
+  "6-11-B": {
+    "file_count": 3,
+    "viable": 347,
+    "non_viable": 25,
+    "total_grains": 372,
+    "non_viable_rate": 0.0672
+  },
+  "6-11-F": {
+    "file_count": 3,
+    "viable": 611,
+    "non_viable": 16,
+    "total_grains": 627,
+    "non_viable_rate": 0.0255
+  },
+  "6-2-C": {
+    "file_count": 4,
+    "viable": 459,
+    "non_viable": 1,
+    "total_grains": 460,
+    "non_viable_rate": 0.0022
+  },
+  "6-3-A": {
+    "file_count": 3,
+    "viable": 887,
+    "non_viable": 1,
+    "total_grains": 888,
+    "non_viable_rate": 0.0011
+  },
+  "6-3-B": {
+    "file_count": 3,
+    "viable": 246,
+    "non_viable": 0,
+    "total_grains": 246,
+    "non_viable_rate": 0.0
+  },
+  "6-3-I": {
+    "file_count": 3,
+    "viable": 448,
+    "non_viable": 1,
+    "total_grains": 449,
+    "non_viable_rate": 0.0022
+  },
+  "6-3-J": {
+    "file_count": 3,
+    "viable": 675,
+    "non_viable": 0,
+    "total_grains": 675,
+    "non_viable_rate": 0.0
+  },
+  "6-4-G": {
+    "file_count": 3,
+    "viable": 388,
+    "non_viable": 1,
+    "total_grains": 389,
+    "non_viable_rate": 0.0026
+  },
+  "6-5-A": {
+    "file_count": 3,
+    "viable": 642,
+    "non_viable": 8,
+    "total_grains": 650,
+    "non_viable_rate": 0.0123
+  },
+  "6-5-E": {
+    "file_count": 4,
+    "viable": 393,
+    "non_viable": 1,
+    "total_grains": 394,
+    "non_viable_rate": 0.0025
+  },
+  "6-6-D": {
+    "file_count": 3,
+    "viable": 533,
+    "non_viable": 0,
+    "total_grains": 533,
+    "non_viable_rate": 0.0
+  },
+  "6-6-H": {
+    "file_count": 4,
+    "viable": 282,
+    "non_viable": 15,
+    "total_grains": 297,
+    "non_viable_rate": 0.0505
+  },
+  "6-7-A": {
+    "file_count": 3,
+    "viable": 207,
+    "non_viable": 2,
+    "total_grains": 209,
+    "non_viable_rate": 0.0096
+  },
+  "6-7-B": {
+    "file_count": 3,
+    "viable": 198,
+    "non_viable": 1,
+    "total_grains": 199,
+    "non_viable_rate": 0.005
+  },
+  "6-7-E": {
+    "file_count": 3,
+    "viable": 276,
+    "non_viable": 0,
+    "total_grains": 276,
+    "non_viable_rate": 0.0
+  },
+  "6-7-J": {
+    "file_count": 3,
+    "viable": 352,
+    "non_viable": 2,
+    "total_grains": 354,
+    "non_viable_rate": 0.0056
+  },
+  "6-8-G": {
+    "file_count": 3,
+    "viable": 504,
+    "non_viable": 0,
+    "total_grains": 504,
+    "non_viable_rate": 0.0
+  },
+  "6-8-H": {
+    "file_count": 3,
+    "viable": 424,
+    "non_viable": 2,
+    "total_grains": 426,
+    "non_viable_rate": 0.0047
+  },
+  "6-9-A": {
+    "file_count": 4,
+    "viable": 385,
+    "non_viable": 4,
+    "total_grains": 389,
+    "non_viable_rate": 0.0103
+  },
+  "6-9-E": {
+    "file_count": 3,
+    "viable": 445,
+    "non_viable": 1,
+    "total_grains": 446,
+    "non_viable_rate": 0.0022
+  },
+  "6-9-F": {
+    "file_count": 3,
+    "viable": 474,
+    "non_viable": 3,
+    "total_grains": 477,
+    "non_viable_rate": 0.0063
+  },
+  "7-1-A": {
+    "file_count": 4,
+    "viable": 211,
+    "non_viable": 0,
+    "total_grains": 211,
+    "non_viable_rate": 0.0
+  },
+  "7-1-B": {
+    "file_count": 3,
+    "viable": 593,
+    "non_viable": 2,
+    "total_grains": 595,
+    "non_viable_rate": 0.0034
+  },
+  "7-1-E": {
+    "file_count": 4,
+    "viable": 175,
+    "non_viable": 1,
+    "total_grains": 176,
+    "non_viable_rate": 0.0057
+  },
+  "7-10-E": {
+    "file_count": 3,
+    "viable": 355,
+    "non_viable": 53,
+    "total_grains": 408,
+    "non_viable_rate": 0.1299
+  },
+  "7-10-I": {
+    "file_count": 4,
+    "viable": 180,
+    "non_viable": 0,
+    "total_grains": 180,
+    "non_viable_rate": 0.0
+  },
+  "7-12-D": {
+    "file_count": 4,
+    "viable": 173,
+    "non_viable": 0,
+    "total_grains": 173,
+    "non_viable_rate": 0.0
+  },
+  "7-12-G": {
+    "file_count": 3,
+    "viable": 917,
+    "non_viable": 1,
+    "total_grains": 918,
+    "non_viable_rate": 0.0011
+  },
+  "7-14-A": {
+    "file_count": 4,
+    "viable": 278,
+    "non_viable": 1,
+    "total_grains": 279,
+    "non_viable_rate": 0.0036
+  },
+  "7-14-D": {
+    "file_count": 3,
+    "viable": 347,
+    "non_viable": 1,
+    "total_grains": 348,
+    "non_viable_rate": 0.0029
+  },
+  "7-14-H": {
+    "file_count": 3,
+    "viable": 488,
+    "non_viable": 2,
+    "total_grains": 490,
+    "non_viable_rate": 0.0041
+  },
+  "7-2-C": {
+    "file_count": 3,
+    "viable": 301,
+    "non_viable": 1,
+    "total_grains": 302,
+    "non_viable_rate": 0.0033
+  },
+  "7-2-D": {
+    "file_count": 3,
+    "viable": 378,
+    "non_viable": 1,
+    "total_grains": 379,
+    "non_viable_rate": 0.0026
+  },
+  "7-2-H": {
+    "file_count": 3,
+    "viable": 288,
+    "non_viable": 1,
+    "total_grains": 289,
+    "non_viable_rate": 0.0035
+  },
+  "7-3-1": {
+    "file_count": 3,
+    "viable": 534,
+    "non_viable": 1,
+    "total_grains": 535,
+    "non_viable_rate": 0.0019
+  },
+  "7-3-B": {
+    "file_count": 3,
+    "viable": 239,
+    "non_viable": 1,
+    "total_grains": 240,
+    "non_viable_rate": 0.0042
+  },
+  "7-3-F": {
+    "file_count": 3,
+    "viable": 219,
+    "non_viable": 2,
+    "total_grains": 221,
+    "non_viable_rate": 0.009
+  },
+  "7-4-I": {
+    "file_count": 4,
+    "viable": 335,
+    "non_viable": 10,
+    "total_grains": 345,
+    "non_viable_rate": 0.029
+  },
+  "7-8-C": {
+    "file_count": 3,
+    "viable": 535,
+    "non_viable": 5,
+    "total_grains": 540,
+    "non_viable_rate": 0.0093
+  },
+  "7-8-H": {
+    "file_count": 3,
+    "viable": 500,
+    "non_viable": 0,
+    "total_grains": 500,
+    "non_viable_rate": 0.0
+  },
+  "7-9-A": {
+    "file_count": 3,
+    "viable": 829,
+    "non_viable": 2,
+    "total_grains": 831,
+    "non_viable_rate": 0.0024
+  },
+  "7-9-B": {
+    "file_count": 3,
+    "viable": 219,
+    "non_viable": 2,
+    "total_grains": 221,
+    "non_viable_rate": 0.009
+  },
+  "7-9-E": {
+    "file_count": 3,
+    "viable": 221,
+    "non_viable": 0,
+    "total_grains": 221,
+    "non_viable_rate": 0.0
+  },
+  "7-9-F": {
+    "file_count": 7,
+    "viable": 87,
+    "non_viable": 176,
+    "total_grains": 263,
+    "non_viable_rate": 0.6692
+  },
+  "8-1-A": {
+    "file_count": 3,
+    "viable": 143,
+    "non_viable": 1,
+    "total_grains": 144,
+    "non_viable_rate": 0.0069
+  },
+  "8-1-B": {
+    "file_count": 3,
+    "viable": 389,
+    "non_viable": 0,
+    "total_grains": 389,
+    "non_viable_rate": 0.0
+  },
+  "8-1-E": {
+    "file_count": 4,
+    "viable": 215,
+    "non_viable": 0,
+    "total_grains": 215,
+    "non_viable_rate": 0.0
+  },
+  "8-1-G": {
+    "file_count": 4,
+    "viable": 203,
+    "non_viable": 0,
+    "total_grains": 203,
+    "non_viable_rate": 0.0
+  },
+  "8-1-I": {
+    "file_count": 3,
+    "viable": 326,
+    "non_viable": 8,
+    "total_grains": 334,
+    "non_viable_rate": 0.024
+  },
+  "8-10-C": {
+    "file_count": 3,
+    "viable": 392,
+    "non_viable": 0,
+    "total_grains": 392,
+    "non_viable_rate": 0.0
+  },
+  "8-10-H": {
+    "file_count": 3,
+    "viable": 192,
+    "non_viable": 4,
+    "total_grains": 196,
+    "non_viable_rate": 0.0204
+  },
+  "8-11-C": {
+    "file_count": 3,
+    "viable": 202,
+    "non_viable": 1,
+    "total_grains": 203,
+    "non_viable_rate": 0.0049
+  },
+  "8-12-A": {
+    "file_count": 3,
+    "viable": 113,
+    "non_viable": 5,
+    "total_grains": 118,
+    "non_viable_rate": 0.0424
+  },
+  "8-2-D": {
+    "file_count": 4,
+    "viable": 211,
+    "non_viable": 2,
+    "total_grains": 213,
+    "non_viable_rate": 0.0094
+  },
+  "8-2-G": {
+    "file_count": 3,
+    "viable": 192,
+    "non_viable": 0,
+    "total_grains": 192,
+    "non_viable_rate": 0.0
+  },
+  "8-3-A": {
+    "file_count": 3,
+    "viable": 330,
+    "non_viable": 3,
+    "total_grains": 333,
+    "non_viable_rate": 0.009
+  },
+  "8-3-C": {
+    "file_count": 4,
+    "viable": 197,
+    "non_viable": 30,
+    "total_grains": 227,
+    "non_viable_rate": 0.1322
+  },
+  "8-3-F": {
+    "file_count": 4,
+    "viable": 189,
+    "non_viable": 3,
+    "total_grains": 192,
+    "non_viable_rate": 0.0156
+  },
+  "8-4-B": {
+    "file_count": 3,
+    "viable": 235,
+    "non_viable": 16,
+    "total_grains": 251,
+    "non_viable_rate": 0.0637
+  },
+  "8-4-C": {
+    "file_count": 4,
+    "viable": 154,
+    "non_viable": 6,
+    "total_grains": 160,
+    "non_viable_rate": 0.0375
+  },
+  "8-6-A": {
+    "file_count": 4,
+    "viable": 198,
+    "non_viable": 6,
+    "total_grains": 204,
+    "non_viable_rate": 0.0294
+  },
+  "8-6-I": {
+    "file_count": 3,
+    "viable": 310,
+    "non_viable": 2,
+    "total_grains": 312,
+    "non_viable_rate": 0.0064
+  },
+  "8-7-A": {
+    "file_count": 3,
+    "viable": 268,
+    "non_viable": 1,
+    "total_grains": 269,
+    "non_viable_rate": 0.0037
+  },
+  "8-8-C": {
+    "file_count": 4,
+    "viable": 172,
+    "non_viable": 8,
+    "total_grains": 180,
+    "non_viable_rate": 0.0444
+  },
+  "8-9-C": {
+    "file_count": 4,
+    "viable": 263,
+    "non_viable": 0,
+    "total_grains": 263,
+    "non_viable_rate": 0.0
+  },
+  "8-9-G": {
+    "file_count": 3,
+    "viable": 394,
+    "non_viable": 0,
+    "total_grains": 394,
+    "non_viable_rate": 0.0
+  },
+  "8-9-I": {
+    "file_count": 3,
+    "viable": 311,
+    "non_viable": 0,
+    "total_grains": 311,
+    "non_viable_rate": 0.0
+  },
+  "9-9-A": {
+    "file_count": 3,
+    "viable": 332,
+    "non_viable": 0,
+    "total_grains": 332,
+    "non_viable_rate": 0.0
+  }
+}

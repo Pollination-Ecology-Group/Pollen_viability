@@ -162,6 +162,31 @@ def filter_sam_results(results, orig_img):
         
     return [res[keep_indices]]
 
+@st.cache_data(ttl=3600)
+def load_sample_viability_index_gui():
+    json_path = os.path.join(os.path.dirname(__file__), "src", "sample_viability_index.json")
+    if os.path.exists(json_path):
+        try:
+            with open(json_path, "r") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {}
+
+sample_index = load_sample_viability_index_gui()
+
+def sort_keys_by_nonviable_priority(keys):
+    if not sample_index:
+        return keys
+    def rank_key(k):
+        filename = os.path.basename(k)
+        sample_id = filename.split('_')[0]
+        if sample_id in sample_index:
+            info = sample_index[sample_id]
+            return (info.get("non_viable", 0), info.get("non_viable_rate", 0.0))
+        return (0, 0.0)
+    return sorted(keys, key=rank_key, reverse=True)
+
 def fetch_keys_from_s3():
     s3 = get_s3_client()
     if not s3:
@@ -179,6 +204,10 @@ def fetch_keys_from_s3():
                 key = obj['Key']
                 if key.lower().endswith(valid_extensions):
                     new_keys.append(key)
+                    
+        if getattr(st.session_state, "prioritize_nonviable_toggle", True):
+            new_keys = sort_keys_by_nonviable_priority(new_keys)
+            
         st.session_state.s3_keys = new_keys
     except Exception as e:
         st.error(f"Error fetching from S3: {e}")

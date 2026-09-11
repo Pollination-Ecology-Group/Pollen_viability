@@ -108,9 +108,35 @@ def tile_image(img_data, base_name, s3_client, tile_size=640, overlap=0.1):
             
     print(f"Generated and uploaded {count} tiles for {base_name}")
 
+import json
+
+def load_sample_viability_index():
+    index_path = os.path.join(os.path.dirname(__file__), 'sample_viability_index.json')
+    if os.path.exists(index_path):
+        try:
+            with open(index_path, 'r') as f:
+                return json.load(f)
+        except Exception as e:
+            print(f"⚠️ Warning loading sample index: {e}")
+    return {}
+
+def get_czi_sample_id(key_or_filename):
+    basename = os.path.basename(key_or_filename)
+    return basename.split('_')[0]
+
+def get_nonviable_rank(key_or_filename, index):
+    sample_id = get_czi_sample_id(key_or_filename)
+    if sample_id in index:
+        data = index[sample_id]
+        return (data.get("non_viable", 0), data.get("non_viable_rate", 0.0))
+    return (0, 0.0)
+
 def main(args):
     s3_resource, s3_client = setup_s3()
     os.makedirs(LOCAL_CZI_DIR, exist_ok=True)
+    index = load_sample_viability_index()
+    if index:
+        print(f"📊 Loaded historical viability index for {len(index)} samples.")
     
     if args.download and s3_client:
         print(f"Fetching list of .czi files from S3 ({S3_PREFIX})...")
@@ -124,14 +150,30 @@ def main(args):
                     if obj['Key'].endswith('.czi'):
                         keys.append(obj['Key'])
         
+        if args.min_nonviable_pct > 0.0:
+            threshold = args.min_nonviable_pct / 100.0
+            filtered = [k for k in keys if get_nonviable_rank(k, index)[1] >= threshold or get_nonviable_rank(k, index)[0] >= 10]
+            if filtered:
+                print(f"🎯 Filtered {len(keys)} CZI files down to {len(filtered)} files with >={args.min_nonviable_pct}% non-viable estimate.")
+                keys = filtered
+
+        if args.prioritize_nonviable:
+            print("🎯 Sorting CZI files by historical non-viable pollen yield...")
+            keys.sort(key=lambda k: get_nonviable_rank(k, index), reverse=True)
+
         if args.limit and args.limit > 0:
-            keys = random.sample(keys, min(args.limit, len(keys)))
-            print(f"Randomly selected {len(keys)} files for processing.")
+            if args.prioritize_nonviable:
+                keys = keys[:args.limit]
+                print(f"Selected top {len(keys)} prioritized CZI files.")
+            else:
+                keys = random.sample(keys, min(args.limit, len(keys)))
+                print(f"Randomly selected {len(keys)} files for processing.")
 
         for key in keys:
             filename = os.path.basename(key)
             local_path = os.path.join(LOCAL_CZI_DIR, filename)
-            print(f"Downloading {filename}...")
+            rank = get_nonviable_rank(filename, index)
+            print(f"Downloading {filename} (Est. Non-Viable: {rank[0]} grains, {rank[1]*100:.1f}%)...")
             s3_client.download_file(S3_BUCKET, key, local_path)
             
             # Process immediately to save ephemeral storage
@@ -148,6 +190,8 @@ def main(args):
     else:
         # Local processing only
         czi_files = [f for f in os.listdir(LOCAL_CZI_DIR) if f.endswith('.czi')]
+        if args.prioritize_nonviable:
+            czi_files.sort(key=lambda f: get_nonviable_rank(f, index), reverse=True)
         for czi_file in czi_files:
             czi_path = os.path.join(LOCAL_CZI_DIR, czi_file)
             base_name = os.path.splitext(czi_file)[0]
@@ -160,6 +204,9 @@ def main(args):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Download and preprocess .czi files")
     parser.add_argument('--download', action='store_true', help="Download files from S3 first")
-    parser.add_argument('--limit', type=int, default=0, help="Randomly limit processing to N files")
+    parser.add_argument('--limit', type=int, default=0, help="Limit processing to N files")
+    parser.add_argument('--prioritize-nonviable', action='store_true', help="Prioritize files from samples with high non-viable yields")
+    parser.add_argument('--min-nonviable-pct', type=float, default=0.0, help="Minimum non-viable percentage threshold (e.g. 5.0)")
     args = parser.parse_args()
     main(args)
+
