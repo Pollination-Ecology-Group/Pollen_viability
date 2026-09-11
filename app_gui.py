@@ -620,12 +620,13 @@ def fetch_single_image(key):
     except Exception:
         return key, None
 
-# Iteratively scan s3_keys to collect EXCLUSIVELY matching tiles
+# Iteratively scan s3_keys up to MAX_SCAN_TILES (36) to prevent Streamlit Cloud timeout/OOM
 matching_keys = []
-candidate_chunk_size = 24
+candidate_chunk_size = 18
 scanned_count = 0
+MAX_SCAN_TILES = 36
 
-while len(matching_keys) < BATCH_SIZE and scanned_count < len(st.session_state.s3_keys):
+while len(matching_keys) < BATCH_SIZE and scanned_count < min(MAX_SCAN_TILES, len(st.session_state.s3_keys)):
     chunk_keys = st.session_state.s3_keys[scanned_count : scanned_count + candidate_chunk_size]
     scanned_count += candidate_chunk_size
     if not chunk_keys:
@@ -633,7 +634,7 @@ while len(matching_keys) < BATCH_SIZE and scanned_count < len(st.session_state.s
         
     keys_to_fetch = [k for k in chunk_keys if k not in st.session_state.batch_images]
     if keys_to_fetch:
-        with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
             fetched_results = executor.map(fetch_single_image, keys_to_fetch)
             for k, img_bytes in fetched_results:
                 if img_bytes:
@@ -656,7 +657,7 @@ while len(matching_keys) < BATCH_SIZE and scanned_count < len(st.session_state.s
                 st.session_state.batch_results[key] = results
                 if results and len(results[0].boxes) > 0:
                     st.session_state.assignments[key] = "🌟 Hard Positives"
-            except Exception as e:
+            except Exception:
                 pass
                 
         if is_tile_matching_strategy(key, strategy):
@@ -665,7 +666,15 @@ while len(matching_keys) < BATCH_SIZE and scanned_count < len(st.session_state.s
             if len(matching_keys) >= BATCH_SIZE:
                 break
 
+# Fallback to remaining scanned keys if matching count is small
+if not matching_keys and candidate_chunk_size <= len(st.session_state.s3_keys):
+    matching_keys = st.session_state.s3_keys[:BATCH_SIZE]
+
 current_batch_keys = matching_keys[:BATCH_SIZE]
+
+# Prune unused image memory to prevent Streamlit Cloud OOM
+active_set = set(current_batch_keys)
+st.session_state.batch_images = {k: v for k, v in st.session_state.batch_images.items() if k in active_set}
 
 # MODE IMPLEMENTATIONS
 
