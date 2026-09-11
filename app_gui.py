@@ -136,7 +136,7 @@ def load_model():
             try:
                 s3 = get_s3_client()
                 if s3:
-                    s3_model_key = "Ostatni/Pollen_viability/trained_models/pollen_v1_27/weights/best.pt"
+                    s3_model_key = "Ostatni/Pollen_viability/trained_models/pollen_train_20260313_2153/weights/best.pt"
                     s3.download_file(get_bucket_name(), s3_model_key, model_path)
                     print(f"Downloaded model from S3: {s3_model_key}")
             except Exception as dl_err:
