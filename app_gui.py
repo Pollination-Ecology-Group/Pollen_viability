@@ -589,30 +589,28 @@ def is_tile_matching_strategy(key, strategy):
             num_viable = sum(1 for c in classes if int(c) == 0)
 
     if strategy == "🌑 Hard Negatives (Low/Zero Pollen)":
-        # Strict Hard Negative matching: MUST have 0 detected pollen grains!
+        # EXCLUSIVE: MUST have 0 detected pollen grains!
         return total_boxes == 0
     elif strategy == "🎯 High Non-Viable Dense":
+        # EXCLUSIVE: MUST contain detected non-viable grains OR come from high non-viable sample
         if num_nonviable > 0:
             return True
         s_id = extract_sample_id(key)
         s_info = sample_index.get(s_id, {})
-        return s_info.get("non_viable", 0) > 0 or s_info.get("non_viable_rate", 0.0) > 0.05
+        return (s_info.get("non_viable", 0) >= 5 or s_info.get("non_viable_rate", 0.0) >= 0.05) and total_boxes > 0
     elif strategy == "🟩 Viable Dense":
-        return num_viable > 0 or total_boxes > 0
+        # EXCLUSIVE: MUST contain viable pollen grains!
+        return num_viable > 0
         
     return True
 
 strategy = getattr(st.session_state, "queue_strategy_select", "🎯 High Non-Viable Dense")
 
-# Pre-fetch a pool of up to 48 candidate keys to filter strictly matching tiles
-CANDIDATE_POOL_SIZE = 48
-candidate_keys = st.session_state.s3_keys[:CANDIDATE_POOL_SIZE]
-
 s3 = get_s3_client()
 bucket = get_bucket_name()
 model = load_model()
 
-# Multi-threaded Parallel Fetching of Candidate Images
+# Multi-threaded Parallel Fetching of Images
 def fetch_single_image(key):
     try:
         s3_c = get_s3_client()
@@ -622,70 +620,50 @@ def fetch_single_image(key):
     except Exception:
         return key, None
 
-keys_to_fetch = [k for k in candidate_keys if k not in st.session_state.batch_images]
-if keys_to_fetch:
-    with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
-        fetched_results = executor.map(fetch_single_image, keys_to_fetch)
-        for k, img_bytes in fetched_results:
-            if img_bytes:
-                st.session_state.batch_images[k] = img_bytes
+# Iteratively scan s3_keys to collect EXCLUSIVELY matching tiles
+matching_keys = []
+candidate_chunk_size = 24
+scanned_count = 0
 
-# Run Model Prediction for Candidate Pool
-for key in candidate_keys:
-    if key not in st.session_state.assignments:
-        st.session_state.assignments[key] = "🌑 Hard Negatives"
+while len(matching_keys) < BATCH_SIZE and scanned_count < len(st.session_state.s3_keys):
+    chunk_keys = st.session_state.s3_keys[scanned_count : scanned_count + candidate_chunk_size]
+    scanned_count += candidate_chunk_size
+    if not chunk_keys:
+        break
         
-    if model and key not in st.session_state.batch_results and key in st.session_state.batch_images:
-        try:
-            img_bytes = st.session_state.batch_images[key]
-            pil_img = Image.open(BytesIO(img_bytes)).convert("RGB")
-            cv_img = cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2BGR)
+    keys_to_fetch = [k for k in chunk_keys if k not in st.session_state.batch_images]
+    if keys_to_fetch:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+            fetched_results = executor.map(fetch_single_image, keys_to_fetch)
+            for k, img_bytes in fetched_results:
+                if img_bytes:
+                    st.session_state.batch_images[k] = img_bytes
+
+    for key in chunk_keys:
+        if key not in st.session_state.assignments:
+            st.session_state.assignments[key] = "🌑 Hard Negatives"
             
-            results = model(cv_img, conf=0.25, iou=0.3, agnostic_nms=True, verbose=False)
-            if hasattr(model, 'task') and getattr(model, 'task', '') == 'segment' or type(model).__name__ == "FastSAM":
-                 results = filter_sam_results(results, cv_img)
-                 
-            st.session_state.batch_results[key] = results
-            if results and len(results[0].boxes) > 0:
-                st.session_state.assignments[key] = "🌟 Hard Positives"
-        except Exception as e:
-            pass
-
-# Filter and rank candidate keys strictly matching active strategy
-matching_keys = [k for k in candidate_keys if is_tile_matching_strategy(k, strategy)]
-
-def rank_batch_key(k):
-    res = st.session_state.batch_results.get(k)
-    num_nonviable = 0
-    num_viable = 0
-    total_boxes = 0
-    if res and len(res) > 0 and hasattr(res[0], 'boxes') and res[0].boxes is not None:
-        total_boxes = len(res[0].boxes)
-        if hasattr(res[0].boxes, 'cls') and res[0].boxes.cls is not None:
-            classes = res[0].boxes.cls.tolist()
-            num_nonviable = sum(1 for c in classes if int(c) == 1)
-            num_viable = sum(1 for c in classes if int(c) == 0)
-            
-    s_id = extract_sample_id(k)
-    s_info = sample_index.get(s_id, {})
-    s_nonviable = s_info.get("non_viable", 0)
-    s_viable = s_info.get("viable", 0)
-    
-    if strategy == "🎯 High Non-Viable Dense":
-        return (num_nonviable, s_nonviable, total_boxes)
-    elif strategy == "🟩 Viable Dense":
-        return (num_viable, s_viable, total_boxes)
-    elif strategy == "🌑 Hard Negatives (Low/Zero Pollen)":
-        return (-total_boxes, -num_viable, -s_viable)
-    return (0, 0, 0)
-
-matching_keys.sort(key=rank_batch_key, reverse=True)
-
-# Fallback: Pad matching keys with sorted remaining candidate keys if pool is small
-if len(matching_keys) < BATCH_SIZE:
-    non_matching = [k for k in candidate_keys if k not in matching_keys]
-    non_matching.sort(key=rank_batch_key, reverse=True)
-    matching_keys.extend(non_matching)
+        if model and key not in st.session_state.batch_results and key in st.session_state.batch_images:
+            try:
+                img_bytes = st.session_state.batch_images[key]
+                pil_img = Image.open(BytesIO(img_bytes)).convert("RGB")
+                cv_img = cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2BGR)
+                
+                results = model(cv_img, conf=0.25, iou=0.3, agnostic_nms=True, verbose=False)
+                if hasattr(model, 'task') and getattr(model, 'task', '') == 'segment' or type(model).__name__ == "FastSAM":
+                     results = filter_sam_results(results, cv_img)
+                     
+                st.session_state.batch_results[key] = results
+                if results and len(results[0].boxes) > 0:
+                    st.session_state.assignments[key] = "🌟 Hard Positives"
+            except Exception as e:
+                pass
+                
+        if is_tile_matching_strategy(key, strategy):
+            if key not in matching_keys:
+                matching_keys.append(key)
+            if len(matching_keys) >= BATCH_SIZE:
+                break
 
 current_batch_keys = matching_keys[:BATCH_SIZE]
 
