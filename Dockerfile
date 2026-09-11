@@ -4,7 +4,7 @@ FROM ultralytics/ultralytics:latest
 WORKDIR /app
 
 # Install additional dependencies
-RUN pip install boto3 pandas
+RUN pip install boto3 pandas czifile
 
 # Copy application code
 COPY src/ ./

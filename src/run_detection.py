@@ -175,7 +175,7 @@ def run_detection():
                 print("   ⚠️ Falling back to generic YOLOv8x (Results will be poor!)")
 
     # 2. Load Model
-    model_name = LOCAL_MODEL if os.path.exists(LOCAL_MODEL) else 'yolov8x-seg.pt'
+    model_name = LOCAL_MODEL if os.path.exists(LOCAL_MODEL) else 'yolo11x-seg.pt'
     print(f"🔮 Loading Model: {model_name}")
     model = YOLO(model_name)
 
@@ -257,7 +257,7 @@ def run_detection():
                 final_boxes, final_scores, final_cls, final_masks = [], [], [], []
 
         # --- UNIFIED PARTICLE PROCESSING ---
-        v_count, nv_count = 0, 0
+        v_count, nv_count, int_count = 0, 0, 0
         particle_data = []
         
         # Pre-calculate areas and identify exclusions
@@ -291,11 +291,18 @@ def run_detection():
             
             area, diameter = calculate_measurements(mask)
             
-            color = EXCLUSION_COLOR if is_excluded else ((0, 255, 0) if cls_id == 0 else (0, 0, 255))
+            
+            if is_excluded:
+                color = EXCLUSION_COLOR
+            else:
+                if cls_id == 0: color = (0, 255, 0) # Green for viable
+                elif cls_id == 1: color = (0, 0, 255) # Red for non-viable
+                else: color = (0, 255, 255) # Yellow for intermediate
             
             if not is_excluded:
                 if cls_id == 0: v_count += 1
-                else: nv_count += 1
+                elif cls_id == 1: nv_count += 1
+                else: int_count += 1
             
             # Visualization
             pts = np.array(mask, np.int32).reshape((-1, 1, 2))
@@ -304,7 +311,9 @@ def run_detection():
             cv2.addWeighted(overlay, 0.4, original_img, 0.6, 0, original_img)
             cv2.polylines(original_img, [pts], True, color, 4)
             
-            label = f"{'V' if cls_id == 0 else 'NV'} {conf:.2f}"
+            
+            class_str = "V" if cls_id == 0 else ("NV" if cls_id == 1 else "INT")
+            label = f"{class_str} {conf:.2f}"
             if is_excluded: label += f" ({'+'.join(reason)})"
             
             font_scale = max(0.8, w_orig / 3000.0)
@@ -315,7 +324,7 @@ def run_detection():
             particle_data.append({
                 'filename': img_file,
                 'particle_id': j,
-                'class': 'viable' if cls_id == 0 else 'non_viable',
+                'class': 'viable' if cls_id == 0 else ('non_viable' if cls_id == 1 else 'intermediate'),
                 'conf': conf,
                 'area_px': area,
                 'diameter_px': diameter,
@@ -335,7 +344,8 @@ def run_detection():
             'filename': img_file,
             'viable': v_count,
             'non_viable': nv_count,
-            'total_counted': v_count + nv_count,
+            'intermediate': int_count,
+            'total_counted': v_count + nv_count + int_count,
             'total_detected': len(final_masks)
         })
         

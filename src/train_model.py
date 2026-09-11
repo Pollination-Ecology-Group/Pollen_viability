@@ -352,7 +352,7 @@ def main():
         device = 0 if torch.cuda.is_available() else 'cpu'
         print(f"   Device: {device}")
         
-        model = YOLO('yolov8x-seg.pt')
+        model = YOLO('yolo11x-seg.pt')
         run_name = f"pollen_train_{datetime.now().strftime('%Y%m%d_%H%M')}"
         
         # ALWAYS overwrite data.yaml to ensure paths are correct for this container
@@ -365,7 +365,7 @@ def main():
             f.write("train: train/images\n")
             f.write("val: val/images\n")
             # Assuming standard classes for this project
-            f.write("names:\n  0: viable\n  1: non_viable\n")
+            f.write("names:\n  0: viable\n  1: non_viable\n  2: intermediate\n")
 
         results = model.train(
             data=yaml_path,

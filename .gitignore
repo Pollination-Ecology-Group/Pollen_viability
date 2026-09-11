@@ -1,6 +1,7 @@
 .env
 **/__pycache__/
 .venv/
+venv/
 pollen_counting_results/
 detected/
 detect_images/
@@ -8,7 +9,9 @@ detect_images/
 /.quarto/
 **/*.quarto_ipynb
 
-# Large data files that should not be in git
-sam_b.pt
+# Large data files and logs that should not be in git
+*.pt
+*.log
+.Rhistory
 visualizations.zip
 _site/

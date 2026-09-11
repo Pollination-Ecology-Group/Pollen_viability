@@ -1,0 +1,42 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: pollen-preprocess-job
+  namespace: stenc-ns
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: pollen-container
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+        image: ultralytics/ultralytics:latest
+        workingDir: /tmp
+        command: ["/bin/bash", "-c", "pip install --user boto3 pandas czifile tqdm && python /scripts/preprocess_czi.py --download --limit 3"]
+        envFrom:
+        - secretRef:
+            name: s3-creds
+        resources:
+          requests:
+            memory: "32Gi"
+            cpu: "8"
+          limits:
+            memory: "64Gi"
+            cpu: "16"
+            nvidia.com/gpu: "1"
+        volumeMounts:
+        - name: script-volume
+          mountPath: /scripts
+      volumes:
+      - name: script-volume
+        configMap:
+          name: preprocess-script
+      restartPolicy: Never

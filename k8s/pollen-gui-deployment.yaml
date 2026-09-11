@@ -1,0 +1,67 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pollen-gui
+  namespace: stenc-ns
+  labels:
+    app: pollen-gui
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pollen-gui
+  template:
+    metadata:
+      labels:
+        app: pollen-gui
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: gui
+        image: ultralytics/ultralytics:latest
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
+        workingDir: /tmp
+        command: ["/bin/bash", "-c"]
+        args:
+          - |
+            pip install --user streamlit boto3
+            export PATH=$PATH:$HOME/.local/bin
+            streamlit run /app/app_gui.py --server.port 8501 --server.address 0.0.0.0
+        envFrom:
+        - secretRef:
+            name: s3-creds
+        ports:
+        - containerPort: 8501
+        readinessProbe:
+          tcpSocket:
+            port: 8501
+          initialDelaySeconds: 10
+          periodSeconds: 5
+        volumeMounts:
+        - name: app-code
+          mountPath: /app/app_gui.py
+          subPath: app_gui.py
+      volumes:
+      - name: app-code
+        configMap:
+          name: pollen-gui-code
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pollen-gui-svc
+  namespace: stenc-ns
+spec:
+  selector:
+    app: pollen-gui
+  ports:
+  - port: 8501
+    targetPort: 8501

@@ -1,0 +1,165 @@
+import os
+import cv2
+import boto3
+import numpy as np
+import czifile
+from botocore.client import Config
+import argparse
+from tqdm import tqdm
+import urllib.request
+import ssl
+import random
+
+S3_ENDPOINT = os.environ.get('S3_ENDPOINT', 'https://s3.cl4.du.cesnet.cz')
+S3_BUCKET = os.environ.get('S3_BUCKET')
+AWS_ACCESS_KEY_ID = os.environ.get('AWS_ACCESS_KEY_ID')
+AWS_SECRET_ACCESS_KEY = os.environ.get('AWS_SECRET_ACCESS_KEY')
+
+S3_PREFIX = 'Ostatni/Pollen_viability/Source'
+S3_OUTPUT_PREFIX = 'Ostatni/Pollen_viability/tiles_640'
+LOCAL_CZI_DIR = 'data/czi_files'
+LOCAL_TILES_DIR = 'data/tiles_640'
+
+def setup_s3():
+    if not all([S3_BUCKET, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY]):
+        print("⚠️ S3 Credentials missing. Make sure to source .env")
+        return None, None
+    resource = boto3.resource('s3',
+        endpoint_url=S3_ENDPOINT,
+        aws_access_key_id=AWS_ACCESS_KEY_ID,
+        aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
+        config=Config(signature_version='s3v4')
+    )
+    client = boto3.client('s3',
+        endpoint_url=S3_ENDPOINT,
+        aws_access_key_id=AWS_ACCESS_KEY_ID,
+        aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
+        config=Config(signature_version='s3v4')
+    )
+    return resource, client
+
+def upload_file_robust(s3_client, local_path, bucket, key):
+    try:
+        url = s3_client.generate_presigned_url('put_object', Params={'Bucket': bucket, 'Key': key}, ExpiresIn=3600)
+        size = os.path.getsize(local_path)
+        with open(local_path, 'rb') as data:
+            req = urllib.request.Request(url, data=data, method='PUT')
+            req.add_header('Content-Length', str(size))
+            ctx = ssl.create_default_context()
+            ctx.check_hostname = False
+            ctx.verify_mode = ssl.CERT_NONE
+            with urllib.request.urlopen(req, context=ctx) as f:
+                if f.status != 200:
+                    print(f"   -> ⚠️ Upload rejected {os.path.basename(local_path)}: Status {f.status}")
+    except Exception as e:
+        print(f"❌ Failed to upload {local_path}: {e}")
+
+def extract_image_from_czi(czi_path):
+    with czifile.CziFile(czi_path) as czi:
+        img_data = czi.asarray()
+        
+    img_data = np.squeeze(img_data)
+    if img_data.ndim == 3 and img_data.shape[0] in [3, 4]: 
+        img_data = np.transpose(img_data, (1, 2, 0))
+        
+    if img_data.dtype == np.uint16:
+        img_min, img_max = img_data.min(), img_data.max()
+        img_data = ((img_data - img_min) / (img_max - img_min + 1e-8) * 255).astype(np.uint8)
+        
+    if img_data.ndim == 2:
+        img_data = cv2.cvtColor(img_data, cv2.COLOR_GRAY2BGR)
+    elif img_data.ndim == 3 and img_data.shape[2] == 3:
+        img_data = cv2.cvtColor(img_data, cv2.COLOR_RGB2BGR)
+
+    return img_data
+
+def tile_image(img_data, base_name, s3_client, tile_size=640, overlap=0.1):
+    h, w = img_data.shape[:2]
+    os.makedirs(LOCAL_TILES_DIR, exist_ok=True)
+    
+    stride = int(tile_size * (1 - overlap))
+    y_starts = list(range(0, h - tile_size, stride))
+    if h > tile_size and y_starts[-1] + tile_size < h: y_starts.append(h - tile_size)
+    x_starts = list(range(0, w - tile_size, stride))
+    if w > tile_size and x_starts[-1] + tile_size < w: x_starts.append(w - tile_size)
+        
+    if h <= tile_size and w <= tile_size:
+        y_starts, x_starts = [0], [0]
+        padded = np.zeros((tile_size, tile_size, 3), dtype=np.uint8)
+        padded[:h, :w] = img_data
+        img_data = padded
+
+    count = 0
+    for y in y_starts:
+        for x in x_starts:
+            tile = img_data[y:y+tile_size, x:x+tile_size]
+            filename = f"{base_name}_tile_{y}_{x}.jpg"
+            out_path = os.path.join(LOCAL_TILES_DIR, filename)
+            cv2.imwrite(out_path, tile)
+            
+            # Upload to S3 organized by sample
+            if s3_client:
+                s3_key = f"{S3_OUTPUT_PREFIX}/{base_name}/{filename}"
+                upload_file_robust(s3_client, out_path, S3_BUCKET, s3_key)
+            
+            # Cleanup local tile to save space
+            os.remove(out_path)
+            count += 1
+            
+    print(f"Generated and uploaded {count} tiles for {base_name}")
+
+def main(args):
+    s3_resource, s3_client = setup_s3()
+    os.makedirs(LOCAL_CZI_DIR, exist_ok=True)
+    
+    if args.download and s3_client:
+        print(f"Fetching list of .czi files from S3 ({S3_PREFIX})...")
+        paginator = s3_client.get_paginator('list_objects_v2')
+        pages = paginator.paginate(Bucket=S3_BUCKET, Prefix=S3_PREFIX)
+        
+        keys = []
+        for page in pages:
+            if 'Contents' in page:
+                for obj in page['Contents']:
+                    if obj['Key'].endswith('.czi'):
+                        keys.append(obj['Key'])
+        
+        if args.limit and args.limit > 0:
+            keys = random.sample(keys, min(args.limit, len(keys)))
+            print(f"Randomly selected {len(keys)} files for processing.")
+
+        for key in keys:
+            filename = os.path.basename(key)
+            local_path = os.path.join(LOCAL_CZI_DIR, filename)
+            print(f"Downloading {filename}...")
+            s3_client.download_file(S3_BUCKET, key, local_path)
+            
+            # Process immediately to save ephemeral storage
+            try:
+                print(f"Processing {filename}...")
+                img_data = extract_image_from_czi(local_path)
+                tile_image(img_data, os.path.splitext(filename)[0], s3_client, tile_size=640)
+            except Exception as e:
+                print(f"Error processing {filename}: {e}")
+            finally:
+                # Cleanup original CZI to conserve K8s ephemeral storage
+                if os.path.exists(local_path):
+                    os.remove(local_path)
+    else:
+        # Local processing only
+        czi_files = [f for f in os.listdir(LOCAL_CZI_DIR) if f.endswith('.czi')]
+        for czi_file in czi_files:
+            czi_path = os.path.join(LOCAL_CZI_DIR, czi_file)
+            base_name = os.path.splitext(czi_file)[0]
+            try:
+                img_data = extract_image_from_czi(czi_path)
+                tile_image(img_data, base_name, s3_client, tile_size=640)
+            except Exception as e:
+                print(f"Error processing {czi_file}: {e}")
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description="Download and preprocess .czi files")
+    parser.add_argument('--download', action='store_true', help="Download files from S3 first")
+    parser.add_argument('--limit', type=int, default=0, help="Randomly limit processing to N files")
+    args = parser.parse_args()
+    main(args)

@@ -1,0 +1,6 @@
+streamlit
+ultralytics
+boto3
+Pillow
+streamlit-drawable-canvas
+opencv-python-headless
