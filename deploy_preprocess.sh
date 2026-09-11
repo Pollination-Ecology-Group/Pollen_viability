@@ -10,12 +10,10 @@ echo "🌸 Pollen Preprocessing Deployment Script"
 echo "-------------------------------------"
 
 
-echo "☁️ 1. Deploying script as configmap..."
-kubectl create configmap preprocess-script --from-file=src/preprocess_czi.py -n stenc-ns --dry-run=client -o yaml | kubectl apply -f -
-
-echo "🧹 3. Cleaning up old jobs..."
+# Check for kubectl
 if ! command -v kubectl &> /dev/null; then
     if [ ! -f "./kubectl" ]; then
+        echo "⬇️ kubectl not found in PATH. Downloading local binary..."
         curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
         chmod +x kubectl
     fi
@@ -28,9 +26,13 @@ if [ -f "./kubeconfig.yaml" ]; then
     export KUBECONFIG="$(pwd)/kubeconfig.yaml"
 fi
 
+echo "☁️ 1. Deploying script as configmap..."
+$KUBECTL create configmap preprocess-script --from-file=src/preprocess_czi.py -n stenc-ns --dry-run=client -o yaml | $KUBECTL apply -f -
+
+echo "🧹 2. Cleaning up old jobs..."
 $KUBECTL delete job pollen-preprocess-job -n $NAMESPACE --ignore-not-found
 
-echo "🚀 4. Deploying job..."
+echo "🚀 3. Deploying job..."
 $KUBECTL apply -f k8s/pollen-preprocess-job.yaml
 
 echo "⏳ 5. Waiting for Pod to start..."

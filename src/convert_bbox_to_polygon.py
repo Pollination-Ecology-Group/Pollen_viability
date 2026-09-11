@@ -89,12 +89,39 @@ def convert_dataset_to_polygons(data_dir, sam_model_name='sam_b.pt'):
             with open(out_lbl_path, 'w') as out_f:
                 result = results[0]
                 if result.masks is not None:
-                    # masks.xyn returns normalized coordinates for polygons (required for YOLO format)
                     for idx, segment in enumerate(result.masks.xyn):
-                        if len(segment) > 0:
-                            cls = classes[idx]
-                            # Format line: class x1 y1 x2 y2 ... xn yn
-                            coords = " ".join(f"{x:.6f} {y:.6f}" for x, y in segment)
+                        cls = classes[idx]
+                        bbox = bboxes[idx]
+                        bx1, by1, bx2, by2 = bbox
+                        bbox_w = max(1.0, bx2 - bx1)
+                        bbox_h = max(1.0, by2 - by1)
+                        bbox_area = bbox_w * bbox_h
+                        
+                        # Convert normalized segment to pixel coordinates for validation
+                        valid_polygon = False
+                        if len(segment) >= 3:
+                            pts = np.array([[pt[0] * w, pt[1] * h] for pt in segment], dtype=np.float32)
+                            poly_area = cv2.contourArea(pts)
+                            
+                            # Validate polygon area against bbox area (ignore tiny specks or huge bleeding SAM masks)
+                            if 0.20 * bbox_area <= poly_area <= 1.80 * bbox_area:
+                                # Clamp points to padded bbox boundaries to prevent mask bleed into background/bubbles
+                                pad_x = bbox_w * 0.10
+                                pad_y = bbox_h * 0.10
+                                clamped_pts = []
+                                for px, py in pts:
+                                    cx_px = max(bx1 - pad_x, min(bx2 + pad_x, px))
+                                    cy_px = max(by1 - pad_y, min(by2 + pad_y, py))
+                                    clamped_pts.append((cx_px / w, cy_px / h))
+                                
+                                coords = " ".join(f"{x:.6f} {y:.6f}" for x, y in clamped_pts)
+                                out_f.write(f"{cls} {coords}\n")
+                                valid_polygon = True
+                        
+                        # Fallback: if SAM generated a corrupted/bleeding mask, use tight rectangular polygon
+                        if not valid_polygon:
+                            rx1, ry1, rx2, ry2 = bx1 / w, by1 / h, bx2 / w, by2 / h
+                            coords = f"{rx1:.6f} {ry1:.6f} {rx2:.6f} {ry1:.6f} {rx2:.6f} {ry2:.6f} {rx1:.6f} {ry2:.6f}"
                             out_f.write(f"{cls} {coords}\n")
         print(f"\nFinished {split} split. {' '*20}")
 

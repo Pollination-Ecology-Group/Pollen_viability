@@ -73,7 +73,57 @@ def extract_image_from_czi(czi_path):
 
     return img_data
 
-def tile_image(img_data, base_name, s3_client, tile_size=640, overlap=0.1):
+def is_nonviable_candidate_tile(tile_bgr, min_candidates=1):
+    """
+    Screens a 640x640 tile for non-viable pollen candidates under Alexander Stain.
+    Criteria:
+      - Viable pollen is heavily stained with Magenta/Purple (High Saturation, Hue 140-175 / 0-10).
+      - Non-viable / aborted pollen lacks deep magenta stain (pale green, grey, transparent, light orange, or empty shells).
+      - Filters out background slide whitespace (white/light grey), huge air bubbles (>25,000px), and tiny cytoplasm specks (<250px).
+    """
+    hsv = cv2.cvtColor(tile_bgr, cv2.COLOR_BGR2HSV)
+    
+    # 1. Mask slide background (very high lightness, low saturation white background)
+    is_bg = (hsv[:, :, 1] < 35) & (hsv[:, :, 2] > 195)
+    
+    # 2. Mask deep magenta/purple (viable pollen cytoplasm)
+    h = hsv[:, :, 0]
+    s = hsv[:, :, 1]
+    v = hsv[:, :, 2]
+    is_magenta = ((h > 135) | (h < 12)) & (s > 55) & (v < 225)
+    
+    # 3. Detect pollen candidate particles (non-background regions)
+    particle_mask = (~is_bg).astype(np.uint8) * 255
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
+    particle_mask = cv2.morphologyEx(particle_mask, cv2.MORPH_OPEN, kernel)
+    
+    contours, _ = cv2.findContours(particle_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    
+    nonviable_count = 0
+    for cnt in contours:
+        area = cv2.contourArea(cnt)
+        # Filter size: pollen grain area on 640x640 tile is ~350 to 20,000 px.
+        # Ignore tiny cytoplasm specks (< 250 px) and huge air bubbles (> 25000 px)
+        if 250 < area < 25000:
+            peri = cv2.arcLength(cnt, True)
+            if peri > 0:
+                circularity = 4 * np.pi * area / (peri * peri)
+                if circularity > 0.22:
+                    c_mask = np.zeros(tile_bgr.shape[:2], dtype=np.uint8)
+                    cv2.drawContours(c_mask, [cnt], -1, 255, -1)
+                    
+                    particle_pixels = np.sum(c_mask > 0)
+                    if particle_pixels > 0:
+                        magenta_pixels = np.sum((c_mask > 0) & is_magenta)
+                        magenta_ratio = magenta_pixels / particle_pixels
+                        
+                        # Non-viable condition: particle lacks deep magenta stain (< 20% magenta)
+                        if magenta_ratio < 0.20:
+                            nonviable_count += 1
+                            
+    return nonviable_count >= min_candidates
+
+def tile_image(img_data, base_name, s3_client, tile_size=640, overlap=0.1, nonviable_only=False):
     h, w = img_data.shape[:2]
     os.makedirs(LOCAL_TILES_DIR, exist_ok=True)
     
@@ -89,10 +139,16 @@ def tile_image(img_data, base_name, s3_client, tile_size=640, overlap=0.1):
         padded[:h, :w] = img_data
         img_data = padded
 
-    count = 0
+    total_generated = 0
+    kept_count = 0
     for y in y_starts:
         for x in x_starts:
+            total_generated += 1
             tile = img_data[y:y+tile_size, x:x+tile_size]
+            
+            if nonviable_only and not is_nonviable_candidate_tile(tile):
+                continue
+                
             filename = f"{base_name}_tile_{y}_{x}.jpg"
             out_path = os.path.join(LOCAL_TILES_DIR, filename)
             cv2.imwrite(out_path, tile)
@@ -104,9 +160,9 @@ def tile_image(img_data, base_name, s3_client, tile_size=640, overlap=0.1):
             
             # Cleanup local tile to save space
             os.remove(out_path)
-            count += 1
+            kept_count += 1
             
-    print(f"Generated and uploaded {count} tiles for {base_name}")
+    print(f"Generated {total_generated} tiles -> Kept {kept_count} non-viable candidate tiles for {base_name}")
 
 import json
 
@@ -184,7 +240,7 @@ def main(args):
             try:
                 print(f"Processing {filename}...")
                 img_data = extract_image_from_czi(local_path)
-                tile_image(img_data, os.path.splitext(filename)[0], s3_client, tile_size=640)
+                tile_image(img_data, os.path.splitext(filename)[0], s3_client, tile_size=640, nonviable_only=args.nonviable_only)
             except Exception as e:
                 print(f"Error processing {filename}: {e}")
             finally:
@@ -203,7 +259,7 @@ def main(args):
             base_name = os.path.splitext(czi_file)[0]
             try:
                 img_data = extract_image_from_czi(czi_path)
-                tile_image(img_data, base_name, s3_client, tile_size=640)
+                tile_image(img_data, base_name, s3_client, tile_size=640, nonviable_only=args.nonviable_only)
             except Exception as e:
                 print(f"Error processing {czi_file}: {e}")
 
@@ -212,6 +268,7 @@ if __name__ == '__main__':
     parser.add_argument('--download', action='store_true', help="Download files from S3 first")
     parser.add_argument('--limit', type=int, default=0, help="Limit processing to N files")
     parser.add_argument('--prioritize-nonviable', action='store_true', help="Prioritize files from samples with high non-viable yields")
+    parser.add_argument('--nonviable-only', action='store_true', help="Screen and keep only tiles containing candidate non-viable pollen")
     parser.add_argument('--min-nonviable-pct', type=float, default=0.0, help="Minimum non-viable percentage threshold (e.g. 5.0)")
     parser.add_argument('--pattern', type=str, default='', help="Filter CZI files by filename pattern or sample ID (e.g. 5-8-B_AA012_s2x)")
     args = parser.parse_args()

@@ -20,17 +20,17 @@ spec:
             drop: ["ALL"]
         image: ultralytics/ultralytics:latest
         workingDir: /tmp
-        command: ["/bin/bash", "-c", "pip install --user boto3 pandas czifile tqdm && python /scripts/preprocess_czi.py --download --limit 3"]
+        command: ["/bin/bash", "-c", "pip install --user boto3 pandas czifile tqdm && python /scripts/preprocess_czi.py --download --prioritize-nonviable --nonviable-only --limit 5"]
         envFrom:
         - secretRef:
             name: s3-creds
         resources:
           requests:
-            memory: "32Gi"
-            cpu: "8"
+            memory: "16Gi"
+            cpu: "4"
           limits:
-            memory: "64Gi"
-            cpu: "16"
+            memory: "48Gi"
+            cpu: "8"
             nvidia.com/gpu: "1"
         volumeMounts:
         - name: script-volume
