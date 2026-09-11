@@ -694,7 +694,19 @@ while len(matching_keys) < BATCH_SIZE and scanned_count < min(MAX_SCAN_TILES, le
                     results = model(cv_img, conf=0.25, iou=0.7, agnostic_nms=False, verbose=False)
                     if hasattr(model, 'task') and getattr(model, 'task', '') == 'segment' or type(model).__name__ == "FastSAM":
                          results = filter_sam_results(results, cv_img)
-                     
+                
+                # Filter out oversized boxes (multi-grain false detections)
+                # Single pollen grain ≈ 40-80px in a 640px tile; max 130px per side
+                if results and len(results[0].boxes) > 0:
+                    boxes = results[0].boxes
+                    widths = boxes.xyxy[:, 2] - boxes.xyxy[:, 0]
+                    heights = boxes.xyxy[:, 3] - boxes.xyxy[:, 1]
+                    max_dim = 130  # pixels — anything wider/taller is likely multi-grain
+                    keep_mask = (widths <= max_dim) & (heights <= max_dim)
+                    if keep_mask.sum() < len(boxes):
+                        keep_idx = keep_mask.nonzero(as_tuple=True)[0]
+                        results[0] = results[0][keep_idx]
+
                 st.session_state.batch_results[key] = results
                 if results and len(results[0].boxes) > 0:
 
