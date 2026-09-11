@@ -7,7 +7,6 @@ from ultralytics import YOLO
 import boto3
 from botocore.client import Config
 from io import BytesIO
-from streamlit_drawable_canvas import st_canvas
 import streamlit.components.v1 as components
 import concurrent.futures
 
@@ -92,9 +91,13 @@ st.markdown("""
 BATCH_SIZE = 12
 
 def get_secret(key, default=None):
-    if hasattr(st, "secrets") and key in st.secrets:
-        return st.secrets[key]
+    try:
+        if hasattr(st, "secrets") and key in st.secrets:
+            return st.secrets[key]
+    except Exception:
+        pass
     return os.environ.get(key, default)
+
 
 # S3 Configuration
 @st.cache_resource
@@ -842,18 +845,22 @@ elif mode == "🎨 Canvas Mode":
             
         pil_img = pil_img.resize((cell_w, cell_h))
         collage.paste(pil_img, (c * cell_w, r * cell_h))
-        
-    canvas_result = st_canvas(
-        fill_color="rgba(255, 165, 0, 0.3)",
-        stroke_width=2,
-        stroke_color="#ff0000",
-        background_image=collage,
-        update_streamlit=True,
-        height=rows * cell_h,
-        width=cols * cell_w,
-        drawing_mode="rect",
-        key="canvas",
-    )
+    try:
+        from streamlit_drawable_canvas import st_canvas
+        canvas_result = st_canvas(
+            fill_color="rgba(255, 165, 0, 0.3)",
+            stroke_width=2,
+            stroke_color="#ff0000",
+            background_image=collage,
+            update_streamlit=True,
+            height=rows * cell_h,
+            width=cols * cell_w,
+            drawing_mode="rect",
+            key="canvas",
+        )
+    except Exception as e:
+        st.warning(f"⚠️ Canvas drawing is disabled due to component compatibility: {e}")
+        canvas_result = None
     
     selected_indices = set()
     if canvas_result.json_data is not None:
