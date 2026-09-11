@@ -422,19 +422,12 @@ if sample_index:
 
 st.sidebar.markdown("---")
 
-def on_sidebar_mode_change():
-    st.session_state.mode = st.session_state.mode_radio_sidebar
-
-if st.session_state.get("mode_radio_sidebar") != st.session_state.mode:
-    st.session_state.mode_radio_sidebar = st.session_state.mode
-
 st.sidebar.radio(
     "Working Mode", 
     MODES, 
-    index=MODES.index(st.session_state.mode) if st.session_state.mode in MODES else 0, 
-    key="mode_radio_sidebar",
-    on_change=on_sidebar_mode_change
+    key="mode"
 )
+
 
 # Top Horizontal Navigation for Phone Ergonomics
 st.markdown("### 🌸 Pollen Curator")
