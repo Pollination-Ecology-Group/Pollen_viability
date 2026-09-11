@@ -118,6 +118,16 @@ Download these files to your computer by right-clicking → **Download** in Cybe
 
 ---
 
+### Step 4 — Interactive Data Curation & Dataset Balancing
+
+To review detections on mobile or desktop, curate active learning batches, or prioritize high non-viable pollen samples:
+
+👉 **[Follow the Pollen Curator GUI Tutorial](curator_gui_tutorial.md)**
+
+Run `./start_gui.sh` on your local machine to launch the interactive curator.
+
+---
+
 ## Troubleshooting
 
 | Problem | Solution |

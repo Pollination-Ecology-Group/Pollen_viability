@@ -314,7 +314,7 @@ ACTION_MAP = {
     "🗑️ Discard": "discarded"
 }
 ACTIONS = list(ACTION_MAP.keys())
-MODES = ["📱 Swipe Mode", "⌨️ Keyboard Mode", "🎨 Canvas Mode", "📋 Grid Mode", "👀 Review & Submit"]
+MODES = ["📱 Swipe Mode", "⌨️ Keyboard Mode", "🎨 Canvas Mode", "📋 Grid Mode", "👀 Review & Submit", "📖 Tutorial & Guide"]
 
 # Sidebar Dashboard & Working Mode
 st.sidebar.title("🌸 Curator Dashboard")
@@ -359,7 +359,17 @@ if sample_index:
             st.markdown(f"**`{s_id}`**: `{s_info.get('non_viable')} non-viable` ({pct:.1f}%)")
 
 st.sidebar.markdown("---")
-sidebar_mode = st.sidebar.radio("Working Mode", MODES, index=MODES.index(st.session_state.mode) if st.session_state.mode in MODES else 0, key="mode_radio_sidebar")
+
+# Sync radio state if top button was clicked
+if "mode_radio_sidebar" in st.session_state and st.session_state.mode_radio_sidebar != st.session_state.mode:
+    st.session_state.mode_radio_sidebar = st.session_state.mode
+
+sidebar_mode = st.sidebar.radio(
+    "Working Mode", 
+    MODES, 
+    index=MODES.index(st.session_state.mode) if st.session_state.mode in MODES else 0, 
+    key="mode_radio_sidebar"
+)
 if sidebar_mode != st.session_state.mode:
     st.session_state.mode = sidebar_mode
     st.rerun()
@@ -372,6 +382,7 @@ for i, m_name in enumerate(MODES):
         btn_type = "primary" if st.session_state.mode == m_name else "secondary"
         if st.button(m_name, key=f"top_nav_btn_{i}", type=btn_type, use_container_width=True):
             st.session_state.mode = m_name
+            st.session_state.mode_radio_sidebar = m_name
             st.rerun()
 
 # Top Summary Card Cards for Pollen Grain Analytics
@@ -692,20 +703,20 @@ elif mode == "🎨 Canvas Mode":
             st.write(f"Tile {i+1}: {st.session_state.assignments[key]}")
 
 elif mode == "📋 Grid Mode":
-    st.markdown("### 📋 Phone-Friendly Grid Mode")
-    st.caption("Tap categories below each tile card to adjust assignments for the batch.")
+    st.markdown("### 📋 Grid Mode (Tile Pollen Confirmation)")
+    st.info("💡 **Tile-Level Confirmation Only**: Grid Mode confirms whether a tile contains pollen grains (`Pollen Present`) vs empty background (`No Pollen`). Individual grain viability (**Viable** 🟩 / **Non-Viable** 🟥 / **Aborted** 🟨) is identified per grain in **📱 Swipe Mode**.")
     
     # Grid Mode Quick Batch Bar
     g_ctrl1, g_ctrl2, g_ctrl3 = st.columns([2, 2, 3])
     with g_ctrl1:
         grid_cols_num = st.radio("Grid Columns:", [2, 1, 4], index=0, horizontal=True, key="grid_cols_choice", help="Select grid column count for comfortable phone viewing.")
     with g_ctrl2:
-        if st.button("🌟 All Hard Positives", use_container_width=True, key="btn_all_pos"):
+        if st.button("🌟 Mark All as Pollen Present", use_container_width=True, key="btn_all_pos"):
             for k in current_batch_keys:
                 st.session_state.assignments[k] = "🌟 Hard Positives"
             st.rerun()
     with g_ctrl3:
-        if st.button("🚀 Submit Batch Directly", type="primary", use_container_width=True, key="btn_grid_submit"):
+        if st.button("🚀 Submit Tile Queue to S3", type="primary", use_container_width=True, key="btn_grid_submit"):
             process_submission()
             st.rerun()
 
@@ -715,7 +726,7 @@ elif mode == "📋 Grid Mode":
     for i, key in enumerate(current_batch_keys):
         with grid_cols[i % grid_cols_num]:
             curr_assign = st.session_state.assignments.get(key, "🌑 Hard Negatives")
-            st.markdown(f"**Tile {i+1} / {len(current_batch_keys)}** &nbsp;|&nbsp; Current: `{curr_assign.split()[0]}`")
+            st.markdown(f"**Tile {i+1} / {len(current_batch_keys)}** &nbsp;|&nbsp; Tile Status: `{curr_assign.split()[0]}`")
             
             img_bytes = st.session_state.batch_images.get(key)
             if img_bytes:
@@ -726,30 +737,42 @@ elif mode == "📋 Grid Mode":
                     pil_img = Image.fromarray(cv2.cvtColor(ann_img, cv2.COLOR_BGR2RGB))
                 st.image(pil_img, use_container_width=True)
             
-            # Ergonomic Touch Action Buttons
+            # Ergonomic Touch Action Buttons for Tile Confirmation
             btn_col1, btn_col2 = st.columns(2)
             with btn_col1:
                 pos_type = "primary" if curr_assign == "🌟 Hard Positives" else "secondary"
-                if st.button("🌟 Positive", key=f"g_pos_{key}", type=pos_type, use_container_width=True):
+                if st.button("🌟 Pollen Present", key=f"g_pos_{key}", type=pos_type, use_container_width=True):
                     st.session_state.assignments[key] = "🌟 Hard Positives"
                     st.rerun()
             with btn_col2:
                 neg_type = "primary" if curr_assign == "🌑 Hard Negatives" else "secondary"
-                if st.button("🌑 Negative", key=f"g_neg_{key}", type=neg_type, use_container_width=True):
+                if st.button("🌑 No Pollen", key=f"g_neg_{key}", type=neg_type, use_container_width=True):
                     st.session_state.assignments[key] = "🌑 Hard Negatives"
                     st.rerun()
 
             btn_col3, btn_col4 = st.columns(2)
             with btn_col3:
                 rel_type = "primary" if curr_assign == "⚠️ Needs Labeling" else "secondary"
-                if st.button("⚠️ Relabel", key=f"g_rel_{key}", type=rel_type, use_container_width=True):
+                if st.button("⚠️ Needs Review", key=f"g_rel_{key}", type=rel_type, use_container_width=True):
                     st.session_state.assignments[key] = "⚠️ Needs Labeling"
                     st.rerun()
             with btn_col4:
                 dis_type = "primary" if curr_assign == "🗑️ Discard" else "secondary"
-                if st.button("🗑️ Discard", key=f"g_dis_{key}", type=dis_type, use_container_width=True):
+                if st.button("🗑️ Discard Tile", key=f"g_dis_{key}", type=dis_type, use_container_width=True):
                     st.session_state.assignments[key] = "🗑️ Discard"
                     st.rerun()
+
+            # Shortcut to jump directly to Swipe Mode for grain-level viability curation
+            if st.button(f"📱 Curate Grains in Swipe Mode", key=f"g_swipe_{key}", use_container_width=True):
+                # Find index of this key in valid_keys
+                valid_k = [k for k in current_batch_keys if k in st.session_state.batch_results and len(st.session_state.batch_results[k][0].boxes) > 0]
+                if key in valid_k:
+                    st.session_state.swipe_tile_idx = valid_k.index(key)
+                    st.session_state._current_swipe_key = None
+                st.session_state.mode = "📱 Swipe Mode"
+                st.session_state.mode_radio_sidebar = "📱 Swipe Mode"
+                st.rerun()
+
             st.markdown("---")
 
 elif mode == "👀 Review & Submit":
@@ -995,3 +1018,64 @@ elif mode == "📱 Swipe Mode":
                         st.session_state.swipe_labels = {}
                         st.toast("Tile moved to Discarded!")
                         st.rerun()
+
+elif mode == "📖 Tutorial & Guide":
+    st.markdown("### 📖 Pollen Curator Interactive Guide & Tutorial")
+    st.caption("Learn how to navigate, curate pollen viability, balance datasets, and use mobile tools.")
+    
+    t_tab1, t_tab2, t_tab3, t_tab4 = st.tabs(["📱 Mobile Curation", "📋 Grid & Keyboard Modes", "🎯 Dataset Balancing", "❓ FAQ & Rules"])
+    
+    with t_tab1:
+        st.markdown("""
+        #### 📱 Mobile Swipe Mode (Individual Pollen Grains)
+        
+        Designed specifically for fast, comfortable single-thumb operation on mobile phones.
+        
+        1. **View Grain Crop**: The screen displays a magnified crop of each detected pollen grain alongside SAM outline contours and confidence scores.
+        2. **Classification Buttons**:
+           - 🟩 **Viable**: Stained dark red/magenta, plump, full cytoplasm.
+           - 🟥 **Non-Viable**: Pale green, empty shell, shriveled, unfertilized.
+           - 🟨 **Aborted**: Faint pink/yellowish, incomplete cytoplasm.
+        3. **Ergonomic Actions**:
+           - **`↩️ Undo Last`**: Tapping this immediately restores your previous choice and steps back one grain or tile.
+           - **`🗑️ Discard Label`**: Skips saving a label for bad or ambiguous crops without affecting the tile.
+           - **`⚠️ Send Tile to Relabel`**: Moves the whole tile to `needs_labeling` for expert re-annotation.
+           - **`🗑️ Discard Whole Tile`**: Removes the entire tile from active learning queue if out of focus or debris.
+        """)
+        
+    with t_tab2:
+        st.markdown("""
+        #### 📋 Phone-Friendly Grid Mode
+        - Select column density: `📱 2 Columns` (Recommended for phones) or `🖥️ 4 Columns` (Desktops).
+        - Tap category badges under each tile card to adjust tile assignment.
+        - Use top quick buttons `🌟 All Hard Positives` or `🚀 Submit Batch Directly`.
+        
+        #### ⌨️ Desktop Keyboard Mode
+        - **Left / Right Arrow Keys**: Cycle categories.
+        - **Spacebar**: Advance to next tile.
+        - **Enter**: Submit current batch to S3.
+        - **Undo Tile**: Step back tile index.
+        """)
+        
+    with t_tab3:
+        st.markdown("""
+        #### 🎯 Dataset Balancing & Non-Viable Prioritization
+        
+        In natural microscope scans, **~96.8%** of grains are viable, leading to heavy dataset imbalance.
+        
+        - The Curator automatically cross-references historical sample rates from **`src/sample_viability_index.json`**.
+        - Top high non-viable samples (e.g. `1-6-J` at **88.4%**, `7-9-F` at **66.9%**, `6-1-F` at **53.8%**) are automatically sorted to the top of your queue when **`🎯 Prioritize High Non-Viable Samples`** is checked.
+        """)
+        
+    with t_tab4:
+        st.markdown("""
+        #### ❓ Frequently Asked Questions
+        
+        * **Where are my labeled tiles stored in S3?**
+          They are moved to `Ostatni/Pollen_viability/active_learning/{hard_positives|needs_labeling|hard_negatives|discarded}/`.
+        * **How are YOLO mask labels saved?**
+          When submitting hard positives, `.txt` segmentation files are generated and uploaded alongside `.jpg` tiles.
+        * **How do I switch modes on mobile?**
+          Use the top horizontal navigation buttons (`📱 Swipe Mode`, `📋 Grid Mode`, `📖 Tutorial & Guide`) directly at the top of the main screen!
+        """)
+

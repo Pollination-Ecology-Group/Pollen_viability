@@ -59,7 +59,11 @@ Detailed instructions on how to set up your environment, connect via SSH, and ma
 For instructions on running detection and training jobs:
 👉 **[Kubernetes Workflow Guide](/vignettes/kubernetes_workflow.md)** 
 
-### 2. Environment Installation
+### 3. Pollen Curator GUI & Mobile Curation
+For instructions on using the mobile-friendly Streamlit GUI (`app_gui.py`), dataset balancing, and single-grain curation:
+👉 **[Pollen Curator GUI Tutorial](/vignettes/curator_gui_tutorial.md)**
+
+### 4. Environment Installation
 The environment uses a custom Jupyter kernel. Dependencies include `ultralytics`, `opencv-python-headless`, and `pandas`.
 *(See the `setup_environment.py` script in the repo for automated dependency handling)*.
 
