@@ -307,6 +307,10 @@ if "keyboard_idx" not in st.session_state:
 if "mode" not in st.session_state:
     st.session_state.mode = "📱 Swipe Mode"
 
+def set_active_mode(new_mode):
+    st.session_state.pop("mode_radio_sidebar", None)
+    st.session_state.mode = new_mode
+
 ACTION_MAP = {
     "🌟 Hard Positives": "hard_positives",
     "⚠️ Needs Labeling": "needs_labeling",
@@ -360,19 +364,16 @@ if sample_index:
 
 st.sidebar.markdown("---")
 
-# Sync radio state if top button was clicked
-if "mode_radio_sidebar" in st.session_state and st.session_state.mode_radio_sidebar != st.session_state.mode:
-    st.session_state.mode_radio_sidebar = st.session_state.mode
+def on_sidebar_mode_change():
+    st.session_state.mode = st.session_state.mode_radio_sidebar
 
-sidebar_mode = st.sidebar.radio(
+st.sidebar.radio(
     "Working Mode", 
     MODES, 
     index=MODES.index(st.session_state.mode) if st.session_state.mode in MODES else 0, 
-    key="mode_radio_sidebar"
+    key="mode_radio_sidebar",
+    on_change=on_sidebar_mode_change
 )
-if sidebar_mode != st.session_state.mode:
-    st.session_state.mode = sidebar_mode
-    st.rerun()
 
 # Top Horizontal Navigation for Phone Ergonomics
 st.markdown("### 🌸 Pollen Curator")
@@ -381,8 +382,7 @@ for i, m_name in enumerate(MODES):
     with top_cols[i]:
         btn_type = "primary" if st.session_state.mode == m_name else "secondary"
         if st.button(m_name, key=f"top_nav_btn_{i}", type=btn_type, use_container_width=True):
-            st.session_state.mode = m_name
-            st.session_state.mode_radio_sidebar = m_name
+            set_active_mode(m_name)
             st.rerun()
 
 # Top Summary Card Cards for Pollen Grain Analytics
@@ -570,7 +570,7 @@ if mode == "⌨️ Keyboard Mode":
         st.success("Finished batch! Go to Review & Submit.")
         if st.button("Review & Submit", type="primary", use_container_width=True):
             st.session_state.keyboard_idx = 0
-            st.session_state.mode = "👀 Review & Submit"
+            set_active_mode("👀 Review & Submit")
             st.rerun()
             
         hist_keys = current_batch_keys
@@ -826,13 +826,11 @@ elif mode == "📋 Grid Mode":
 
             # Shortcut to jump directly to Swipe Mode for grain-level viability curation
             if st.button(f"📱 Curate Grains in Swipe Mode", key=f"g_swipe_{key}", use_container_width=True):
-                # Find index of this key in valid_keys
                 valid_k = [k for k in current_batch_keys if k in st.session_state.batch_results and len(st.session_state.batch_results[k][0].boxes) > 0]
                 if key in valid_k:
                     st.session_state.swipe_tile_idx = valid_k.index(key)
                     st.session_state._current_swipe_key = None
-                st.session_state.mode = "📱 Swipe Mode"
-                st.session_state.mode_radio_sidebar = "📱 Swipe Mode"
+                set_active_mode("📱 Swipe Mode")
                 st.rerun()
 
             st.markdown("---")
@@ -888,7 +886,7 @@ elif mode == "📱 Swipe Mode":
             st.success("🎉 Finished all tiles in this batch!")
             if st.button("🚀 Go to Review & Submit Batch", type="primary", use_container_width=True):
                 st.session_state.swipe_tile_idx = 0
-                st.session_state.mode = "👀 Review & Submit"
+                set_active_mode("👀 Review & Submit")
                 st.rerun()
         else:
             current_key = valid_keys[st.session_state.swipe_tile_idx]
