@@ -959,8 +959,35 @@ elif mode == "📋 Grid Mode":
                 pil_img = Image.open(BytesIO(img_bytes)).convert("RGB")
                 results = st.session_state.batch_results.get(key)
                 if results and len(results[0].boxes) > 0:
-                    ann_img = results[0].plot(boxes=False, labels=False)
-                    pil_img = Image.fromarray(cv2.cvtColor(ann_img, cv2.COLOR_BGR2RGB))
+                    # Draw color-coded detections: Green=Viable, Red=Non-Viable, Yellow=Other
+                    cv_img = cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2BGR)
+                    boxes = results[0].boxes
+                    class_names = {0: "V", 1: "NV"}
+                    class_colors = {0: (0, 200, 0), 1: (0, 0, 220)}  # BGR: green, red
+                    default_color = (0, 200, 200)  # yellow
+                    
+                    # Draw masks if available
+                    if hasattr(results[0], 'masks') and results[0].masks is not None:
+                        overlay = cv_img.copy()
+                        for m_idx, mask_xy in enumerate(results[0].masks.xy):
+                            cls_id = int(boxes.cls[m_idx])
+                            color = class_colors.get(cls_id, default_color)
+                            pts = np.array(mask_xy, np.int32).reshape((-1, 1, 2))
+                            cv2.fillPoly(overlay, [pts], color)
+                        cv2.addWeighted(overlay, 0.3, cv_img, 0.7, 0, cv_img)
+                    
+                    # Draw boxes and labels
+                    for b_idx in range(len(boxes)):
+                        cls_id = int(boxes.cls[b_idx])
+                        conf = float(boxes.conf[b_idx])
+                        x1, y1, x2, y2 = [int(v) for v in boxes.xyxy[b_idx].tolist()]
+                        color = class_colors.get(cls_id, default_color)
+                        label = f"{class_names.get(cls_id, '?')} {conf:.0%}"
+                        cv2.rectangle(cv_img, (x1, y1), (x2, y2), color, 2)
+                        cv2.putText(cv_img, label, (x1, max(y1 - 6, 12)),
+                                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+                    
+                    pil_img = Image.fromarray(cv2.cvtColor(cv_img, cv2.COLOR_BGR2RGB))
                 st.image(pil_img, use_container_width=True)
             
             # Ergonomic Touch Action Buttons for Tile Confirmation
