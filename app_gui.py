@@ -3,12 +3,12 @@ import os
 import cv2
 import numpy as np
 from PIL import Image, ImageEnhance
-from ultralytics import YOLO
 import boto3
 from botocore.client import Config
 from io import BytesIO
 import streamlit.components.v1 as components
 import concurrent.futures
+import gc
 
 st.set_page_config(page_title="Pollen Curator", layout="wide", initial_sidebar_state="expanded")
 
@@ -122,6 +122,7 @@ def get_bucket_name():
 @st.cache_resource
 def load_model():
     try:
+        from ultralytics import YOLO
         model_path = "best.pt"
         if os.path.exists(model_path):
             return YOLO(model_path)
@@ -628,9 +629,6 @@ def fetch_single_image(key):
     except Exception:
         return key, None
 
-import gc
-import torch
-
 # Iteratively scan s3_keys up to MAX_SCAN_TILES (24) to prevent Streamlit Cloud OOM
 matching_keys = []
 candidate_chunk_size = 12
@@ -657,6 +655,7 @@ while len(matching_keys) < BATCH_SIZE and scanned_count < min(MAX_SCAN_TILES, le
             
         if model and key not in st.session_state.batch_results and key in st.session_state.batch_images:
             try:
+                import torch
                 img_bytes = st.session_state.batch_images[key]
                 pil_img = Image.open(BytesIO(img_bytes)).convert("RGB")
                 cv_img = cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2BGR)
@@ -668,6 +667,7 @@ while len(matching_keys) < BATCH_SIZE and scanned_count < min(MAX_SCAN_TILES, le
                      
                 st.session_state.batch_results[key] = results
                 if results and len(results[0].boxes) > 0:
+
                     st.session_state.assignments[key] = "🌟 Hard Positives"
             except Exception:
                 pass
