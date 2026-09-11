@@ -130,13 +130,12 @@ def get_bucket_name():
 def load_model():
     try:
         from ultralytics import YOLO
-        model_path = "best.pt"
-        if os.path.exists(model_path):
-            return YOLO(model_path)
-        if os.path.exists("FastSAM-s.pt"):
-            from ultralytics import FastSAM
-            return FastSAM("FastSAM-s.pt")
-        return None
+        # Prefer custom trained model if available locally
+        if os.path.exists("best.pt"):
+            return YOLO("best.pt")
+        # Fallback: FastSAM-s (auto-downloads ~24MB from ultralytics hub)
+        from ultralytics import FastSAM
+        return FastSAM("FastSAM-s.pt")
     except Exception as e:
         print(f"Warning: load_model failed with {e}")
         return None
