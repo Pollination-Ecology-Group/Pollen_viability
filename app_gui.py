@@ -399,6 +399,68 @@ with m_col4:
 st.markdown("---")
 mode = st.session_state.mode
 
+if mode == "📖 Tutorial & Guide":
+    st.markdown("### 📖 Pollen Curator Interactive Guide & Tutorial")
+    st.caption("Learn how to navigate, curate pollen viability, balance datasets, and use mobile tools.")
+    
+    t_tab1, t_tab2, t_tab3, t_tab4 = st.tabs(["📱 Mobile Curation", "📋 Grid & Keyboard Modes", "🎯 Dataset Balancing", "❓ FAQ & Rules"])
+    
+    with t_tab1:
+        st.markdown("""
+        #### 📱 Mobile Swipe Mode (Individual Pollen Grains)
+        
+        Designed specifically for fast, comfortable single-thumb operation on mobile phones.
+        
+        1. **View Grain Crop**: The screen displays a magnified crop of each detected pollen grain alongside SAM outline contours and confidence scores.
+        2. **Classification Buttons**:
+           - 🟩 **Viable**: Stained dark red/magenta, plump, full cytoplasm.
+           - 🟥 **Non-Viable**: Pale green, empty shell, shriveled, unfertilized.
+           - 🟨 **Aborted**: Faint pink/yellowish, incomplete cytoplasm.
+        3. **Ergonomic Actions**:
+           - **`↩️ Undo Last`**: Tapping this immediately restores your previous choice and steps back one grain or tile.
+           - **`🗑️ Discard Label`**: Skips saving a label for bad or ambiguous crops without affecting the tile.
+           - **`⚠️ Send Tile to Relabel`**: Moves the whole tile to `needs_labeling` for expert re-annotation.
+           - **`🗑️ Discard Whole Tile`**: Removes the entire tile from active learning queue if out of focus or debris.
+        """)
+        
+    with t_tab2:
+        st.markdown("""
+        #### 📋 Phone-Friendly Grid Mode (Tile Pollen Confirmation)
+        - Select column density: `📱 2 Columns` (Recommended for phones) or `🖥️ 4 Columns` (Desktops).
+        - Tap tile confirmation buttons below each card (`🌟 Pollen Present`, `🌑 No Pollen`, `⚠️ Needs Review`, `🗑️ Discard Tile`).
+        - Use top quick buttons `🌟 Mark All as Pollen Present` or `🚀 Submit Tile Queue to S3`.
+        - Tap `📱 Curate Grains in Swipe Mode` on any tile card to jump straight into grain-by-grain viability curation.
+        
+        #### ⌨️ Desktop Keyboard Mode
+        - **Left / Right Arrow Keys**: Cycle categories.
+        - **Spacebar**: Advance to next tile.
+        - **Enter**: Submit current batch to S3.
+        - **Undo Tile**: Step back tile index.
+        """)
+        
+    with t_tab3:
+        st.markdown("""
+        #### 🎯 Dataset Balancing & Non-Viable Prioritization
+        
+        In natural microscope scans, **~96.8%** of grains are viable, leading to heavy dataset imbalance.
+        
+        - The Curator automatically cross-references historical sample rates from **`src/sample_viability_index.json`**.
+        - Top high non-viable samples (e.g. `1-6-J` at **88.4%**, `7-9-F` at **66.9%**, `6-1-F` at **53.8%**) are automatically sorted to the top of your queue when **`🎯 Prioritize High Non-Viable Samples`** is checked.
+        """)
+        
+    with t_tab4:
+        st.markdown("""
+        #### ❓ Frequently Asked Questions
+        
+        * **Where are my labeled tiles stored in S3?**
+          They are moved to `Ostatni/Pollen_viability/active_learning/{hard_positives|needs_labeling|hard_negatives|discarded}/`.
+        * **How are YOLO mask labels saved?**
+          When submitting hard positives, `.txt` segmentation files are generated and uploaded alongside `.jpg` tiles.
+        * **How do I switch modes on mobile?**
+          Use the top horizontal navigation buttons (`📱 Swipe Mode`, `📋 Grid Mode`, `📖 Tutorial & Guide`) directly at the top of the main screen!
+        """)
+    st.stop()
+
 def process_submission():
     s3 = get_s3_client()
     bucket = get_bucket_name()
@@ -1018,64 +1080,4 @@ elif mode == "📱 Swipe Mode":
                         st.session_state.swipe_labels = {}
                         st.toast("Tile moved to Discarded!")
                         st.rerun()
-
-elif mode == "📖 Tutorial & Guide":
-    st.markdown("### 📖 Pollen Curator Interactive Guide & Tutorial")
-    st.caption("Learn how to navigate, curate pollen viability, balance datasets, and use mobile tools.")
-    
-    t_tab1, t_tab2, t_tab3, t_tab4 = st.tabs(["📱 Mobile Curation", "📋 Grid & Keyboard Modes", "🎯 Dataset Balancing", "❓ FAQ & Rules"])
-    
-    with t_tab1:
-        st.markdown("""
-        #### 📱 Mobile Swipe Mode (Individual Pollen Grains)
-        
-        Designed specifically for fast, comfortable single-thumb operation on mobile phones.
-        
-        1. **View Grain Crop**: The screen displays a magnified crop of each detected pollen grain alongside SAM outline contours and confidence scores.
-        2. **Classification Buttons**:
-           - 🟩 **Viable**: Stained dark red/magenta, plump, full cytoplasm.
-           - 🟥 **Non-Viable**: Pale green, empty shell, shriveled, unfertilized.
-           - 🟨 **Aborted**: Faint pink/yellowish, incomplete cytoplasm.
-        3. **Ergonomic Actions**:
-           - **`↩️ Undo Last`**: Tapping this immediately restores your previous choice and steps back one grain or tile.
-           - **`🗑️ Discard Label`**: Skips saving a label for bad or ambiguous crops without affecting the tile.
-           - **`⚠️ Send Tile to Relabel`**: Moves the whole tile to `needs_labeling` for expert re-annotation.
-           - **`🗑️ Discard Whole Tile`**: Removes the entire tile from active learning queue if out of focus or debris.
-        """)
-        
-    with t_tab2:
-        st.markdown("""
-        #### 📋 Phone-Friendly Grid Mode
-        - Select column density: `📱 2 Columns` (Recommended for phones) or `🖥️ 4 Columns` (Desktops).
-        - Tap category badges under each tile card to adjust tile assignment.
-        - Use top quick buttons `🌟 All Hard Positives` or `🚀 Submit Batch Directly`.
-        
-        #### ⌨️ Desktop Keyboard Mode
-        - **Left / Right Arrow Keys**: Cycle categories.
-        - **Spacebar**: Advance to next tile.
-        - **Enter**: Submit current batch to S3.
-        - **Undo Tile**: Step back tile index.
-        """)
-        
-    with t_tab3:
-        st.markdown("""
-        #### 🎯 Dataset Balancing & Non-Viable Prioritization
-        
-        In natural microscope scans, **~96.8%** of grains are viable, leading to heavy dataset imbalance.
-        
-        - The Curator automatically cross-references historical sample rates from **`src/sample_viability_index.json`**.
-        - Top high non-viable samples (e.g. `1-6-J` at **88.4%**, `7-9-F` at **66.9%**, `6-1-F` at **53.8%**) are automatically sorted to the top of your queue when **`🎯 Prioritize High Non-Viable Samples`** is checked.
-        """)
-        
-    with t_tab4:
-        st.markdown("""
-        #### ❓ Frequently Asked Questions
-        
-        * **Where are my labeled tiles stored in S3?**
-          They are moved to `Ostatni/Pollen_viability/active_learning/{hard_positives|needs_labeling|hard_negatives|discarded}/`.
-        * **How are YOLO mask labels saved?**
-          When submitting hard positives, `.txt` segmentation files are generated and uploaded alongside `.jpg` tiles.
-        * **How do I switch modes on mobile?**
-          Use the top horizontal navigation buttons (`📱 Swipe Mode`, `📋 Grid Mode`, `📖 Tutorial & Guide`) directly at the top of the main screen!
-        """)
 
