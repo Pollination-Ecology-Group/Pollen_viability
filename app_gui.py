@@ -338,6 +338,27 @@ st.sidebar.metric("🌑 Hard Negatives", tile_counts["hard_negatives"])
 st.sidebar.metric("🗑️ Discarded Tiles", tile_counts["discarded"])
 
 st.sidebar.markdown("---")
+st.sidebar.markdown("#### 🎯 Dataset Balance Controls")
+prioritize_toggle = st.sidebar.checkbox(
+    "🎯 Prioritize High Non-Viable Samples", 
+    value=True, 
+    key="prioritize_nonviable_toggle",
+    help="Sorts S3 tile curation queue so tiles from samples with high non-viable pollen density appear first."
+)
+
+if sample_index:
+    with st.sidebar.expander("📊 Non-Viable Sample Leaderboard", expanded=False):
+        st.caption("Historical non-viable pollen yields per sample:")
+        sorted_samples = sorted(
+            sample_index.items(),
+            key=lambda item: (item[1].get("non_viable", 0), item[1].get("non_viable_rate", 0)),
+            reverse=True
+        )[:12]
+        for s_id, s_info in sorted_samples:
+            pct = s_info.get('non_viable_rate', 0) * 100
+            st.markdown(f"**`{s_id}`**: `{s_info.get('non_viable')} non-viable` ({pct:.1f}%)")
+
+st.sidebar.markdown("---")
 sidebar_mode = st.sidebar.radio("Working Mode", MODES, index=MODES.index(st.session_state.mode) if st.session_state.mode in MODES else 0, key="mode_radio_sidebar")
 if sidebar_mode != st.session_state.mode:
     st.session_state.mode = sidebar_mode
