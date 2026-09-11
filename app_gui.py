@@ -376,7 +376,7 @@ if "mode" not in st.session_state:
     st.session_state.mode = "📱 Swipe Mode"
 
 def set_active_mode(new_mode):
-    st.session_state.mode = new_mode
+    st.session_state._pending_mode = new_mode
 
 ACTION_MAP = {
     "🌟 Hard Positives": "hard_positives",
@@ -441,6 +441,11 @@ if sample_index:
             st.markdown(f"**`{s_id}`**: `{s_info.get('non_viable')} non-viable` ({pct:.1f}%)")
 
 st.sidebar.markdown("---")
+
+# Apply any pending mode change BEFORE the radio widget renders
+if "_pending_mode" in st.session_state:
+    st.session_state.mode = st.session_state._pending_mode
+    del st.session_state._pending_mode
 
 st.sidebar.radio(
     "Working Mode", 
