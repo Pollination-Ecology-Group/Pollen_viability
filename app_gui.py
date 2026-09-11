@@ -1,16 +1,23 @@
 import streamlit as st
-import os
-import cv2
-import numpy as np
-from PIL import Image, ImageEnhance
-import boto3
-from botocore.client import Config
-from io import BytesIO
-import streamlit.components.v1 as components
-import concurrent.futures
-import gc
-
 st.set_page_config(page_title="Pollen Curator", layout="wide", initial_sidebar_state="expanded")
+
+try:
+    import os
+    import cv2
+    import numpy as np
+    from PIL import Image, ImageEnhance
+    import boto3
+    from botocore.client import Config
+    from io import BytesIO
+    import streamlit.components.v1 as components
+    import concurrent.futures
+    import gc
+except Exception as e:
+    st.error(f"**Import Error:** `{type(e).__name__}: {e}`")
+    import traceback
+    st.code(traceback.format_exc())
+    st.stop()
+
 
 # Mobile and Touch Ergonomic Styling
 st.markdown("""
