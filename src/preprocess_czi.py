@@ -150,11 +150,15 @@ def main(args):
                     if obj['Key'].endswith('.czi'):
                         keys.append(obj['Key'])
         
+        if args.pattern:
+            keys = [k for k in keys if args.pattern.lower() in k.lower()]
+            print(f"🔍 Filtered down to {len(keys)} files matching pattern '{args.pattern}'")
+
         if args.min_nonviable_pct > 0.0:
             threshold = args.min_nonviable_pct / 100.0
             filtered = [k for k in keys if get_nonviable_rank(k, index)[1] >= threshold or get_nonviable_rank(k, index)[0] >= 10]
             if filtered:
-                print(f"🎯 Filtered {len(keys)} CZI files down to {len(filtered)} files with >={args.min_nonviable_pct}% non-viable estimate.")
+                print(f"🎯 Filtered CZI files down to {len(filtered)} files with >={args.min_nonviable_pct}% non-viable estimate.")
                 keys = filtered
 
         if args.prioritize_nonviable:
@@ -162,7 +166,7 @@ def main(args):
             keys.sort(key=lambda k: get_nonviable_rank(k, index), reverse=True)
 
         if args.limit and args.limit > 0:
-            if args.prioritize_nonviable:
+            if args.prioritize_nonviable or args.pattern:
                 keys = keys[:args.limit]
                 print(f"Selected top {len(keys)} prioritized CZI files.")
             else:
@@ -190,6 +194,8 @@ def main(args):
     else:
         # Local processing only
         czi_files = [f for f in os.listdir(LOCAL_CZI_DIR) if f.endswith('.czi')]
+        if args.pattern:
+            czi_files = [f for f in czi_files if args.pattern.lower() in f.lower()]
         if args.prioritize_nonviable:
             czi_files.sort(key=lambda f: get_nonviable_rank(f, index), reverse=True)
         for czi_file in czi_files:
@@ -207,6 +213,7 @@ if __name__ == '__main__':
     parser.add_argument('--limit', type=int, default=0, help="Limit processing to N files")
     parser.add_argument('--prioritize-nonviable', action='store_true', help="Prioritize files from samples with high non-viable yields")
     parser.add_argument('--min-nonviable-pct', type=float, default=0.0, help="Minimum non-viable percentage threshold (e.g. 5.0)")
+    parser.add_argument('--pattern', type=str, default='', help="Filter CZI files by filename pattern or sample ID (e.g. 5-8-B_AA012_s2x)")
     args = parser.parse_args()
     main(args)
 
