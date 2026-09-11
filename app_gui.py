@@ -968,7 +968,14 @@ elif mode == "👀 Review & Submit":
                 cols = st.columns(6)
                 for i, key in enumerate(keys_for_action):
                     with cols[i % 6]:
-                        img_bytes = st.session_state.batch_images[key]
+                        img_bytes = st.session_state.batch_images.get(key)
+                        if not img_bytes:
+                            try:
+                                resp = s3.get_object(Bucket=bucket, Key=key)
+                                img_bytes = resp['Body'].read()
+                                st.session_state.batch_images[key] = img_bytes
+                            except Exception:
+                                continue
                         pil_img = Image.open(BytesIO(img_bytes)).convert("RGB")
                         st.image(pil_img, use_container_width=True)
                     
@@ -1019,8 +1026,24 @@ elif mode == "📱 Swipe Mode":
                 st.session_state.swipe_labels = {}
                 st.session_state.swipe_history = []
                 
-                results = st.session_state.batch_results[current_key]
-                img_bytes = st.session_state.batch_images[current_key]
+                results = st.session_state.batch_results.get(current_key)
+                img_bytes = st.session_state.batch_images.get(current_key)
+                
+                if not img_bytes:
+                    try:
+                        resp = s3.get_object(Bucket=bucket, Key=current_key)
+                        img_bytes = resp['Body'].read()
+                        st.session_state.batch_images[current_key] = img_bytes
+                    except Exception:
+                        st.error(f"Failed to load image for '{current_key}'")
+                        st.session_state.swipe_tile_idx += 1
+                        st.rerun()
+                        
+                if not results:
+                    st.warning(f"Detection results missing for '{current_key}'. Skipping tile...")
+                    st.session_state.swipe_tile_idx += 1
+                    st.rerun()
+                    
                 pil_img = Image.open(BytesIO(img_bytes)).convert("RGB")
                 cv_img = cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2BGR)
                 
