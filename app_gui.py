@@ -9,8 +9,85 @@ from botocore.client import Config
 from io import BytesIO
 from streamlit_drawable_canvas import st_canvas
 import streamlit.components.v1 as components
+import concurrent.futures
 
-st.set_page_config(page_title="Pollen Curator", layout="wide")
+st.set_page_config(page_title="Pollen Curator", layout="wide", initial_sidebar_state="expanded")
+
+# Mobile and Touch Ergonomic Styling
+st.markdown("""
+<style>
+    /* Global touch optimizations */
+    div.stButton > button {
+        width: 100% !important;
+        min-height: 56px !important;
+        font-size: 1.15rem !important;
+        font-weight: 700 !important;
+        border-radius: 12px !important;
+        margin: 4px 0px !important;
+        transition: all 0.15s ease-in-out !important;
+        touch-action: manipulation !important;
+    }
+    div.stButton > button:active {
+        transform: scale(0.97) !important;
+    }
+
+    /* Viable Button */
+    button[key*="btn_viable"] {
+        background: linear-gradient(135deg, #10B981 0%, #059669 100%) !important;
+        color: white !important;
+        border: none !important;
+        box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3) !important;
+    }
+
+    /* Non-Viable Button */
+    button[key*="btn_nonviable"] {
+        background: linear-gradient(135deg, #EF4444 0%, #DC2626 100%) !important;
+        color: white !important;
+        border: none !important;
+        box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3) !important;
+    }
+
+    /* Aborted Button */
+    button[key*="btn_aborted"] {
+        background: linear-gradient(135deg, #F59E0B 0%, #D97706 100%) !important;
+        color: white !important;
+        border: none !important;
+        box-shadow: 0 4px 12px rgba(245, 158, 11, 0.3) !important;
+    }
+
+    /* Undo Button */
+    button[key*="btn_undo"] {
+        background: linear-gradient(135deg, #4B5563 0%, #374151 100%) !important;
+        color: #F9FAFB !important;
+        border: 1px solid #6B7280 !important;
+    }
+
+    /* Discard & Relabel Buttons */
+    button[key*="btn_discard_grain"], button[key*="btn_relabel_tile"], button[key*="btn_discard_tile"] {
+        font-size: 1.05rem !important;
+        min-height: 50px !important;
+    }
+
+    /* Top Navigation bar */
+    .top-nav-container {
+        display: flex;
+        gap: 8px;
+        margin-bottom: 16px;
+        overflow-x: auto;
+    }
+
+    /* Responsive grid tweaks for mobile */
+    @media (max-width: 768px) {
+        .element-container, .stColumn {
+            width: 100% !important;
+        }
+        div.stButton > button {
+            min-height: 64px !important;
+            font-size: 1.25rem !important;
+        }
+    }
+</style>
+""", unsafe_allow_html=True)
 
 BATCH_SIZE = 12
 
@@ -106,23 +183,86 @@ def fetch_keys_from_s3():
     except Exception as e:
         st.error(f"Error fetching from S3: {e}")
 
-def get_dashboard_counts():
+@st.cache_data(ttl=30, show_spinner=False)
+def get_grain_and_tile_counts():
     categories = ["hard_positives", "needs_labeling", "hard_negatives", "discarded"]
-    counts = {cat: 0 for cat in categories}
+    tile_counts = {cat: 0 for cat in categories}
+    grain_counts = {"viable": 0, "non_viable": 0, "aborted": 0, "total": 0}
     try:
         s3 = get_s3_client()
         if not s3:
-            return counts
+            return tile_counts, grain_counts
         bucket = get_bucket_name()
         base_prefix = "Ostatni/Pollen_viability/active_learning/"
+        
+        txt_keys = []
         for cat in categories:
             response = s3.list_objects_v2(Bucket=bucket, Prefix=f"{base_prefix}{cat}/")
             if 'Contents' in response:
-                imgs = [obj for obj in response['Contents'] if not obj['Key'].endswith('/') and not obj['Key'].endswith('.txt')]
-                counts[cat] = len(imgs)
+                for obj in response['Contents']:
+                    key = obj['Key']
+                    if not key.endswith('/'):
+                        if key.endswith('.txt'):
+                            txt_keys.append(key)
+                        else:
+                            tile_counts[cat] += 1
+                            
+        def process_txt(key):
+            counts = {0: 0, 1: 0, 2: 0}
+            try:
+                res = s3.get_object(Bucket=bucket, Key=key)
+                lines = res['Body'].read().decode('utf-8').splitlines()
+                for line in lines:
+                    parts = line.strip().split()
+                    if parts:
+                        cls_id = int(parts[0])
+                        if cls_id in counts:
+                            counts[cls_id] += 1
+            except Exception:
+                pass
+            return counts
+
+        if txt_keys:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+                results = executor.map(process_txt, txt_keys)
+                for r in results:
+                    grain_counts["viable"] += r[0]
+                    grain_counts["non_viable"] += r[1]
+                    grain_counts["aborted"] += r[2]
+
+        grain_counts["total"] = grain_counts["viable"] + grain_counts["non_viable"] + grain_counts["aborted"]
     except Exception:
         pass
-    return counts
+    return tile_counts, grain_counts
+
+def move_s3_file(key, target_category):
+    try:
+        s3 = get_s3_client()
+        bucket = get_bucket_name()
+        filename = os.path.basename(key)
+        target_key = f"Ostatni/Pollen_viability/active_learning/{target_category}/{filename}"
+        s3.copy_object(
+            Bucket=bucket,
+            CopySource={'Bucket': bucket, 'Key': key},
+            Key=target_key
+        )
+        s3.delete_object(Bucket=bucket, Key=key)
+        
+        # Clean up session state
+        if key in st.session_state.s3_keys:
+            st.session_state.s3_keys.remove(key)
+        if key in st.session_state.batch_images:
+            del st.session_state.batch_images[key]
+        if key in st.session_state.batch_results:
+            del st.session_state.batch_results[key]
+        if key in st.session_state.assignments:
+            del st.session_state.assignments[key]
+            
+        get_grain_and_tile_counts.clear()
+        return True
+    except Exception as e:
+        st.error(f"Error moving tile '{key}': {e}")
+        return False
 
 # State Initialization
 if "s3_keys" not in st.session_state:
@@ -135,6 +275,8 @@ if "batch_results" not in st.session_state:
     st.session_state.batch_results = {}
 if "keyboard_idx" not in st.session_state:
     st.session_state.keyboard_idx = 0
+if "mode" not in st.session_state:
+    st.session_state.mode = "📱 Swipe Mode"
 
 ACTION_MAP = {
     "🌟 Hard Positives": "hard_positives",
@@ -143,28 +285,65 @@ ACTION_MAP = {
     "🗑️ Discard": "discarded"
 }
 ACTIONS = list(ACTION_MAP.keys())
+MODES = ["📱 Swipe Mode", "⌨️ Keyboard Mode", "🎨 Canvas Mode", "📋 Grid Mode", "👀 Review & Submit"]
 
-# Sidebar: Dashboard & Mode Selection
+# Sidebar Dashboard & Working Mode
 st.sidebar.title("🌸 Curator Dashboard")
 
 if get_s3_client() is None:
     st.sidebar.error("⚠️ **S3 Credentials Required**\n\nPlease configure `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` in **App settings -> Secrets**.")
 
-counts = get_dashboard_counts()
-st.sidebar.metric("🌟 Hard Positives", counts["hard_positives"])
-st.sidebar.metric("⚠️ Needs Labeling", counts["needs_labeling"])
-st.sidebar.metric("🌑 Hard Negatives", counts["hard_negatives"])
-st.sidebar.metric("🗑️ Discard", counts["discarded"])
+tile_counts, grain_counts = get_grain_and_tile_counts()
+
+st.sidebar.markdown("#### 🌾 Individual Pollen Grains")
+st.sidebar.metric("🟩 Viable Grains", f"{grain_counts['viable']:,}")
+st.sidebar.metric("🟥 Non-Viable Grains", f"{grain_counts['non_viable']:,}")
+st.sidebar.metric("🟨 Aborted Grains", f"{grain_counts['aborted']:,}")
+st.sidebar.caption(f"📊 **Total Pollen Count:** {grain_counts['total']:,}")
 
 st.sidebar.markdown("---")
-mode = st.sidebar.radio("Working Mode", ["⌨️ Keyboard Mode", "🎨 Canvas Mode", "📋 Grid Mode", "📱 Swipe Mode", "👀 Review & Submit"])
+st.sidebar.markdown("#### 🖼️ Active Learning Tiles")
+st.sidebar.metric("🌟 Hard Positives", tile_counts["hard_positives"])
+st.sidebar.metric("⚠️ Needs Labeling", tile_counts["needs_labeling"])
+st.sidebar.metric("🌑 Hard Negatives", tile_counts["hard_negatives"])
+st.sidebar.metric("🗑️ Discarded Tiles", tile_counts["discarded"])
+
+st.sidebar.markdown("---")
+sidebar_mode = st.sidebar.radio("Working Mode", MODES, index=MODES.index(st.session_state.mode) if st.session_state.mode in MODES else 0, key="mode_radio_sidebar")
+if sidebar_mode != st.session_state.mode:
+    st.session_state.mode = sidebar_mode
+    st.rerun()
+
+# Top Horizontal Navigation for Phone Ergonomics
+st.markdown("### 🌸 Pollen Curator")
+top_cols = st.columns(len(MODES))
+for i, m_name in enumerate(MODES):
+    with top_cols[i]:
+        btn_type = "primary" if st.session_state.mode == m_name else "secondary"
+        if st.button(m_name, key=f"top_nav_btn_{i}", type=btn_type, use_container_width=True):
+            st.session_state.mode = m_name
+            st.rerun()
+
+# Top Summary Card Cards for Pollen Grain Analytics
+m_col1, m_col2, m_col3, m_col4 = st.columns(4)
+with m_col1:
+    st.metric("🟩 Viable Grains", f"{grain_counts['viable']:,}")
+with m_col2:
+    st.metric("🟥 Non-Viable Grains", f"{grain_counts['non_viable']:,}")
+with m_col3:
+    st.metric("🟨 Aborted Grains", f"{grain_counts['aborted']:,}")
+with m_col4:
+    st.metric("🖼️ Pending Batch", len(st.session_state.s3_keys))
+
+st.markdown("---")
+mode = st.session_state.mode
 
 def process_submission():
     s3 = get_s3_client()
     bucket = get_bucket_name()
     current_batch = st.session_state.s3_keys[:BATCH_SIZE]
     
-    with st.spinner("Uploading to S3..."):
+    with st.spinner("Uploading batch to S3..."):
         for key in current_batch:
             action_str = st.session_state.assignments.get(key, "🌑 Hard Negatives")
             action_type = ACTION_MAP[action_str]
@@ -199,15 +378,17 @@ def process_submission():
     st.session_state.batch_results = {}
     st.session_state.batch_images = {}
     st.session_state.keyboard_idx = 0
+    get_grain_and_tile_counts.clear()
     st.success("Batch Submitted!")
 
 valid_extensions = ('.jpg', '.jpeg', '.png', '.tif', '.tiff', '.bmp', '.webp')
 st.session_state.s3_keys = [k for k in st.session_state.s3_keys if k.lower().endswith(valid_extensions)]
 
 if not st.session_state.s3_keys:
-    st.success("No pending tiles in queue!")
-    if st.button("⬇️ Fetch Tiles from S3"):
+    st.success("🎉 No pending tiles in queue!")
+    if st.button("⬇️ Fetch Tiles from S3", use_container_width=True):
         fetch_keys_from_s3()
+        get_grain_and_tile_counts.clear()
         st.rerun()
     st.stop()
 
@@ -216,34 +397,46 @@ s3 = get_s3_client()
 bucket = get_bucket_name()
 model = load_model()
 
-# Pre-load batch images and predict
-for key in current_batch_keys:
+# Multi-threaded Parallel Fetching of Batch Images
+def fetch_single_image(key):
     try:
-        if key not in st.session_state.batch_images:
-            response = s3.get_object(Bucket=bucket, Key=key)
-            st.session_state.batch_images[key] = response['Body'].read()
+        s3_c = get_s3_client()
+        b_name = get_bucket_name()
+        resp = s3_c.get_object(Bucket=b_name, Key=key)
+        return key, resp['Body'].read()
+    except Exception:
+        return key, None
+
+keys_to_fetch = [k for k in current_batch_keys if k not in st.session_state.batch_images]
+if keys_to_fetch:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
+        fetched_results = executor.map(fetch_single_image, keys_to_fetch)
+        for k, img_bytes in fetched_results:
+            if img_bytes:
+                st.session_state.batch_images[k] = img_bytes
+
+# Run Model Prediction (Cached per key)
+for key in current_batch_keys:
+    if key not in st.session_state.assignments:
+        st.session_state.assignments[key] = "🌑 Hard Negatives"
         
-        if key not in st.session_state.assignments:
-            st.session_state.assignments[key] = "🌑 Hard Negatives"
-            
-        if model and key not in st.session_state.batch_results:
+    if model and key not in st.session_state.batch_results and key in st.session_state.batch_images:
+        try:
             img_bytes = st.session_state.batch_images[key]
             pil_img = Image.open(BytesIO(img_bytes)).convert("RGB")
             cv_img = cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2BGR)
             
-            # Predict using YOLO or FastSAM
-            # iou=0.3 enforces strict Non-Maximum Suppression (removes overlapping duplicates)
             results = model(cv_img, conf=0.25, iou=0.3, agnostic_nms=True, verbose=False)
-            
-            # Apply filtering if we are using FastSAM (which generates masks natively)
             if hasattr(model, 'task') and getattr(model, 'task', '') == 'segment' or type(model).__name__ == "FastSAM":
                  results = filter_sam_results(results, cv_img)
                  
             st.session_state.batch_results[key] = results
             if results and len(results[0].boxes) > 0:
                 st.session_state.assignments[key] = "🌟 Hard Positives"
-    except Exception as e:
-        st.error(f"Error processing tile '{key}': {e}")
+        except Exception as e:
+            st.error(f"Error predicting tile '{key}': {e}")
+
+# MODE IMPLEMENTATIONS
 
 if mode == "⌨️ Keyboard Mode":
     st.markdown("### ⌨️ Keyboard Mode")
@@ -252,16 +445,16 @@ if mode == "⌨️ Keyboard Mode":
     idx = st.session_state.keyboard_idx
     if idx >= len(current_batch_keys):
         st.success("Finished batch! Go to Review & Submit.")
-        if st.button("Review & Submit"):
+        if st.button("Review & Submit", type="primary", use_container_width=True):
             st.session_state.keyboard_idx = 0
+            st.session_state.mode = "👀 Review & Submit"
             st.rerun()
             
-        # Also show history when finished with batch so they can edit before submit
         hist_keys = current_batch_keys
         if len(hist_keys) > 0:
             st.markdown("---")
             st.markdown("#### 🕒 Batch History (Click Edit to change)")
-            display_keys = hist_keys[-8:] # Show up to 8
+            display_keys = hist_keys[-8:]
             hist_cols = st.columns(len(display_keys))
             for i, h_key in enumerate(display_keys):
                 with hist_cols[i]:
@@ -269,7 +462,7 @@ if mode == "⌨️ Keyboard Mode":
                         h_img_bytes = st.session_state.batch_images[h_key]
                         h_pil_img = Image.open(BytesIO(h_img_bytes)).convert("RGB")
                         st.image(h_pil_img, use_container_width=True)
-                        st.caption(st.session_state.assignments[h_key].split()[0]) # Just emoji
+                        st.caption(st.session_state.assignments[h_key].split()[0])
                     except Exception:
                         pass
                     orig_idx = current_batch_keys.index(h_key)
@@ -288,7 +481,6 @@ if mode == "⌨️ Keyboard Mode":
             st.error(f"Cannot render image tile '{key}': {e}")
             st.stop()
         
-        # Render Image
         results = st.session_state.batch_results.get(key)
         if results and len(results[0].boxes) > 0:
             colA, colB = st.columns(2)
@@ -304,31 +496,46 @@ if mode == "⌨️ Keyboard Mode":
                 annotated_img = cv2.addWeighted(annotated_img, opacity, orig_cv, 1 - opacity, 0)
                 
             annotated_img = cv2.cvtColor(annotated_img, cv2.COLOR_BGR2RGB)
-            st.image(annotated_img, width=640)
+            st.image(annotated_img, use_container_width=True)
         else:
-            st.image(pil_img, width=640)
+            st.image(pil_img, use_container_width=True)
             
         current_action = st.session_state.assignments[key]
         st.markdown(f"### Current Category: <span style='color:#0078D7'>{current_action}</span>", unsafe_allow_html=True)
         
-        col1, col2, col3, col4 = st.columns(4)
-        with col1:
-            if st.button("⬅️ Prev Cat", key="btn_prev_cat"):
+        # Action Bar & Ergonomic Control Buttons
+        c1, c2, c3, c4 = st.columns(4)
+        with c1:
+            if st.button("⬅️ Prev Cat", key="btn_prev_cat", use_container_width=True):
                 c_idx = ACTIONS.index(st.session_state.assignments[key])
                 st.session_state.assignments[key] = ACTIONS[(c_idx - 1) % 4]
                 st.rerun()
-        with col2:
-            if st.button("➡️ Next Cat", key="btn_next_cat"):
+        with c2:
+            if st.button("➡️ Next Cat", key="btn_next_cat", use_container_width=True):
                 c_idx = ACTIONS.index(st.session_state.assignments[key])
                 st.session_state.assignments[key] = ACTIONS[(c_idx + 1) % 4]
                 st.rerun()
-        with col3:
-            if st.button("⏭️ Next Tile", key="btn_next_tile"):
+        with c3:
+            if st.button("↩️ Undo Tile", key="btn_undo_kb", use_container_width=True):
+                if st.session_state.keyboard_idx > 0:
+                    st.session_state.keyboard_idx -= 1
+                st.rerun()
+        with c4:
+            if st.button("⏭️ Next Tile", key="btn_next_tile", use_container_width=True):
                 st.session_state.keyboard_idx += 1
                 st.rerun()
-        with col4:
-            if st.button("🚀 Submit Batch", key="btn_submit"):
-                process_submission()
+                
+        # Direct Relabel & Discard buttons for whole tile
+        rc1, rc2 = st.columns(2)
+        with rc1:
+            if st.button("⚠️ Send Tile to Relabel", key="btn_relabel_tile_kb", use_container_width=True):
+                move_s3_file(key, "needs_labeling")
+                st.toast("Tile moved to Needs Labeling!")
+                st.rerun()
+        with rc2:
+            if st.button("🗑️ Discard Tile", key="btn_discard_tile_kb", use_container_width=True):
+                move_s3_file(key, "discarded")
+                st.toast("Tile discarded!")
                 st.rerun()
                 
         # History Line
@@ -336,14 +543,14 @@ if mode == "⌨️ Keyboard Mode":
         if len(hist_keys) > 0:
             st.markdown("---")
             st.markdown("#### 🕒 Recently Assigned")
-            display_keys = hist_keys[-6:] # Show up to last 6
+            display_keys = hist_keys[-6:]
             hist_cols = st.columns(len(display_keys))
             for i, h_key in enumerate(display_keys):
                 with hist_cols[i]:
                     h_img_bytes = st.session_state.batch_images[h_key]
                     h_pil_img = Image.open(BytesIO(h_img_bytes)).convert("RGB")
                     st.image(h_pil_img, use_container_width=True)
-                    st.caption(st.session_state.assignments[h_key].split()[0]) # Just emoji
+                    st.caption(st.session_state.assignments[h_key].split()[0])
                     orig_idx = current_batch_keys.index(h_key)
                     if st.button("✏️ Edit", key=f"undo_{h_key}"):
                         st.session_state.keyboard_idx = orig_idx
@@ -423,7 +630,7 @@ elif mode == "🎨 Canvas Mode":
     if selected_indices:
         st.info(f"**{len(selected_indices)} tiles selected.**")
         cat = st.selectbox("Assign selected to:", ACTIONS)
-        if st.button("Apply Category to Selected"):
+        if st.button("Apply Category to Selected", type="primary", use_container_width=True):
             for idx in selected_indices:
                 st.session_state.assignments[current_batch_keys[idx]] = cat
             st.rerun()
@@ -471,16 +678,16 @@ elif mode == "👀 Review & Submit":
         process_submission()
 
 elif mode == "📱 Swipe Mode":
-    st.markdown("### 📱 Swipe Mode (Individual Pollen Grains)")
+    st.markdown("### 📱 Mobile Swipe Mode (Individual Pollen Grains)")
     
-    with st.expander("⚙️ Adjust Image & SAM Outline Controls", expanded=False):
+    with st.expander("⚙️ Image Controls & SAM Outline Opacity", expanded=False):
         b_col, c_col, o_col = st.columns(3)
         with b_col:
-            brightness = st.slider("☀️ Brightness Boost", 0.8, 3.0, 1.4, 0.1, key="swipe_brightness")
+            brightness = st.slider("☀️ Brightness", 0.8, 3.0, 1.4, 0.1, key="swipe_brightness")
         with c_col:
-            contrast = st.slider("🔍 Contrast Boost", 0.8, 2.5, 1.2, 0.1, key="swipe_contrast")
+            contrast = st.slider("🔍 Contrast", 0.8, 2.5, 1.2, 0.1, key="swipe_contrast")
         with o_col:
-            mask_opacity = st.slider("👁️ SAM Outline Opacity", 0.0, 1.0, 0.5, 0.1, key="swipe_mask_opacity")
+            mask_opacity = st.slider("👁️ Outline Opacity", 0.0, 1.0, 0.5, 0.1, key="swipe_mask_opacity")
     
     if "swipe_tile_idx" not in st.session_state:
         st.session_state.swipe_tile_idx = 0
@@ -490,34 +697,35 @@ elif mode == "📱 Swipe Mode":
         st.session_state.swipe_grains = []
     if "swipe_labels" not in st.session_state:
         st.session_state.swipe_labels = {} # grain_id -> class_id
+    if "swipe_history" not in st.session_state:
+        st.session_state.swipe_history = [] # list of {"grain_idx": G, "label": prev_label}
         
-    # Get all tiles in current batch that have results
     valid_keys = [k for k in current_batch_keys if k in st.session_state.batch_results and len(st.session_state.batch_results[k][0].boxes) > 0]
     
     if not valid_keys:
-        st.warning("No pollen grains detected in the current batch. Try a different batch or verify the model is working.")
+        st.warning("⚠️ No pollen grains detected in the current batch. Try fetching a new batch or switching modes.")
     else:
-        # Load grains for current tile if needed
         if st.session_state.swipe_tile_idx >= len(valid_keys):
-            st.success("Finished all tiles in this batch!")
-            if st.button("Review & Submit Batch"):
+            st.success("🎉 Finished all tiles in this batch!")
+            if st.button("🚀 Go to Review & Submit Batch", type="primary", use_container_width=True):
                 st.session_state.swipe_tile_idx = 0
+                st.session_state.mode = "👀 Review & Submit"
                 st.rerun()
         else:
             current_key = valid_keys[st.session_state.swipe_tile_idx]
             
-            # Extract grains if we haven't for this tile
+            # Load grains for tile if not loaded
             if getattr(st.session_state, '_current_swipe_key', None) != current_key:
                 st.session_state._current_swipe_key = current_key
                 st.session_state.swipe_grain_idx = 0
                 st.session_state.swipe_labels = {}
+                st.session_state.swipe_history = []
                 
                 results = st.session_state.batch_results[current_key]
                 img_bytes = st.session_state.batch_images[current_key]
                 pil_img = Image.open(BytesIO(img_bytes)).convert("RGB")
                 cv_img = cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2BGR)
                 
-                # Draw SAM outlines on tile copy
                 overlay_cv = cv_img.copy()
                 if results[0].masks is not None and len(results[0].masks.data) > 0:
                     masks_data = results[0].masks.data.cpu().numpy()
@@ -564,44 +772,52 @@ elif mode == "📱 Swipe Mode":
                     })
                 st.session_state.swipe_grains = grains
             
-            # Display current grain
             grains = st.session_state.swipe_grains
             
             if st.session_state.swipe_grain_idx >= len(grains):
-                st.success(f"Finished {len(grains)} grains for this tile!")
+                st.success(f"✅ Categorized {len(st.session_state.swipe_labels)} of {len(grains)} grains for this tile!")
                 
-                # Save YOLO labels to S3
-                if st.button("Save Labels & Next Tile"):
-                    s3 = get_s3_client()
-                    bucket = get_bucket_name()
-                    
-                    # Generate YOLO string
-                    lines = []
-                    for g in grains:
-                        gid = g["id"]
-                        if gid in st.session_state.swipe_labels:
-                            cls_id = st.session_state.swipe_labels[gid]
-                            xc, yc, w, h = g["yolo_coords"]
-                            lines.append(f"{cls_id} {xc} {yc} {w} {h}")
-                    
-                    if lines:
-                        txt_content = "\n".join(lines)
-                        base_name = os.path.basename(current_key)
-                        txt_key = current_key.rsplit('.', 1)[0] + '.txt'
-                        s3.put_object(Bucket=bucket, Key=txt_key, Body=txt_content.encode('utf-8'))
-                        st.toast(f"Saved {len(lines)} labels to S3!")
+                s_col1, s_col2 = st.columns(2)
+                with s_col1:
+                    if st.button("↩️ Undo Last Grain", key="btn_undo_end_grain", use_container_width=True):
+                        if st.session_state.swipe_grain_idx > 0:
+                            st.session_state.swipe_grain_idx -= 1
+                            if st.session_state.swipe_history:
+                                last_item = st.session_state.swipe_history.pop()
+                                gid = last_item["grain_id"]
+                                if last_item["label"] is None:
+                                    st.session_state.swipe_labels.pop(gid, None)
+                                else:
+                                    st.session_state.swipe_labels[gid] = last_item["label"]
+                        st.rerun()
+                with s_col2:
+                    if st.button("💾 Save Labels & Next Tile", type="primary", key="btn_save_next_tile", use_container_width=True):
+                        lines = []
+                        for g in grains:
+                            gid = g["id"]
+                            if gid in st.session_state.swipe_labels:
+                                cls_id = st.session_state.swipe_labels[gid]
+                                xc, yc, w, h = g["yolo_coords"]
+                                lines.append(f"{cls_id} {xc} {yc} {w} {h}")
                         
-                    st.session_state.swipe_tile_idx += 1
-                    st.rerun()
+                        if lines:
+                            txt_content = "\n".join(lines)
+                            txt_key = current_key.rsplit('.', 1)[0] + '.txt'
+                            s3.put_object(Bucket=bucket, Key=txt_key, Body=txt_content.encode('utf-8'))
+                            st.toast(f"Saved {len(lines)} labels to S3!")
+                            get_grain_and_tile_counts.clear()
+                            
+                        st.session_state.swipe_tile_idx += 1
+                        st.rerun()
             else:
                 current_grain = grains[st.session_state.swipe_grain_idx]
                 st.progress((st.session_state.swipe_grain_idx) / len(grains), text=f"Grain {st.session_state.swipe_grain_idx + 1} of {len(grains)}")
                 
                 conf_pct = current_grain.get('conf', 1.0) * 100
-                st.markdown(f"**🎯 SAM / YOLO Confidence:** `{conf_pct:.1f}%`")
+                st.markdown(f"**🎯 SAM / YOLO Confidence:** `{conf_pct:.1f}%` &nbsp;|&nbsp; **Tile {st.session_state.swipe_tile_idx + 1}/{len(valid_keys)}**")
                 
-                raw_img = current_grain.get("image_raw", current_grain.get("image"))
-                overlay_img = current_grain.get("image_overlay", raw_img)
+                raw_img = current_grain.get("image_raw")
+                overlay_img = current_grain.get("image_overlay")
                 
                 if mask_opacity > 0.0 and overlay_img is not None:
                     img_to_show = Image.blend(raw_img, overlay_img, mask_opacity)
@@ -614,14 +830,19 @@ elif mode == "📱 Swipe Mode":
                     img_to_show = ImageEnhance.Contrast(img_to_show).enhance(contrast)
                 
                 st.image(img_to_show, use_container_width=True)
-                
                 st.markdown("<br>", unsafe_allow_html=True)
                 
-                # Giant Buttons
+                # Giant Classification Buttons for Mobile Ergonomics
                 col1, col2, col3 = st.columns(3)
                 
                 def classify_grain(cls_id):
-                    st.session_state.swipe_labels[current_grain["id"]] = cls_id
+                    gid = current_grain["id"]
+                    prev_val = st.session_state.swipe_labels.get(gid)
+                    st.session_state.swipe_history.append({"grain_id": gid, "label": prev_val})
+                    if cls_id is not None:
+                        st.session_state.swipe_labels[gid] = cls_id
+                    else:
+                        st.session_state.swipe_labels.pop(gid, None)
                     st.session_state.swipe_grain_idx += 1
                 
                 with col1:
@@ -635,4 +856,48 @@ elif mode == "📱 Swipe Mode":
                 with col3:
                     if st.button("🟨 Aborted", use_container_width=True, key=f"btn_aborted_{current_grain['id']}"):
                         classify_grain(2)
+                        st.rerun()
+
+                st.markdown("<br>", unsafe_allow_html=True)
+                
+                # Undo & Discard Grain Row
+                ctrl_col1, ctrl_col2 = st.columns(2)
+                with ctrl_col1:
+                    if st.button("↩️ Undo Last", key=f"btn_undo_{current_grain['id']}", use_container_width=True):
+                        if st.session_state.swipe_grain_idx > 0:
+                            st.session_state.swipe_grain_idx -= 1
+                            if st.session_state.swipe_history:
+                                last_item = st.session_state.swipe_history.pop()
+                                gid = last_item["grain_id"]
+                                if last_item["label"] is None:
+                                    st.session_state.swipe_labels.pop(gid, None)
+                                else:
+                                    st.session_state.swipe_labels[gid] = last_item["label"]
+                        elif st.session_state.swipe_tile_idx > 0:
+                            st.session_state.swipe_tile_idx -= 1
+                            st.session_state._current_swipe_key = None
+                        st.rerun()
+                with ctrl_col2:
+                    if st.button("🗑️ Discard Label", key=f"btn_discard_grain_{current_grain['id']}", use_container_width=True):
+                        classify_grain(None)
+                        st.toast("Discarded grain label")
+                        st.rerun()
+                        
+                # Relabel Tile & Discard Tile Row
+                tile_ctrl1, tile_ctrl2 = st.columns(2)
+                with tile_ctrl1:
+                    if st.button("⚠️ Send Tile to Relabel", key=f"btn_relabel_tile_{current_grain['id']}", use_container_width=True):
+                        move_s3_file(current_key, "needs_labeling")
+                        st.session_state._current_swipe_key = None
+                        st.session_state.swipe_grain_idx = 0
+                        st.session_state.swipe_labels = {}
+                        st.toast("Tile moved to Needs Labeling!")
+                        st.rerun()
+                with tile_ctrl2:
+                    if st.button("🗑️ Discard Whole Tile", key=f"btn_discard_tile_{current_grain['id']}", use_container_width=True):
+                        move_s3_file(current_key, "discarded")
+                        st.session_state._current_swipe_key = None
+                        st.session_state.swipe_grain_idx = 0
+                        st.session_state.swipe_labels = {}
+                        st.toast("Tile moved to Discarded!")
                         st.rerun()
