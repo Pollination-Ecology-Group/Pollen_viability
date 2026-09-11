@@ -681,7 +681,7 @@ while len(matching_keys) < BATCH_SIZE and scanned_count < min(MAX_SCAN_TILES, le
 
     for key in chunk_keys:
         if key not in st.session_state.assignments:
-            st.session_state.assignments[key] = "⚠️ Needs Labeling"
+            st.session_state.assignments[key] = "🌑 Hard Negatives"
             
         if model and key not in st.session_state.batch_results and key in st.session_state.batch_images:
             try:
