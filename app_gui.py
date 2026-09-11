@@ -691,7 +691,7 @@ while len(matching_keys) < BATCH_SIZE and scanned_count < min(MAX_SCAN_TILES, le
                 cv_img = cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2BGR)
                 
                 with torch.no_grad():
-                    results = model(cv_img, conf=0.25, iou=0.3, agnostic_nms=True, verbose=False)
+                    results = model(cv_img, conf=0.25, iou=0.7, agnostic_nms=False, verbose=False)
                     if hasattr(model, 'task') and getattr(model, 'task', '') == 'segment' or type(model).__name__ == "FastSAM":
                          results = filter_sam_results(results, cv_img)
                      
