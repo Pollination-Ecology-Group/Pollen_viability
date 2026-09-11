@@ -94,12 +94,14 @@ def fetch_keys_from_s3():
     try:
         bucket = get_bucket_name()
         prefix = "Ostatni/Pollen_viability/tiles_640/"
-        response = s3.list_objects_v2(Bucket=bucket, Prefix=prefix, MaxKeys=200)
+        response = s3.list_objects_v2(Bucket=bucket, Prefix=prefix, MaxKeys=500)
         new_keys = []
+        valid_extensions = ('.jpg', '.jpeg', '.png', '.tif', '.tiff', '.bmp', '.webp')
         if 'Contents' in response:
             for obj in response['Contents']:
-                if not obj['Key'].endswith('/'):
-                    new_keys.append(obj['Key'])
+                key = obj['Key']
+                if key.lower().endswith(valid_extensions):
+                    new_keys.append(key)
         st.session_state.s3_keys = new_keys
     except Exception as e:
         st.error(f"Error fetching from S3: {e}")
@@ -199,6 +201,9 @@ def process_submission():
     st.session_state.keyboard_idx = 0
     st.success("Batch Submitted!")
 
+valid_extensions = ('.jpg', '.jpeg', '.png', '.tif', '.tiff', '.bmp', '.webp')
+st.session_state.s3_keys = [k for k in st.session_state.s3_keys if k.lower().endswith(valid_extensions)]
+
 if not st.session_state.s3_keys:
     st.success("No pending tiles in queue!")
     if st.button("⬇️ Fetch Tiles from S3"):
@@ -260,18 +265,28 @@ if mode == "⌨️ Keyboard Mode":
             hist_cols = st.columns(len(display_keys))
             for i, h_key in enumerate(display_keys):
                 with hist_cols[i]:
-                    h_img_bytes = st.session_state.batch_images[h_key]
-                    h_pil_img = Image.open(BytesIO(h_img_bytes)).convert("RGB")
-                    st.image(h_pil_img, use_container_width=True)
-                    st.caption(st.session_state.assignments[h_key].split()[0]) # Just emoji
+                    try:
+                        h_img_bytes = st.session_state.batch_images[h_key]
+                        h_pil_img = Image.open(BytesIO(h_img_bytes)).convert("RGB")
+                        st.image(h_pil_img, use_container_width=True)
+                        st.caption(st.session_state.assignments[h_key].split()[0]) # Just emoji
+                    except Exception:
+                        pass
                     orig_idx = current_batch_keys.index(h_key)
                     if st.button("✏️ Edit", key=f"undo_end_{h_key}"):
                         st.session_state.keyboard_idx = orig_idx
                         st.rerun()
     else:
         key = current_batch_keys[idx]
-        img_bytes = st.session_state.batch_images[key]
-        pil_img = Image.open(BytesIO(img_bytes)).convert("RGB")
+        if key not in st.session_state.batch_images:
+            st.error(f"Image data for tile '{key}' not available.")
+            st.stop()
+        try:
+            img_bytes = st.session_state.batch_images[key]
+            pil_img = Image.open(BytesIO(img_bytes)).convert("RGB")
+        except Exception as e:
+            st.error(f"Cannot render image tile '{key}': {e}")
+            st.stop()
         
         # Render Image
         results = st.session_state.batch_results.get(key)
