@@ -121,12 +121,18 @@ def get_bucket_name():
 
 @st.cache_resource
 def load_model():
-    model_path = "best.pt"
-    if os.path.exists(model_path):
-        return YOLO(model_path)
-    # Fallback to FastSAM if best.pt is not available yet
-    from ultralytics import FastSAM
-    return FastSAM("FastSAM-s.pt")
+    try:
+        model_path = "best.pt"
+        if os.path.exists(model_path):
+            return YOLO(model_path)
+        if os.path.exists("FastSAM-s.pt"):
+            from ultralytics import FastSAM
+            return FastSAM("FastSAM-s.pt")
+        return None
+    except Exception as e:
+        print(f"Warning: load_model failed with {e}")
+        return None
+
 
 def filter_sam_results(results, orig_img):
     """Filter SAM masks based on area and color (purple hue)."""
