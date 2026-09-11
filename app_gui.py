@@ -573,12 +573,46 @@ if not st.session_state.s3_keys:
         st.rerun()
     st.stop()
 
-current_batch_keys = st.session_state.s3_keys[:BATCH_SIZE]
+def is_tile_matching_strategy(key, strategy):
+    if strategy == "🎲 All Tiles (Natural Mix)":
+        return True
+        
+    res = st.session_state.batch_results.get(key)
+    num_nonviable = 0
+    num_viable = 0
+    total_boxes = 0
+    if res and len(res) > 0 and hasattr(res[0], 'boxes') and res[0].boxes is not None:
+        total_boxes = len(res[0].boxes)
+        if hasattr(res[0].boxes, 'cls') and res[0].boxes.cls is not None:
+            classes = res[0].boxes.cls.tolist()
+            num_nonviable = sum(1 for c in classes if int(c) == 1)
+            num_viable = sum(1 for c in classes if int(c) == 0)
+
+    if strategy == "🌑 Hard Negatives (Low/Zero Pollen)":
+        # Strict Hard Negative matching: MUST have 0 detected pollen grains!
+        return total_boxes == 0
+    elif strategy == "🎯 High Non-Viable Dense":
+        if num_nonviable > 0:
+            return True
+        s_id = extract_sample_id(key)
+        s_info = sample_index.get(s_id, {})
+        return s_info.get("non_viable", 0) > 0 or s_info.get("non_viable_rate", 0.0) > 0.05
+    elif strategy == "🟩 Viable Dense":
+        return num_viable > 0 or total_boxes > 0
+        
+    return True
+
+strategy = getattr(st.session_state, "queue_strategy_select", "🎯 High Non-Viable Dense")
+
+# Pre-fetch a pool of up to 48 candidate keys to filter strictly matching tiles
+CANDIDATE_POOL_SIZE = 48
+candidate_keys = st.session_state.s3_keys[:CANDIDATE_POOL_SIZE]
+
 s3 = get_s3_client()
 bucket = get_bucket_name()
 model = load_model()
 
-# Multi-threaded Parallel Fetching of Batch Images
+# Multi-threaded Parallel Fetching of Candidate Images
 def fetch_single_image(key):
     try:
         s3_c = get_s3_client()
@@ -588,16 +622,16 @@ def fetch_single_image(key):
     except Exception:
         return key, None
 
-keys_to_fetch = [k for k in current_batch_keys if k not in st.session_state.batch_images]
+keys_to_fetch = [k for k in candidate_keys if k not in st.session_state.batch_images]
 if keys_to_fetch:
-    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
         fetched_results = executor.map(fetch_single_image, keys_to_fetch)
         for k, img_bytes in fetched_results:
             if img_bytes:
                 st.session_state.batch_images[k] = img_bytes
 
-# Run Model Prediction (Cached per key)
-for key in current_batch_keys:
+# Run Model Prediction for Candidate Pool
+for key in candidate_keys:
     if key not in st.session_state.assignments:
         st.session_state.assignments[key] = "🌑 Hard Negatives"
         
@@ -615,10 +649,10 @@ for key in current_batch_keys:
             if results and len(results[0].boxes) > 0:
                 st.session_state.assignments[key] = "🌟 Hard Positives"
         except Exception as e:
-            st.error(f"Error predicting tile '{key}': {e}")
+            pass
 
-# Live In-Batch Sorting according to selected Queue Strategy
-strategy = getattr(st.session_state, "queue_strategy_select", "🎯 High Non-Viable Dense")
+# Filter and rank candidate keys strictly matching active strategy
+matching_keys = [k for k in candidate_keys if is_tile_matching_strategy(k, strategy)]
 
 def rank_batch_key(k):
     res = st.session_state.batch_results.get(k)
@@ -642,11 +676,18 @@ def rank_batch_key(k):
     elif strategy == "🟩 Viable Dense":
         return (num_viable, s_viable, total_boxes)
     elif strategy == "🌑 Hard Negatives (Low/Zero Pollen)":
-        # Hard Negatives means 0/low pollen! -total_boxes ranks 0 boxes above 15 boxes
         return (-total_boxes, -num_viable, -s_viable)
     return (0, 0, 0)
 
-current_batch_keys.sort(key=rank_batch_key, reverse=True)
+matching_keys.sort(key=rank_batch_key, reverse=True)
+
+# Fallback: Pad matching keys with sorted remaining candidate keys if pool is small
+if len(matching_keys) < BATCH_SIZE:
+    non_matching = [k for k in candidate_keys if k not in matching_keys]
+    non_matching.sort(key=rank_batch_key, reverse=True)
+    matching_keys.extend(non_matching)
+
+current_batch_keys = matching_keys[:BATCH_SIZE]
 
 # MODE IMPLEMENTATIONS
 
