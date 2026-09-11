@@ -175,17 +175,25 @@ def load_sample_viability_index_gui():
 
 sample_index = load_sample_viability_index_gui()
 
-def sort_keys_by_nonviable_priority(keys):
-    if not sample_index:
+def sort_keys_by_strategy(keys, strategy="🎯 High Non-Viable Dense"):
+    if not sample_index or strategy == "🎲 All Tiles (Natural Mix)":
         return keys
+        
     def rank_key(k):
         filename = os.path.basename(k)
         sample_id = filename.split('_')[0]
         if sample_id in sample_index:
             info = sample_index[sample_id]
-            return (info.get("non_viable", 0), info.get("non_viable_rate", 0.0))
-        return (0, 0.0)
-    return sorted(keys, key=rank_key, reverse=True)
+            if strategy == "🎯 High Non-Viable Dense":
+                return (info.get("non_viable", 0), info.get("non_viable_rate", 0.0))
+            elif strategy == "🟩 Viable Dense":
+                return (info.get("viable", 0), 1.0 - info.get("non_viable_rate", 0.0))
+            elif strategy == "🌑 Hard Negatives (Low/Zero Pollen)":
+                return (-info.get("total_grains", 0), -info.get("viable", 0))
+        return (0, 0.0) if "High" in strategy or "Viable" in strategy else (99999, 99999)
+
+    reverse_sort = "High" in strategy or "Viable" in strategy
+    return sorted(keys, key=rank_key, reverse=reverse_sort)
 
 def fetch_keys_from_s3():
     s3 = get_s3_client()
@@ -205,8 +213,8 @@ def fetch_keys_from_s3():
                 if key.lower().endswith(valid_extensions):
                     new_keys.append(key)
                     
-        if getattr(st.session_state, "prioritize_nonviable_toggle", True):
-            new_keys = sort_keys_by_nonviable_priority(new_keys)
+        strategy = getattr(st.session_state, "queue_strategy_select", "🎯 High Non-Viable Dense")
+        new_keys = sort_keys_by_strategy(new_keys, strategy)
             
         st.session_state.s3_keys = new_keys
     except Exception as e:
@@ -343,11 +351,22 @@ st.sidebar.metric("🗑️ Discarded Tiles", tile_counts["discarded"])
 
 st.sidebar.markdown("---")
 st.sidebar.markdown("#### 🎯 Dataset Balance Controls")
-prioritize_toggle = st.sidebar.checkbox(
-    "🎯 Prioritize High Non-Viable Samples", 
-    value=True, 
-    key="prioritize_nonviable_toggle",
-    help="Sorts S3 tile curation queue so tiles from samples with high non-viable pollen density appear first."
+
+def on_queue_strategy_change():
+    fetch_keys_from_s3()
+
+queue_strategy = st.sidebar.selectbox(
+    "🎯 Queue Filter & Priority",
+    options=[
+        "🎯 High Non-Viable Dense",
+        "🟩 Viable Dense",
+        "🌑 Hard Negatives (Low/Zero Pollen)",
+        "🎲 All Tiles (Natural Mix)"
+    ],
+    index=0,
+    key="queue_strategy_select",
+    on_change=on_queue_strategy_change,
+    help="Controls which tiles appear at the top of your batch queue in Grid & Swipe modes."
 )
 
 if sample_index:

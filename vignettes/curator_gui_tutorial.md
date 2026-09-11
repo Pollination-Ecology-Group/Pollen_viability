@@ -61,7 +61,11 @@ To accelerate training data collection for rare non-viable grains:
   - `1-6-J`: **88.4% non-viable** (975 non-viable grains)
   - `7-9-F`: **66.9% non-viable** (176 non-viable grains)
   - `6-1-F`: **53.8% non-viable** (154 non-viable grains)
-- **Automatic Queue Sorting**: Enabling **`🎯 Prioritize High Non-Viable Samples`** sorts incoming S3 tiles so tiles rich in non-viable grains appear first.
+- **Interactive Queue Prioritization Selector** (`🎯 Queue Filter & Priority`):
+  - **`🎯 High Non-Viable Dense`**: Prioritizes tiles from samples rich in non-viable grains (`1-6-J`, `7-9-F`, `6-1-F`).
+  - **`🟩 Viable Dense`**: Prioritizes tiles from samples rich in viable pollen.
+  - **`🌑 Hard Negatives (Low/Zero Pollen)`**: Prioritizes empty/background tiles with zero pollen to build negative training datasets.
+  - **`🎲 All Tiles (Natural Mix)`**: Displays standard natural batch sequence.
 
 ---
 
