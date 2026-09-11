@@ -20,7 +20,7 @@ spec:
             drop: ["ALL"]
         image: ultralytics/ultralytics:latest
         workingDir: /tmp
-        command: ["/bin/bash", "-c", "pip install --user boto3 pandas czifile tqdm && python /scripts/preprocess_czi.py --download --prioritize-nonviable --nonviable-only --limit 5"]
+        command: ["/bin/bash", "-c", "pip install --user boto3 pandas czifile tqdm && python /scripts/preprocess_czi.py --download --prioritize-nonviable --nonviable-only"]
         envFrom:
         - secretRef:
             name: s3-creds
