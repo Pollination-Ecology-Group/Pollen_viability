@@ -350,6 +350,12 @@ def move_s3_file(key, target_category):
 # State Initialization
 if "s3_keys" not in st.session_state:
     st.session_state.s3_keys = []
+    if get_s3_client() is not None:
+        try:
+            fetch_keys_from_s3()
+        except Exception:
+            pass
+
 if "assignments" not in st.session_state:
     st.session_state.assignments = {}
 if "batch_images" not in st.session_state:
@@ -862,8 +868,9 @@ elif mode == "🎨 Canvas Mode":
         canvas_result = None
     
     selected_indices = set()
-    if canvas_result.json_data is not None:
+    if canvas_result is not None and canvas_result.json_data is not None:
         objects = canvas_result.json_data["objects"]
+
         for obj in objects:
             if obj["type"] == "rect":
                 left, top = obj["left"], obj["top"]
