@@ -175,25 +175,34 @@ def load_sample_viability_index_gui():
 
 sample_index = load_sample_viability_index_gui()
 
-def sort_keys_by_strategy(keys, strategy="🎯 High Non-Viable Dense"):
-    if not sample_index or strategy == "🎲 All Tiles (Natural Mix)":
-        return keys
-        
-    def rank_key(k):
-        filename = os.path.basename(k)
-        sample_id = filename.split('_')[0]
-        if sample_id in sample_index:
-            info = sample_index[sample_id]
-            if strategy == "🎯 High Non-Viable Dense":
-                return (info.get("non_viable", 0), info.get("non_viable_rate", 0.0))
-            elif strategy == "🟩 Viable Dense":
-                return (info.get("viable", 0), 1.0 - info.get("non_viable_rate", 0.0))
-            elif strategy == "🌑 Hard Negatives (Low/Zero Pollen)":
-                return (-info.get("total_grains", 0), -info.get("viable", 0))
-        return (0, 0.0) if "High" in strategy or "Viable" in strategy else (99999, 99999)
+def extract_sample_id(key):
+    """
+    Extracts the matching sample ID from a file key or path using sample_index.
+    """
+    if not sample_index:
+        return ""
+    clean_k = os.path.basename(key)
+    # 1. Substring match against known sample_index keys
+    for s_id in sample_index:
+        if s_id in clean_k or s_id in key:
+            return s_id
+    # 2. Substring search in parts
+    parts = clean_k.replace('.jpg', '').replace('.czi', '').split('_')
+    for part in parts:
+        if part in sample_index:
+            return part
+    return parts[0]
 
-    reverse_sort = "High" in strategy or "Viable" in strategy
-    return sorted(keys, key=rank_key, reverse=reverse_sort)
+def get_sample_rank(sample_id, strategy):
+    if sample_id in sample_index:
+        info = sample_index[sample_id]
+        if strategy == "🎯 High Non-Viable Dense":
+            return (info.get("non_viable", 0), info.get("non_viable_rate", 0.0))
+        elif strategy == "🟩 Viable Dense":
+            return (info.get("viable", 0), 1.0 - info.get("non_viable_rate", 0.0))
+        elif strategy == "🌑 Hard Negatives (Low/Zero Pollen)":
+            return (-info.get("total_grains", 0), -info.get("viable", 0))
+    return (0, 0.0) if "High" in strategy or "Viable" in strategy else (99999, 99999)
 
 def fetch_keys_from_s3():
     s3 = get_s3_client()
@@ -204,19 +213,47 @@ def fetch_keys_from_s3():
     try:
         bucket = get_bucket_name()
         prefix = "Ostatni/Pollen_viability/tiles_640/"
-        response = s3.list_objects_v2(Bucket=bucket, Prefix=prefix, MaxKeys=500)
-        new_keys = []
-        valid_extensions = ('.jpg', '.jpeg', '.png', '.tif', '.tiff', '.bmp', '.webp')
-        if 'Contents' in response:
-            for obj in response['Contents']:
-                key = obj['Key']
-                if key.lower().endswith(valid_extensions):
-                    new_keys.append(key)
-                    
         strategy = getattr(st.session_state, "queue_strategy_select", "🎯 High Non-Viable Dense")
-        new_keys = sort_keys_by_strategy(new_keys, strategy)
+        
+        # List sample subdirectories under tiles_640/ using Delimiter='/'
+        response = s3.list_objects_v2(Bucket=bucket, Prefix=prefix, Delimiter="/")
+        subfolders = []
+        if 'CommonPrefixes' in response:
+            subfolders = [p['Prefix'] for p in response['CommonPrefixes']]
             
-        st.session_state.s3_keys = new_keys
+        valid_extensions = ('.jpg', '.jpeg', '.png', '.tif', '.tiff', '.bmp', '.webp')
+        new_keys = []
+        
+        if subfolders:
+            reverse_sort = "High" in strategy or "Viable" in strategy
+            sorted_folders = sorted(
+                subfolders,
+                key=lambda folder: get_sample_rank(extract_sample_id(folder), strategy),
+                reverse=reverse_sort
+            )
+            for folder in sorted_folders:
+                if len(new_keys) >= 500:
+                    break
+                f_resp = s3.list_objects_v2(Bucket=bucket, Prefix=folder, MaxKeys=100)
+                if 'Contents' in f_resp:
+                    for obj in f_resp['Contents']:
+                        k = obj['Key']
+                        if k.lower().endswith(valid_extensions):
+                            new_keys.append(k)
+        else:
+            response = s3.list_objects_v2(Bucket=bucket, Prefix=prefix, MaxKeys=500)
+            if 'Contents' in response:
+                for obj in response['Contents']:
+                    k = obj['Key']
+                    if k.lower().endswith(valid_extensions):
+                        new_keys.append(k)
+            reverse_sort = "High" in strategy or "Viable" in strategy
+            new_keys = sorted(new_keys, key=lambda k: get_sample_rank(extract_sample_id(k), strategy), reverse=reverse_sort)
+
+        st.session_state.s3_keys = new_keys[:500]
+        st.session_state.batch_images = {}
+        st.session_state.batch_results = {}
+        st.session_state.assignments = {}
     except Exception as e:
         st.error(f"Error fetching from S3: {e}")
 
