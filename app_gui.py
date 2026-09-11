@@ -597,8 +597,14 @@ if not st.session_state.s3_keys:
 def is_tile_matching_strategy(key, strategy):
     if strategy == "🎲 All Tiles (Natural Mix)":
         return True
-        
+
     res = st.session_state.batch_results.get(key)
+
+    # If no detection results exist for this tile (no model loaded),
+    # we can't filter — show all tiles regardless of strategy
+    if res is None:
+        return True
+
     num_nonviable = 0
     num_viable = 0
     total_boxes = 0
@@ -630,6 +636,9 @@ strategy = getattr(st.session_state, "queue_strategy_select", "🎯 High Non-Via
 s3 = get_s3_client()
 bucket = get_bucket_name()
 model = load_model()
+
+if not model:
+    st.info("ℹ️ **No detection model available** — all tiles shown without auto-classification. You can still manually label them!")
 
 # Multi-threaded Parallel Fetching of Images
 def fetch_single_image(key):
@@ -663,7 +672,7 @@ while len(matching_keys) < BATCH_SIZE and scanned_count < min(MAX_SCAN_TILES, le
 
     for key in chunk_keys:
         if key not in st.session_state.assignments:
-            st.session_state.assignments[key] = "🌑 Hard Negatives"
+            st.session_state.assignments[key] = "⚠️ Needs Labeling"
             
         if model and key not in st.session_state.batch_results and key in st.session_state.batch_images:
             try:
