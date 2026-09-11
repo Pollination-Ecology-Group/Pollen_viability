@@ -182,11 +182,11 @@ def extract_sample_id(key):
     if not sample_index:
         return ""
     clean_k = os.path.basename(key)
-    # 1. Substring match against known sample_index keys
-    for s_id in sample_index:
+    # Sort sample_index keys by length descending so longer IDs like '27-3-B' match before '7-3-B'
+    sorted_s_ids = sorted(sample_index.keys(), key=len, reverse=True)
+    for s_id in sorted_s_ids:
         if s_id in clean_k or s_id in key:
             return s_id
-    # 2. Substring search in parts
     parts = clean_k.replace('.jpg', '').replace('.czi', '').split('_')
     for part in parts:
         if part in sample_index:
@@ -616,6 +616,37 @@ for key in current_batch_keys:
                 st.session_state.assignments[key] = "🌟 Hard Positives"
         except Exception as e:
             st.error(f"Error predicting tile '{key}': {e}")
+
+# Live In-Batch Sorting according to selected Queue Strategy
+strategy = getattr(st.session_state, "queue_strategy_select", "🎯 High Non-Viable Dense")
+
+def rank_batch_key(k):
+    res = st.session_state.batch_results.get(k)
+    num_nonviable = 0
+    num_viable = 0
+    total_boxes = 0
+    if res and len(res) > 0 and hasattr(res[0], 'boxes') and res[0].boxes is not None:
+        total_boxes = len(res[0].boxes)
+        if hasattr(res[0].boxes, 'cls') and res[0].boxes.cls is not None:
+            classes = res[0].boxes.cls.tolist()
+            num_nonviable = sum(1 for c in classes if int(c) == 1)
+            num_viable = sum(1 for c in classes if int(c) == 0)
+            
+    s_id = extract_sample_id(k)
+    s_info = sample_index.get(s_id, {})
+    s_nonviable = s_info.get("non_viable", 0)
+    s_viable = s_info.get("viable", 0)
+    
+    if strategy == "🎯 High Non-Viable Dense":
+        return (num_nonviable, s_nonviable, total_boxes)
+    elif strategy == "🟩 Viable Dense":
+        return (num_viable, s_viable, total_boxes)
+    elif strategy == "🌑 Hard Negatives (Low/Zero Pollen)":
+        # Hard Negatives means 0/low pollen! -total_boxes ranks 0 boxes above 15 boxes
+        return (-total_boxes, -num_viable, -s_viable)
+    return (0, 0, 0)
+
+current_batch_keys.sort(key=rank_batch_key, reverse=True)
 
 # MODE IMPLEMENTATIONS
 
