@@ -692,21 +692,65 @@ elif mode == "🎨 Canvas Mode":
             st.write(f"Tile {i+1}: {st.session_state.assignments[key]}")
 
 elif mode == "📋 Grid Mode":
-    st.markdown("### 📋 Grid Mode")
-    cols = st.columns(4)
+    st.markdown("### 📋 Phone-Friendly Grid Mode")
+    st.caption("Tap categories below each tile card to adjust assignments for the batch.")
+    
+    # Grid Mode Quick Batch Bar
+    g_ctrl1, g_ctrl2, g_ctrl3 = st.columns([2, 2, 3])
+    with g_ctrl1:
+        grid_cols_num = st.radio("Grid Columns:", [2, 1, 4], index=0, horizontal=True, key="grid_cols_choice", help="Select grid column count for comfortable phone viewing.")
+    with g_ctrl2:
+        if st.button("🌟 All Hard Positives", use_container_width=True, key="btn_all_pos"):
+            for k in current_batch_keys:
+                st.session_state.assignments[k] = "🌟 Hard Positives"
+            st.rerun()
+    with g_ctrl3:
+        if st.button("🚀 Submit Batch Directly", type="primary", use_container_width=True, key="btn_grid_submit"):
+            process_submission()
+            st.rerun()
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    grid_cols = st.columns(grid_cols_num)
     for i, key in enumerate(current_batch_keys):
-        with cols[i % 4]:
-            img_bytes = st.session_state.batch_images[key]
-            pil_img = Image.open(BytesIO(img_bytes)).convert("RGB")
-            results = st.session_state.batch_results.get(key)
-            if results and len(results[0].boxes) > 0:
-                ann_img = results[0].plot()
-                pil_img = Image.fromarray(cv2.cvtColor(ann_img, cv2.COLOR_BGR2RGB))
-            st.image(pil_img, use_container_width=True)
+        with grid_cols[i % grid_cols_num]:
+            curr_assign = st.session_state.assignments.get(key, "🌑 Hard Negatives")
+            st.markdown(f"**Tile {i+1} / {len(current_batch_keys)}** &nbsp;|&nbsp; Current: `{curr_assign.split()[0]}`")
             
-            new_assign = st.radio("Action:", ACTIONS, index=ACTIONS.index(st.session_state.assignments[key]), key=f"rad_{key}")
-            if new_assign != st.session_state.assignments[key]:
-                st.session_state.assignments[key] = new_assign
+            img_bytes = st.session_state.batch_images.get(key)
+            if img_bytes:
+                pil_img = Image.open(BytesIO(img_bytes)).convert("RGB")
+                results = st.session_state.batch_results.get(key)
+                if results and len(results[0].boxes) > 0:
+                    ann_img = results[0].plot(boxes=False, labels=False)
+                    pil_img = Image.fromarray(cv2.cvtColor(ann_img, cv2.COLOR_BGR2RGB))
+                st.image(pil_img, use_container_width=True)
+            
+            # Ergonomic Touch Action Buttons
+            btn_col1, btn_col2 = st.columns(2)
+            with btn_col1:
+                pos_type = "primary" if curr_assign == "🌟 Hard Positives" else "secondary"
+                if st.button("🌟 Positive", key=f"g_pos_{key}", type=pos_type, use_container_width=True):
+                    st.session_state.assignments[key] = "🌟 Hard Positives"
+                    st.rerun()
+            with btn_col2:
+                neg_type = "primary" if curr_assign == "🌑 Hard Negatives" else "secondary"
+                if st.button("🌑 Negative", key=f"g_neg_{key}", type=neg_type, use_container_width=True):
+                    st.session_state.assignments[key] = "🌑 Hard Negatives"
+                    st.rerun()
+
+            btn_col3, btn_col4 = st.columns(2)
+            with btn_col3:
+                rel_type = "primary" if curr_assign == "⚠️ Needs Labeling" else "secondary"
+                if st.button("⚠️ Relabel", key=f"g_rel_{key}", type=rel_type, use_container_width=True):
+                    st.session_state.assignments[key] = "⚠️ Needs Labeling"
+                    st.rerun()
+            with btn_col4:
+                dis_type = "primary" if curr_assign == "🗑️ Discard" else "secondary"
+                if st.button("🗑️ Discard", key=f"g_dis_{key}", type=dis_type, use_container_width=True):
+                    st.session_state.assignments[key] = "🗑️ Discard"
+                    st.rerun()
+            st.markdown("---")
 
 elif mode == "👀 Review & Submit":
     st.markdown("### 👀 Review & Submit")
