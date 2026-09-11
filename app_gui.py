@@ -130,9 +130,19 @@ def get_bucket_name():
 def load_model():
     try:
         from ultralytics import YOLO
-        # Prefer custom trained model if available locally
-        if os.path.exists("best.pt"):
-            return YOLO("best.pt")
+        model_path = "best.pt"
+        # If model not available locally, try downloading from S3
+        if not os.path.exists(model_path):
+            try:
+                s3 = get_s3_client()
+                if s3:
+                    s3_model_key = "Ostatni/Pollen_viability/trained_models/pollen_v1_27/weights/best.pt"
+                    s3.download_file(get_bucket_name(), s3_model_key, model_path)
+                    print(f"Downloaded model from S3: {s3_model_key}")
+            except Exception as dl_err:
+                print(f"Could not download model from S3: {dl_err}")
+        if os.path.exists(model_path):
+            return YOLO(model_path)
         # Fallback: FastSAM-s (auto-downloads ~24MB from ultralytics hub)
         from ultralytics import FastSAM
         return FastSAM("FastSAM-s.pt")
