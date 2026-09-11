@@ -933,7 +933,7 @@ elif mode == "📋 Grid Mode":
     st.info("💡 **Tile-Level Confirmation Only**: Grid Mode confirms whether a tile contains pollen grains (`Pollen Present`) vs empty background (`No Pollen`). Individual grain viability (**Viable** 🟩 / **Non-Viable** 🟥 / **Aborted** 🟨) is identified per grain in **📱 Swipe Mode**.")
     
     # Grid Mode Quick Batch Bar
-    g_ctrl1, g_ctrl2, g_ctrl3 = st.columns([2, 2, 3])
+    g_ctrl1, g_ctrl2, g_ctrl3, g_ctrl4 = st.columns([2, 2, 2, 3])
     with g_ctrl1:
         grid_cols_num = st.radio("Grid Columns:", [2, 1, 4], index=0, horizontal=True, key="grid_cols_choice", help="Select grid column count for comfortable phone viewing.")
     with g_ctrl2:
@@ -942,6 +942,15 @@ elif mode == "📋 Grid Mode":
                 st.session_state.assignments[k] = "🌟 Hard Positives"
             st.rerun()
     with g_ctrl3:
+        if st.button("⏭️ Skip Batch", use_container_width=True, key="btn_skip_batch"):
+            # Clear current batch and load next tiles
+            st.session_state.batch_images = {}
+            st.session_state.batch_results = {}
+            st.session_state.assignments = {}
+            fetch_keys_from_s3()
+            get_grain_and_tile_counts.clear()
+            st.rerun()
+    with g_ctrl4:
         if st.button("🚀 Submit Tile Queue to S3", type="primary", use_container_width=True, key="btn_grid_submit"):
             process_submission()
             st.rerun()
