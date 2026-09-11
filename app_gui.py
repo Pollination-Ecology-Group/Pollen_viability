@@ -314,10 +314,12 @@ if "keyboard_idx" not in st.session_state:
     st.session_state.keyboard_idx = 0
 if "mode" not in st.session_state:
     st.session_state.mode = "📱 Swipe Mode"
+if "mode_radio_sidebar" not in st.session_state:
+    st.session_state.mode_radio_sidebar = st.session_state.mode
 
 def set_active_mode(new_mode):
-    st.session_state.pop("mode_radio_sidebar", None)
     st.session_state.mode = new_mode
+    st.session_state.mode_radio_sidebar = new_mode
 
 ACTION_MAP = {
     "🌟 Hard Positives": "hard_positives",
@@ -385,6 +387,9 @@ st.sidebar.markdown("---")
 
 def on_sidebar_mode_change():
     st.session_state.mode = st.session_state.mode_radio_sidebar
+
+if st.session_state.get("mode_radio_sidebar") != st.session_state.mode:
+    st.session_state.mode_radio_sidebar = st.session_state.mode
 
 st.sidebar.radio(
     "Working Mode", 
