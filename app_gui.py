@@ -473,12 +473,14 @@ elif mode == "👀 Review & Submit":
 elif mode == "📱 Swipe Mode":
     st.markdown("### 📱 Swipe Mode (Individual Pollen Grains)")
     
-    with st.expander("☀️ Adjust Image Brightness & Contrast", expanded=False):
-        b_col, c_col = st.columns(2)
+    with st.expander("⚙️ Adjust Image & SAM Outline Controls", expanded=False):
+        b_col, c_col, o_col = st.columns(3)
         with b_col:
             brightness = st.slider("☀️ Brightness Boost", 0.8, 3.0, 1.4, 0.1, key="swipe_brightness")
         with c_col:
             contrast = st.slider("🔍 Contrast Boost", 0.8, 2.5, 1.2, 0.1, key="swipe_contrast")
+        with o_col:
+            mask_opacity = st.slider("👁️ SAM Outline Opacity", 0.0, 1.0, 0.5, 0.1, key="swipe_mask_opacity")
     
     if "swipe_tile_idx" not in st.session_state:
         st.session_state.swipe_tile_idx = 0
@@ -513,20 +515,40 @@ elif mode == "📱 Swipe Mode":
                 results = st.session_state.batch_results[current_key]
                 img_bytes = st.session_state.batch_images[current_key]
                 pil_img = Image.open(BytesIO(img_bytes)).convert("RGB")
+                cv_img = cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2BGR)
+                
+                # Draw SAM outlines on tile copy
+                overlay_cv = cv_img.copy()
+                if results[0].masks is not None and len(results[0].masks.data) > 0:
+                    masks_data = results[0].masks.data.cpu().numpy()
+                    img_h, img_w = cv_img.shape[:2]
+                    for m_idx, mask in enumerate(masks_data):
+                        mask_resized = cv2.resize(mask, (img_w, img_h), interpolation=cv2.INTER_NEAREST).astype(np.uint8)
+                        contours, _ = cv2.findContours(mask_resized, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                        cv2.drawContours(overlay_cv, contours, -1, (255, 255, 0), 2)
+                else:
+                    for box in results[0].boxes.xyxy:
+                        bx1, by1, bx2, by2 = map(int, box.tolist())
+                        cv2.rectangle(overlay_cv, (bx1, by1), (bx2, by2), (0, 255, 0), 2)
+                        
+                annotated_pil = Image.fromarray(cv2.cvtColor(overlay_cv, cv2.COLOR_BGR2RGB))
                 
                 grains = []
                 for idx, box in enumerate(results[0].boxes.xyxy):
                     x1, y1, x2, y2 = map(int, box.tolist())
-                    # Add some padding
                     pad = 20
                     x1 = max(0, x1 - pad)
                     y1 = max(0, y1 - pad)
                     x2 = min(pil_img.width, x2 + pad)
                     y2 = min(pil_img.height, y2 + pad)
                     
-                    cropped = pil_img.crop((x1, y1, x2, y2))
+                    cropped_raw = pil_img.crop((x1, y1, x2, y2))
+                    cropped_overlay = annotated_pil.crop((x1, y1, x2, y2))
                     
-                    # Original YOLO format coordinates (center x, center y, w, h normalized)
+                    conf = 1.0
+                    if hasattr(results[0].boxes, 'conf') and len(results[0].boxes.conf) > idx:
+                        conf = float(results[0].boxes.conf[idx])
+                    
                     orig_x1, orig_y1, orig_x2, orig_y2 = map(float, box.tolist())
                     xc = ((orig_x1 + orig_x2) / 2) / pil_img.width
                     yc = ((orig_y1 + orig_y2) / 2) / pil_img.height
@@ -535,7 +557,9 @@ elif mode == "📱 Swipe Mode":
                     
                     grains.append({
                         "id": idx,
-                        "image": cropped,
+                        "image_raw": cropped_raw,
+                        "image_overlay": cropped_overlay,
+                        "conf": conf,
                         "yolo_coords": (xc, yc, w, h)
                     })
                 st.session_state.swipe_grains = grains
@@ -563,7 +587,6 @@ elif mode == "📱 Swipe Mode":
                     if lines:
                         txt_content = "\n".join(lines)
                         base_name = os.path.basename(current_key)
-                        # Replace .jpg or .czi with .txt
                         txt_key = current_key.rsplit('.', 1)[0] + '.txt'
                         s3.put_object(Bucket=bucket, Key=txt_key, Body=txt_content.encode('utf-8'))
                         st.toast(f"Saved {len(lines)} labels to S3!")
@@ -574,14 +597,22 @@ elif mode == "📱 Swipe Mode":
                 current_grain = grains[st.session_state.swipe_grain_idx]
                 st.progress((st.session_state.swipe_grain_idx) / len(grains), text=f"Grain {st.session_state.swipe_grain_idx + 1} of {len(grains)}")
                 
-                # Apply brightness & contrast enhancements
-                img_to_show = current_grain["image"]
+                conf_pct = current_grain.get('conf', 1.0) * 100
+                st.markdown(f"**🎯 SAM / YOLO Confidence:** `{conf_pct:.1f}%`")
+                
+                raw_img = current_grain.get("image_raw", current_grain.get("image"))
+                overlay_img = current_grain.get("image_overlay", raw_img)
+                
+                if mask_opacity > 0.0 and overlay_img is not None:
+                    img_to_show = Image.blend(raw_img, overlay_img, mask_opacity)
+                else:
+                    img_to_show = raw_img
+                    
                 if brightness != 1.0:
                     img_to_show = ImageEnhance.Brightness(img_to_show).enhance(brightness)
                 if contrast != 1.0:
                     img_to_show = ImageEnhance.Contrast(img_to_show).enhance(contrast)
                 
-                # Big centered image
                 st.image(img_to_show, use_container_width=True)
                 
                 st.markdown("<br>", unsafe_allow_html=True)
