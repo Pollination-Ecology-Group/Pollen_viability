@@ -14,18 +14,30 @@ st.set_page_config(page_title="Pollen Curator", layout="wide")
 
 BATCH_SIZE = 12
 
+def get_secret(key, default=None):
+    if hasattr(st, "secrets") and key in st.secrets:
+        return st.secrets[key]
+    return os.environ.get(key, default)
+
 # S3 Configuration
 @st.cache_resource
 def get_s3_client():
-    endpoint = os.environ.get("S3_ENDPOINT", "https://s3.cl4.du.cesnet.cz")
-    return boto3.client('s3',
-                        endpoint_url=endpoint,
-                        aws_access_key_id=os.environ.get("AWS_ACCESS_KEY_ID"),
-                        aws_secret_access_key=os.environ.get("AWS_SECRET_ACCESS_KEY"),
-                        config=Config(signature_version='s3v4'))
+    endpoint = get_secret("S3_ENDPOINT", "https://s3.cl4.du.cesnet.cz")
+    access_key = get_secret("AWS_ACCESS_KEY_ID")
+    secret_key = get_secret("AWS_SECRET_ACCESS_KEY")
+    if not access_key or not secret_key:
+        return None
+    try:
+        return boto3.client('s3',
+                            endpoint_url=endpoint,
+                            aws_access_key_id=access_key,
+                            aws_secret_access_key=secret_key,
+                            config=Config(signature_version='s3v4'))
+    except Exception:
+        return None
 
 def get_bucket_name():
-    return os.environ.get("S3_BUCKET", "bucket")
+    return get_secret("S3_BUCKET", "bucket")
 
 @st.cache_resource
 def load_model():
@@ -74,31 +86,40 @@ def filter_sam_results(results, orig_img):
     return [res[keep_indices]]
 
 def fetch_keys_from_s3():
-    st.info("Fetching tiles from S3...")
     s3 = get_s3_client()
-    bucket = get_bucket_name()
-    prefix = "Ostatni/Pollen_viability/tiles_640/"
-    response = s3.list_objects_v2(Bucket=bucket, Prefix=prefix, MaxKeys=200)
-    new_keys = []
-    if 'Contents' in response:
-        for obj in response['Contents']:
-            if not obj['Key'].endswith('/'):
-                new_keys.append(obj['Key'])
-    st.session_state.s3_keys = new_keys
+    if not s3:
+        st.error("⚠️ S3 client is not configured. Please add AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY in Streamlit Secrets.")
+        return
+    st.info("Fetching tiles from S3...")
+    try:
+        bucket = get_bucket_name()
+        prefix = "Ostatni/Pollen_viability/tiles_640/"
+        response = s3.list_objects_v2(Bucket=bucket, Prefix=prefix, MaxKeys=200)
+        new_keys = []
+        if 'Contents' in response:
+            for obj in response['Contents']:
+                if not obj['Key'].endswith('/'):
+                    new_keys.append(obj['Key'])
+        st.session_state.s3_keys = new_keys
+    except Exception as e:
+        st.error(f"Error fetching from S3: {e}")
 
 def get_dashboard_counts():
-    s3 = get_s3_client()
-    bucket = get_bucket_name()
-    base_prefix = "Ostatni/Pollen_viability/active_learning/"
     categories = ["hard_positives", "needs_labeling", "hard_negatives", "discarded"]
-    counts = {}
-    for cat in categories:
-        response = s3.list_objects_v2(Bucket=bucket, Prefix=f"{base_prefix}{cat}/")
-        if 'Contents' in response:
-            imgs = [obj for obj in response['Contents'] if not obj['Key'].endswith('/') and not obj['Key'].endswith('.txt')]
-            counts[cat] = len(imgs)
-        else:
-            counts[cat] = 0
+    counts = {cat: 0 for cat in categories}
+    try:
+        s3 = get_s3_client()
+        if not s3:
+            return counts
+        bucket = get_bucket_name()
+        base_prefix = "Ostatni/Pollen_viability/active_learning/"
+        for cat in categories:
+            response = s3.list_objects_v2(Bucket=bucket, Prefix=f"{base_prefix}{cat}/")
+            if 'Contents' in response:
+                imgs = [obj for obj in response['Contents'] if not obj['Key'].endswith('/') and not obj['Key'].endswith('.txt')]
+                counts[cat] = len(imgs)
+    except Exception:
+        pass
     return counts
 
 # State Initialization
@@ -123,6 +144,10 @@ ACTIONS = list(ACTION_MAP.keys())
 
 # Sidebar: Dashboard & Mode Selection
 st.sidebar.title("🌸 Curator Dashboard")
+
+if get_s3_client() is None:
+    st.sidebar.error("⚠️ **S3 Credentials Required**\n\nPlease configure `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` in **App settings -> Secrets**.")
+
 counts = get_dashboard_counts()
 st.sidebar.metric("🌟 Hard Positives", counts["hard_positives"])
 st.sidebar.metric("⚠️ Needs Labeling", counts["needs_labeling"])
