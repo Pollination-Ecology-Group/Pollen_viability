@@ -213,29 +213,32 @@ model = load_model()
 
 # Pre-load batch images and predict
 for key in current_batch_keys:
-    if key not in st.session_state.batch_images:
-        response = s3.get_object(Bucket=bucket, Key=key)
-        st.session_state.batch_images[key] = response['Body'].read()
-    
-    if key not in st.session_state.assignments:
-        st.session_state.assignments[key] = "🌑 Hard Negatives"
+    try:
+        if key not in st.session_state.batch_images:
+            response = s3.get_object(Bucket=bucket, Key=key)
+            st.session_state.batch_images[key] = response['Body'].read()
         
-    if model and key not in st.session_state.batch_results:
-        img_bytes = st.session_state.batch_images[key]
-        pil_img = Image.open(BytesIO(img_bytes)).convert("RGB")
-        cv_img = cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2BGR)
-        
-        # Predict using YOLO or FastSAM
-        # iou=0.3 enforces strict Non-Maximum Suppression (removes overlapping duplicates)
-        results = model(cv_img, conf=0.25, iou=0.3, agnostic_nms=True, verbose=False)
-        
-        # Apply filtering if we are using FastSAM (which generates masks natively)
-        if hasattr(model, 'task') and getattr(model, 'task', '') == 'segment' or type(model).__name__ == "FastSAM":
-             results = filter_sam_results(results, cv_img)
-             
-        st.session_state.batch_results[key] = results
-        if results and len(results[0].boxes) > 0:
-            st.session_state.assignments[key] = "🌟 Hard Positives"
+        if key not in st.session_state.assignments:
+            st.session_state.assignments[key] = "🌑 Hard Negatives"
+            
+        if model and key not in st.session_state.batch_results:
+            img_bytes = st.session_state.batch_images[key]
+            pil_img = Image.open(BytesIO(img_bytes)).convert("RGB")
+            cv_img = cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2BGR)
+            
+            # Predict using YOLO or FastSAM
+            # iou=0.3 enforces strict Non-Maximum Suppression (removes overlapping duplicates)
+            results = model(cv_img, conf=0.25, iou=0.3, agnostic_nms=True, verbose=False)
+            
+            # Apply filtering if we are using FastSAM (which generates masks natively)
+            if hasattr(model, 'task') and getattr(model, 'task', '') == 'segment' or type(model).__name__ == "FastSAM":
+                 results = filter_sam_results(results, cv_img)
+                 
+            st.session_state.batch_results[key] = results
+            if results and len(results[0].boxes) > 0:
+                st.session_state.assignments[key] = "🌟 Hard Positives"
+    except Exception as e:
+        st.error(f"Error processing tile '{key}': {e}")
 
 if mode == "⌨️ Keyboard Mode":
     st.markdown("### ⌨️ Keyboard Mode")

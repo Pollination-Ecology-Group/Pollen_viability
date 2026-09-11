@@ -2,5 +2,6 @@ streamlit
 ultralytics
 boto3
 Pillow
+pillow-heif
 streamlit-drawable-canvas
 opencv-python-headless
