@@ -230,6 +230,57 @@ def get_sample_rank(sample_id, strategy):
             return (-info.get("total_grains", 0), -info.get("viable", 0))
     return (0, 0.0) if "High" in strategy or "Viable" in strategy else (99999, 99999)
 
+@st.cache_data(ttl=120, show_spinner=False)
+def get_all_s3_tile_keys():
+    s3 = get_s3_client()
+    if not s3:
+        return {}
+    bucket = get_bucket_name()
+    prefix = "Ostatni/Pollen_viability/tiles_640/"
+    valid_extensions = ('.jpg', '.jpeg', '.png', '.tif', '.tiff', '.bmp', '.webp')
+    
+    try:
+        response = s3.list_objects_v2(Bucket=bucket, Prefix=prefix, Delimiter="/")
+        subfolders = []
+        if 'CommonPrefixes' in response:
+            subfolders = [p['Prefix'] for p in response['CommonPrefixes']]
+            
+        if subfolders:
+            def fetch_folder_keys(folder_prefix):
+                try:
+                    s3_c = get_s3_client()
+                    b_name = get_bucket_name()
+                    f_resp = s3_c.list_objects_v2(Bucket=b_name, Prefix=folder_prefix, MaxKeys=100)
+                    keys = []
+                    if 'Contents' in f_resp:
+                        for obj in f_resp['Contents']:
+                            k = obj['Key']
+                            if k.lower().endswith(valid_extensions):
+                                keys.append(k)
+                    return folder_prefix, keys
+                except Exception:
+                    return folder_prefix, []
+
+            folder_keys_map = {}
+            with concurrent.futures.ThreadPoolExecutor(max_workers=16) as executor:
+                results = executor.map(fetch_folder_keys, subfolders)
+                for f_prefix, keys in results:
+                    if keys:
+                        folder_keys_map[f_prefix] = keys
+            return folder_keys_map
+        else:
+            all_keys = []
+            paginator = s3.get_paginator('list_objects_v2')
+            for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
+                if 'Contents' in page:
+                    for obj in page['Contents']:
+                        k = obj['Key']
+                        if k.lower().endswith(valid_extensions):
+                            all_keys.append(k)
+            return all_keys
+    except Exception:
+        return {}
+
 def fetch_keys_from_s3():
     s3 = get_s3_client()
     if not s3:
@@ -237,44 +288,26 @@ def fetch_keys_from_s3():
         return
     st.info("Fetching tiles from S3...")
     try:
-        bucket = get_bucket_name()
-        prefix = "Ostatni/Pollen_viability/tiles_640/"
         strategy = getattr(st.session_state, "queue_strategy_select", "🎯 High Non-Viable Dense")
+        folder_data = get_all_s3_tile_keys()
         
-        # List sample subdirectories under tiles_640/ using Delimiter='/'
-        response = s3.list_objects_v2(Bucket=bucket, Prefix=prefix, Delimiter="/")
-        subfolders = []
-        if 'CommonPrefixes' in response:
-            subfolders = [p['Prefix'] for p in response['CommonPrefixes']]
-            
         valid_extensions = ('.jpg', '.jpeg', '.png', '.tif', '.tiff', '.bmp', '.webp')
         new_keys = []
         
-        if subfolders:
+        if isinstance(folder_data, dict):
             reverse_sort = "High" in strategy or "Viable" in strategy
             sorted_folders = sorted(
-                subfolders,
+                folder_data.keys(),
                 key=lambda folder: get_sample_rank(extract_sample_id(folder), strategy),
                 reverse=reverse_sort
             )
             for folder in sorted_folders:
                 if len(new_keys) >= 500:
                     break
-                f_resp = s3.list_objects_v2(Bucket=bucket, Prefix=folder, MaxKeys=100)
-                if 'Contents' in f_resp:
-                    for obj in f_resp['Contents']:
-                        k = obj['Key']
-                        if k.lower().endswith(valid_extensions):
-                            new_keys.append(k)
-        else:
-            response = s3.list_objects_v2(Bucket=bucket, Prefix=prefix, MaxKeys=500)
-            if 'Contents' in response:
-                for obj in response['Contents']:
-                    k = obj['Key']
-                    if k.lower().endswith(valid_extensions):
-                        new_keys.append(k)
+                new_keys.extend(folder_data[folder])
+        elif isinstance(folder_data, list):
             reverse_sort = "High" in strategy or "Viable" in strategy
-            new_keys = sorted(new_keys, key=lambda k: get_sample_rank(extract_sample_id(k), strategy), reverse=reverse_sort)
+            new_keys = sorted(folder_data, key=lambda k: get_sample_rank(extract_sample_id(k), strategy), reverse=reverse_sort)
 
         st.session_state.s3_keys = new_keys[:500]
         st.session_state.batch_images = {}
@@ -649,15 +682,19 @@ model = load_model()
 if not model:
     st.info("ℹ️ **No detection model available** — all tiles shown without auto-classification. You can still manually label them!")
 
-# Multi-threaded Parallel Fetching of Images
-def fetch_single_image(key):
+@st.cache_data(ttl=600, max_entries=1000, show_spinner=False)
+def load_s3_image_bytes(key):
     try:
         s3_c = get_s3_client()
         b_name = get_bucket_name()
         resp = s3_c.get_object(Bucket=b_name, Key=key)
-        return key, resp['Body'].read()
+        return resp['Body'].read()
     except Exception:
-        return key, None
+        return None
+
+# Multi-threaded Parallel Fetching of Images
+def fetch_single_image(key):
+    return key, load_s3_image_bytes(key)
 
 # Iteratively scan s3_keys up to MAX_SCAN_TILES (24) to prevent Streamlit Cloud OOM
 matching_keys = []
@@ -673,46 +710,61 @@ while len(matching_keys) < BATCH_SIZE and scanned_count < min(MAX_SCAN_TILES, le
         
     keys_to_fetch = [k for k in chunk_keys if k not in st.session_state.batch_images]
     if keys_to_fetch:
-        with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=16) as executor:
             fetched_results = executor.map(fetch_single_image, keys_to_fetch)
             for k, img_bytes in fetched_results:
                 if img_bytes:
                     st.session_state.batch_images[k] = img_bytes
 
+    # Batched model inference for maximum performance
+    keys_needing_inf = [
+        k for k in chunk_keys 
+        if model and k not in st.session_state.batch_results and k in st.session_state.batch_images
+    ]
+    if keys_needing_inf:
+        try:
+            import torch
+            cv_imgs = []
+            valid_keys_inf = []
+            for k in keys_needing_inf:
+                img_bytes = st.session_state.batch_images.get(k)
+                if img_bytes:
+                    pil_img = Image.open(BytesIO(img_bytes)).convert("RGB")
+                    cv_img = cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2BGR)
+                    cv_imgs.append(cv_img)
+                    valid_keys_inf.append(k)
+
+            if cv_imgs:
+                with torch.no_grad():
+                    batch_results_raw = model(cv_imgs, conf=0.25, iou=0.7, agnostic_nms=False, verbose=False)
+
+                for idx, k in enumerate(valid_keys_inf):
+                    raw_res = [batch_results_raw[idx]]
+                    cv_img = cv_imgs[idx]
+
+                    if hasattr(model, 'task') and getattr(model, 'task', '') == 'segment' or type(model).__name__ == "FastSAM":
+                        raw_res = filter_sam_results(raw_res, cv_img)
+
+                    # Filter out oversized boxes (multi-grain false detections)
+                    if raw_res and len(raw_res[0].boxes) > 0:
+                        boxes = raw_res[0].boxes
+                        widths = boxes.xyxy[:, 2] - boxes.xyxy[:, 0]
+                        heights = boxes.xyxy[:, 3] - boxes.xyxy[:, 1]
+                        max_dim = 130  # pixels — anything wider/taller is likely multi-grain
+                        keep_mask = (widths <= max_dim) & (heights <= max_dim)
+                        if keep_mask.sum() < len(boxes):
+                            keep_idx = keep_mask.nonzero(as_tuple=True)[0]
+                            raw_res[0] = raw_res[0][keep_idx]
+
+                    st.session_state.batch_results[k] = raw_res
+                    if raw_res and len(raw_res[0].boxes) > 0:
+                        st.session_state.assignments[k] = "🌟 Hard Positives"
+        except Exception:
+            pass
+
     for key in chunk_keys:
         if key not in st.session_state.assignments:
             st.session_state.assignments[key] = "🌑 Hard Negatives"
-            
-        if model and key not in st.session_state.batch_results and key in st.session_state.batch_images:
-            try:
-                import torch
-                img_bytes = st.session_state.batch_images[key]
-                pil_img = Image.open(BytesIO(img_bytes)).convert("RGB")
-                cv_img = cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2BGR)
-                
-                with torch.no_grad():
-                    results = model(cv_img, conf=0.25, iou=0.7, agnostic_nms=False, verbose=False)
-                    if hasattr(model, 'task') and getattr(model, 'task', '') == 'segment' or type(model).__name__ == "FastSAM":
-                         results = filter_sam_results(results, cv_img)
-                
-                # Filter out oversized boxes (multi-grain false detections)
-                # Single pollen grain ≈ 40-80px in a 640px tile; max 130px per side
-                if results and len(results[0].boxes) > 0:
-                    boxes = results[0].boxes
-                    widths = boxes.xyxy[:, 2] - boxes.xyxy[:, 0]
-                    heights = boxes.xyxy[:, 3] - boxes.xyxy[:, 1]
-                    max_dim = 130  # pixels — anything wider/taller is likely multi-grain
-                    keep_mask = (widths <= max_dim) & (heights <= max_dim)
-                    if keep_mask.sum() < len(boxes):
-                        keep_idx = keep_mask.nonzero(as_tuple=True)[0]
-                        results[0] = results[0][keep_idx]
-
-                st.session_state.batch_results[key] = results
-                if results and len(results[0].boxes) > 0:
-
-                    st.session_state.assignments[key] = "🌟 Hard Positives"
-            except Exception:
-                pass
                 
         if is_tile_matching_strategy(key, strategy):
             if key not in matching_keys:
