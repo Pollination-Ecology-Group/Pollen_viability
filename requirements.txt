@@ -1,5 +1,4 @@
 streamlit
-ultralytics
 boto3
 Pillow
 opencv-python-headless

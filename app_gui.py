@@ -95,7 +95,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-BATCH_SIZE = 12
+BATCH_SIZE = 6  # Keep low to stay within Streamlit Cloud 1GB RAM limit
 
 def get_secret(key, default=None):
     try:
@@ -128,24 +128,19 @@ def get_bucket_name():
 
 @st.cache_resource
 def load_model():
+    """Only load the model if it already exists locally.
+    Never download from S3 at runtime — downloading a ~100MB+ model
+    on Streamlit Cloud's 1GB RAM tier causes an OOM crash.
+    Pre-bake best.pt into your deployment image, or leave it absent
+    to run the app in manual-labeling-only mode.
+    """
     try:
-        from ultralytics import YOLO
         model_path = "best.pt"
-        # If model not available locally, try downloading from S3
-        if not os.path.exists(model_path):
-            try:
-                s3 = get_s3_client()
-                if s3:
-                    s3_model_key = "Ostatni/Pollen_viability/trained_models/pollen_train_20260313_2153/weights/best.pt"
-                    s3.download_file(get_bucket_name(), s3_model_key, model_path)
-                    print(f"Downloaded model from S3: {s3_model_key}")
-            except Exception as dl_err:
-                print(f"Could not download model from S3: {dl_err}")
         if os.path.exists(model_path):
+            from ultralytics import YOLO
             return YOLO(model_path)
-        # Fallback: FastSAM-s (auto-downloads ~24MB from ultralytics hub)
-        from ultralytics import FastSAM
-        return FastSAM("FastSAM-s.pt")
+        # Model not present — run without auto-detection
+        return None
     except Exception as e:
         print(f"Warning: load_model failed with {e}")
         return None
@@ -696,11 +691,11 @@ def load_s3_image_bytes(key):
 def fetch_single_image(key):
     return key, load_s3_image_bytes(key)
 
-# Iteratively scan s3_keys up to MAX_SCAN_TILES (24) to prevent Streamlit Cloud OOM
+# Iteratively scan s3_keys up to MAX_SCAN_TILES to prevent Streamlit Cloud OOM
 matching_keys = []
-candidate_chunk_size = 12
+candidate_chunk_size = 6  # Fetch 6 at a time to cap concurrent HTTP memory
 scanned_count = 0
-MAX_SCAN_TILES = 24
+MAX_SCAN_TILES = 12  # Limit total tiles scanned per page load
 
 while len(matching_keys) < BATCH_SIZE and scanned_count < min(MAX_SCAN_TILES, len(st.session_state.s3_keys)):
     chunk_keys = st.session_state.s3_keys[scanned_count : scanned_count + candidate_chunk_size]
@@ -735,7 +730,7 @@ while len(matching_keys) < BATCH_SIZE and scanned_count < min(MAX_SCAN_TILES, le
                     valid_keys_inf.append(k)
 
             if cv_imgs:
-                sub_batch_sz = 4
+                sub_batch_sz = 1  # One image at a time — minimizes peak PyTorch RAM
                 for sb in range(0, len(cv_imgs), sub_batch_sz):
                     sub_imgs = cv_imgs[sb : sb + sub_batch_sz]
                     sub_keys = valid_keys_inf[sb : sb + sub_batch_sz]
