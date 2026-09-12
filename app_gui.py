@@ -262,7 +262,7 @@ def get_all_s3_tile_keys():
                     return folder_prefix, []
 
             folder_keys_map = {}
-            with concurrent.futures.ThreadPoolExecutor(max_workers=16) as executor:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
                 results = executor.map(fetch_folder_keys, subfolders)
                 for f_prefix, keys in results:
                     if keys:
@@ -356,7 +356,7 @@ def get_grain_and_tile_counts():
             return counts
 
         if txt_keys:
-            with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=6) as executor:
                 results = executor.map(process_txt, txt_keys)
                 for r in results:
                     grain_counts["viable"] += r[0]
@@ -682,7 +682,7 @@ model = load_model()
 if not model:
     st.info("ℹ️ **No detection model available** — all tiles shown without auto-classification. You can still manually label them!")
 
-@st.cache_data(ttl=600, max_entries=1000, show_spinner=False)
+@st.cache_data(ttl=180, max_entries=50, show_spinner=False)
 def load_s3_image_bytes(key):
     try:
         s3_c = get_s3_client()
@@ -710,13 +710,13 @@ while len(matching_keys) < BATCH_SIZE and scanned_count < min(MAX_SCAN_TILES, le
         
     keys_to_fetch = [k for k in chunk_keys if k not in st.session_state.batch_images]
     if keys_to_fetch:
-        with concurrent.futures.ThreadPoolExecutor(max_workers=16) as executor:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=6) as executor:
             fetched_results = executor.map(fetch_single_image, keys_to_fetch)
             for k, img_bytes in fetched_results:
                 if img_bytes:
                     st.session_state.batch_images[k] = img_bytes
 
-    # Batched model inference for maximum performance
+    # Batched model inference in mini-batches (size 4) to stay under 1GB RAM
     keys_needing_inf = [
         k for k in chunk_keys 
         if model and k not in st.session_state.batch_results and k in st.session_state.batch_images
@@ -735,30 +735,36 @@ while len(matching_keys) < BATCH_SIZE and scanned_count < min(MAX_SCAN_TILES, le
                     valid_keys_inf.append(k)
 
             if cv_imgs:
-                with torch.no_grad():
-                    batch_results_raw = model(cv_imgs, conf=0.25, iou=0.7, agnostic_nms=False, verbose=False)
+                sub_batch_sz = 4
+                for sb in range(0, len(cv_imgs), sub_batch_sz):
+                    sub_imgs = cv_imgs[sb : sb + sub_batch_sz]
+                    sub_keys = valid_keys_inf[sb : sb + sub_batch_sz]
+                    with torch.no_grad():
+                        batch_results_raw = model(sub_imgs, conf=0.25, iou=0.7, agnostic_nms=False, verbose=False)
 
-                for idx, k in enumerate(valid_keys_inf):
-                    raw_res = [batch_results_raw[idx]]
-                    cv_img = cv_imgs[idx]
+                    for idx, k in enumerate(sub_keys):
+                        raw_res = [batch_results_raw[idx]]
+                        cv_img = sub_imgs[idx]
 
-                    if hasattr(model, 'task') and getattr(model, 'task', '') == 'segment' or type(model).__name__ == "FastSAM":
-                        raw_res = filter_sam_results(raw_res, cv_img)
+                        if hasattr(model, 'task') and getattr(model, 'task', '') == 'segment' or type(model).__name__ == "FastSAM":
+                            raw_res = filter_sam_results(raw_res, cv_img)
 
-                    # Filter out oversized boxes (multi-grain false detections)
-                    if raw_res and len(raw_res[0].boxes) > 0:
-                        boxes = raw_res[0].boxes
-                        widths = boxes.xyxy[:, 2] - boxes.xyxy[:, 0]
-                        heights = boxes.xyxy[:, 3] - boxes.xyxy[:, 1]
-                        max_dim = 130  # pixels — anything wider/taller is likely multi-grain
-                        keep_mask = (widths <= max_dim) & (heights <= max_dim)
-                        if keep_mask.sum() < len(boxes):
-                            keep_idx = keep_mask.nonzero(as_tuple=True)[0]
-                            raw_res[0] = raw_res[0][keep_idx]
+                        # Filter out oversized boxes (multi-grain false detections)
+                        if raw_res and len(raw_res[0].boxes) > 0:
+                            boxes = raw_res[0].boxes
+                            widths = boxes.xyxy[:, 2] - boxes.xyxy[:, 0]
+                            heights = boxes.xyxy[:, 3] - boxes.xyxy[:, 1]
+                            max_dim = 130  # pixels — anything wider/taller is likely multi-grain
+                            keep_mask = (widths <= max_dim) & (heights <= max_dim)
+                            if keep_mask.sum() < len(boxes):
+                                keep_idx = keep_mask.nonzero(as_tuple=True)[0]
+                                raw_res[0] = raw_res[0][keep_idx]
 
-                    st.session_state.batch_results[k] = raw_res
-                    if raw_res and len(raw_res[0].boxes) > 0:
-                        st.session_state.assignments[k] = "🌟 Hard Positives"
+                        st.session_state.batch_results[k] = raw_res
+                        if raw_res and len(raw_res[0].boxes) > 0:
+                            st.session_state.assignments[k] = "🌟 Hard Positives"
+            del cv_imgs
+            gc.collect()
         except Exception:
             pass
 
@@ -778,9 +784,11 @@ if not matching_keys and candidate_chunk_size <= len(st.session_state.s3_keys):
 
 current_batch_keys = matching_keys[:BATCH_SIZE]
 
-# Prune unused image memory to prevent Streamlit Cloud OOM
+# Prune unused image memory and model results to prevent Streamlit Cloud OOM
 active_set = set(current_batch_keys)
 st.session_state.batch_images = {k: v for k, v in st.session_state.batch_images.items() if k in active_set}
+st.session_state.batch_results = {k: v for k, v in st.session_state.batch_results.items() if k in active_set}
+gc.collect()
 
 # MODE IMPLEMENTATIONS
 
