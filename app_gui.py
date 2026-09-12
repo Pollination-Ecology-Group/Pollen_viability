@@ -3,6 +3,7 @@ st.set_page_config(page_title="Pollen Curator", layout="wide", initial_sidebar_s
 
 try:
     import os
+    import json
     import cv2
     import numpy as np
     from PIL import Image, ImageEnhance
@@ -126,62 +127,157 @@ def get_s3_client():
 def get_bucket_name():
     return get_secret("S3_BUCKET", "bucket")
 
-@st.cache_resource
-def load_model():
-    """Only load the model if it already exists locally.
-    Never download from S3 at runtime — downloading a ~100MB+ model
-    on Streamlit Cloud's 1GB RAM tier causes an OOM crash.
-    Pre-bake best.pt into your deployment image, or leave it absent
-    to run the app in manual-labeling-only mode.
-    """
-    try:
-        model_path = "best.pt"
-        if os.path.exists(model_path):
-            from ultralytics import YOLO
-            return YOLO(model_path)
-        # Model not present — run without auto-detection
-        return None
-    except Exception as e:
-        print(f"Warning: load_model failed with {e}")
-        return None
 
 
-def filter_sam_results(results, orig_img):
-    """Filter SAM masks based on area and color (purple hue)."""
-    if not results or not results[0].masks:
-        return results
-        
-    res = results[0]
-    masks = res.masks.data.cpu().numpy()
-    hsv_img = cv2.cvtColor(orig_img, cv2.COLOR_BGR2HSV)
-    img_h, img_w = orig_img.shape[:2]
-    img_area = img_h * img_w
-    
-    keep_indices = []
-    for i, mask in enumerate(masks):
-        mask_resized = cv2.resize(mask, (img_w, img_h), interpolation=cv2.INTER_NEAREST)
-        area = np.sum(mask_resized)
-        
-        # Area filter to remove tiny specks
-        if area < (img_area * 0.0005): 
-            continue
-            
-        masked_hsv = hsv_img[mask_resized.astype(bool)]
-        if len(masked_hsv) == 0:
-            continue
-            
-        avg_h = np.mean(masked_hsv[:, 0])
-        avg_s = np.mean(masked_hsv[:, 1])
-        
-        # Purple in OpenCV HSV is generally Hue between 110 and 170
-        # Pollen is very saturated, dust is not. Increase S threshold to 80.
-        if 110 <= avg_h <= 170 and avg_s > 80:
-            keep_indices.append(i)
-            
-    if len(keep_indices) == 0:
-        return [res[[]]] # Return empty results object
-        
-    return [res[keep_indices]]
+# ─── Lightweight detection result types ────────────────────────────────────────
+# These mimic the YOLO result interface so all rendering code works unchanged,
+# but they hold plain numpy arrays — no PyTorch, no ultralytics required.
+
+class _Tensor:
+    """Minimal tensor-like wrapper around a numpy array."""
+    def __init__(self, arr):
+        self._arr = np.array(arr, dtype=np.float32) if len(arr) else np.zeros((0, 4), dtype=np.float32)
+    def __len__(self):
+        return len(self._arr)
+    def tolist(self):
+        return self._arr.tolist()
+    def __getitem__(self, idx):
+        return self._arr[idx]
+    # tensor-style column slices used for box coordinates
+    @property
+    def T(self):
+        return self._arr.T
+    def __repr__(self):
+        return f"_Tensor({self._arr})"
+
+
+class DetBoxes:
+    """Mimics ultralytics.engine.results.Boxes."""
+    def __init__(self, boxes_list):
+        # boxes_list: [[x1,y1,x2,y2,conf,cls], ...]
+        if boxes_list:
+            arr = np.array(boxes_list, dtype=np.float32)
+            self.xyxy = arr[:, :4]
+            self.conf = arr[:, 4]
+            self.cls  = arr[:, 5].astype(int)
+        else:
+            self.xyxy = np.zeros((0, 4), dtype=np.float32)
+            self.conf = np.zeros(0, dtype=np.float32)
+            self.cls  = np.zeros(0, dtype=int)
+
+    def __len__(self):
+        return len(self.xyxy)
+
+
+class DetMasks:
+    """Mimics ultralytics.engine.results.Masks."""
+    def __init__(self, masks_xyn, img_w, img_h):
+        # masks_xyn: list of [[xn, yn], ...] normalised polygons
+        self.xyn = [np.array(m, dtype=np.float32) for m in masks_xyn]
+        # pixel-space polygons (.xy)
+        self.xy  = [np.array([[pt[0] * img_w, pt[1] * img_h] for pt in m], dtype=np.float32)
+                    for m in masks_xyn]
+        # .data as boolean masks for overlay code (lazy, uses polygons)
+        self._w = img_w
+        self._h = img_h
+
+    @property
+    def data(self):
+        """Return boolean mask tensors (H×W) for each detection."""
+        import numpy as np
+        masks = []
+        for poly in self.xy:
+            mask = np.zeros((self._h, self._w), dtype=np.float32)
+            if len(poly) >= 3:
+                pts = np.array(poly, dtype=np.int32).reshape(-1, 1, 2)
+                cv2.fillPoly(mask, [pts], 1.0)
+            masks.append(mask)
+        # Return as a simple list wrapped in a cpu()-able object
+        return _MaskArray(masks)
+
+
+class _MaskArray:
+    """Minimal wrapper so .data.cpu().numpy() works."""
+    def __init__(self, masks):
+        self._masks = masks
+    def cpu(self):
+        return self
+    def numpy(self):
+        return np.array(self._masks, dtype=np.float32)
+    def __len__(self):
+        return len(self._masks)
+
+
+class DetectionResult:
+    """Mimics a single YOLO result object.  Holds pre-computed detections."""
+    def __init__(self, det_json: dict, img_w: int, img_h: int):
+        boxes_list   = det_json.get("boxes", [])
+        masks_xyn    = det_json.get("masks_xyn", [])
+        self.boxes   = DetBoxes(boxes_list)
+        self.masks   = DetMasks(masks_xyn, img_w, img_h) if masks_xyn else None
+        self._img_w  = img_w
+        self._img_h  = img_h
+
+    def __len__(self):
+        return len(self.boxes)
+
+    def __getitem__(self, idx):
+        """Allow result[keep_idx] slicing used in box filtering."""
+        import numpy as np
+        subset = DetectionResult.__new__(DetectionResult)
+        subset._img_w = self._img_w
+        subset._img_h = self._img_h
+
+        if hasattr(idx, '__len__') or isinstance(idx, (list, np.ndarray)):
+            idx_list = list(idx)
+        else:
+            idx_list = [idx]
+
+        boxes_arr = np.zeros((0, 6), dtype=np.float32)
+        if len(self.boxes) > 0:
+            full = np.column_stack([
+                self.boxes.xyxy,
+                self.boxes.conf[:, None],
+                self.boxes.cls[:, None]
+            ])
+            boxes_arr = full[idx_list]
+        subset.boxes = DetBoxes(boxes_arr.tolist())
+
+        if self.masks is not None:
+            subset_xyn = [self.masks.xyn[i].tolist() for i in idx_list if i < len(self.masks.xyn)]
+            subset.masks = DetMasks(subset_xyn, self._img_w, self._img_h)
+        else:
+            subset.masks = None
+        return subset
+
+    def plot(self, boxes=True, labels=True, conf=True):
+        """Minimal annotated-image renderer (replaces YOLO .plot())."""
+        img = np.zeros((self._img_h, self._img_w, 3), dtype=np.uint8)
+        cls_colors = {0: (0, 200, 0), 1: (0, 0, 220)}   # BGR: green, red
+        default_color = (0, 200, 200)
+        cls_names  = {0: "V", 1: "NV"}
+        if self.masks is not None:
+            overlay = img.copy()
+            for i, poly in enumerate(self.masks.xy):
+                cls_id = int(self.boxes.cls[i]) if i < len(self.boxes) else 0
+                color = cls_colors.get(cls_id, default_color)
+                pts = np.array(poly, dtype=np.int32).reshape(-1, 1, 2)
+                cv2.fillPoly(overlay, [pts], color)
+            cv2.addWeighted(overlay, 0.4, img, 0.6, 0, img)
+        if boxes:
+            for i in range(len(self.boxes)):
+                x1, y1, x2, y2 = [int(v) for v in self.boxes.xyxy[i]]
+                cls_id = int(self.boxes.cls[i])
+                cf = float(self.boxes.conf[i])
+                color = cls_colors.get(cls_id, default_color)
+                cv2.rectangle(img, (x1, y1), (x2, y2), color, 2)
+                if labels:
+                    lbl = f"{cls_names.get(cls_id, '?')} {cf:.0%}" if conf else cls_names.get(cls_id, '?')
+                    cv2.putText(img, lbl, (x1, max(y1 - 6, 12)),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.45, color, 1)
+        return img
+
+# ── end lightweight detection types ─────────────────────────────────────────
 
 @st.cache_data(ttl=3600)
 def load_sample_viability_index_gui():
@@ -672,10 +768,6 @@ strategy = getattr(st.session_state, "queue_strategy_select", "🎯 High Non-Via
 
 s3 = get_s3_client()
 bucket = get_bucket_name()
-model = load_model()
-
-if not model:
-    st.info("ℹ️ **No detection model available** — all tiles shown without auto-classification. You can still manually label them!")
 
 @st.cache_data(ttl=180, max_entries=50, show_spinner=False)
 def load_s3_image_bytes(key):
@@ -687,101 +779,77 @@ def load_s3_image_bytes(key):
     except Exception:
         return None
 
-# Multi-threaded Parallel Fetching of Images
-def fetch_single_image(key):
-    return key, load_s3_image_bytes(key)
 
-# Iteratively scan s3_keys up to MAX_SCAN_TILES to prevent Streamlit Cloud OOM
+@st.cache_data(ttl=300, max_entries=200, show_spinner=False)
+def load_s3_detection_json(tile_key):
+    """Load pre-computed detection JSON (_det.json) from S3.
+    Returns a dict {boxes, masks_xyn} or None if not found.
+    """
+    det_key = tile_key.rsplit('.', 1)[0] + '_det.json'
+    try:
+        s3_c = get_s3_client()
+        b_name = get_bucket_name()
+        resp = s3_c.get_object(Bucket=b_name, Key=det_key)
+        return json.loads(resp['Body'].read().decode('utf-8'))
+    except Exception:
+        return None  # JSON not yet generated — tile shows without annotations
+
+
+def fetch_tile_and_detections(key):
+    """Fetch image bytes and detection JSON for one tile in parallel."""
+    img_bytes = load_s3_image_bytes(key)
+    det_json  = load_s3_detection_json(key)
+    return key, img_bytes, det_json
+
+# Load images + pre-computed detections; scan up to MAX_SCAN_TILES tiles
 matching_keys = []
-candidate_chunk_size = 6  # Fetch 6 at a time to cap concurrent HTTP memory
+candidate_chunk_size = 6
 scanned_count = 0
-MAX_SCAN_TILES = 12  # Limit total tiles scanned per page load
+MAX_SCAN_TILES = 12
 
 while len(matching_keys) < BATCH_SIZE and scanned_count < min(MAX_SCAN_TILES, len(st.session_state.s3_keys)):
     chunk_keys = st.session_state.s3_keys[scanned_count : scanned_count + candidate_chunk_size]
     scanned_count += candidate_chunk_size
     if not chunk_keys:
         break
-        
+
+    # Fetch images + detection JSONs in parallel (both are tiny S3 GETs)
     keys_to_fetch = [k for k in chunk_keys if k not in st.session_state.batch_images]
     if keys_to_fetch:
         with concurrent.futures.ThreadPoolExecutor(max_workers=6) as executor:
-            fetched_results = executor.map(fetch_single_image, keys_to_fetch)
-            for k, img_bytes in fetched_results:
+            for k, img_bytes, det_json in executor.map(fetch_tile_and_detections, keys_to_fetch):
                 if img_bytes:
                     st.session_state.batch_images[k] = img_bytes
-
-    # Batched model inference in mini-batches (size 4) to stay under 1GB RAM
-    keys_needing_inf = [
-        k for k in chunk_keys 
-        if model and k not in st.session_state.batch_results and k in st.session_state.batch_images
-    ]
-    if keys_needing_inf:
-        try:
-            import torch
-            cv_imgs = []
-            valid_keys_inf = []
-            for k in keys_needing_inf:
-                img_bytes = st.session_state.batch_images.get(k)
-                if img_bytes:
-                    pil_img = Image.open(BytesIO(img_bytes)).convert("RGB")
-                    cv_img = cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2BGR)
-                    cv_imgs.append(cv_img)
-                    valid_keys_inf.append(k)
-
-            if cv_imgs:
-                sub_batch_sz = 1  # One image at a time — minimizes peak PyTorch RAM
-                for sb in range(0, len(cv_imgs), sub_batch_sz):
-                    sub_imgs = cv_imgs[sb : sb + sub_batch_sz]
-                    sub_keys = valid_keys_inf[sb : sb + sub_batch_sz]
-                    with torch.no_grad():
-                        batch_results_raw = model(sub_imgs, conf=0.25, iou=0.7, agnostic_nms=False, verbose=False)
-
-                    for idx, k in enumerate(sub_keys):
-                        raw_res = [batch_results_raw[idx]]
-                        cv_img = sub_imgs[idx]
-
-                        if hasattr(model, 'task') and getattr(model, 'task', '') == 'segment' or type(model).__name__ == "FastSAM":
-                            raw_res = filter_sam_results(raw_res, cv_img)
-
-                        # Filter out oversized boxes (multi-grain false detections)
-                        if raw_res and len(raw_res[0].boxes) > 0:
-                            boxes = raw_res[0].boxes
-                            widths = boxes.xyxy[:, 2] - boxes.xyxy[:, 0]
-                            heights = boxes.xyxy[:, 3] - boxes.xyxy[:, 1]
-                            max_dim = 130  # pixels — anything wider/taller is likely multi-grain
-                            keep_mask = (widths <= max_dim) & (heights <= max_dim)
-                            if keep_mask.sum() < len(boxes):
-                                keep_idx = keep_mask.nonzero(as_tuple=True)[0]
-                                raw_res[0] = raw_res[0][keep_idx]
-
-                        st.session_state.batch_results[k] = raw_res
-                        if raw_res and len(raw_res[0].boxes) > 0:
+                if det_json is not None and k not in st.session_state.batch_results:
+                    # Build a DetectionResult from the cached JSON
+                    try:
+                        pil_img = Image.open(BytesIO(img_bytes)).convert("RGB")
+                        det_result = DetectionResult(det_json, pil_img.width, pil_img.height)
+                        st.session_state.batch_results[k] = [det_result]
+                        if len(det_result.boxes) > 0:
                             st.session_state.assignments[k] = "🌟 Hard Positives"
-            del cv_imgs
-            gc.collect()
-        except Exception:
-            pass
+                    except Exception:
+                        pass
 
     for key in chunk_keys:
         if key not in st.session_state.assignments:
             st.session_state.assignments[key] = "🌑 Hard Negatives"
-                
+
         if is_tile_matching_strategy(key, strategy):
             if key not in matching_keys:
                 matching_keys.append(key)
             if len(matching_keys) >= BATCH_SIZE:
                 break
 
-# Fallback to remaining scanned keys if matching count is small
-if not matching_keys and candidate_chunk_size <= len(st.session_state.s3_keys):
+# Fallback: if no matching keys found, show whatever was scanned
+if not matching_keys:
     matching_keys = st.session_state.s3_keys[:BATCH_SIZE]
 
 current_batch_keys = matching_keys[:BATCH_SIZE]
 
-# Prune unused image memory and model results to prevent Streamlit Cloud OOM
+# Prune session state to only the active batch (keep RAM tight)
 active_set = set(current_batch_keys)
-st.session_state.batch_images = {k: v for k, v in st.session_state.batch_images.items() if k in active_set}
+st.session_state.batch_images  = {k: v for k, v in st.session_state.batch_images.items()  if k in active_set}
 st.session_state.batch_results = {k: v for k, v in st.session_state.batch_results.items() if k in active_set}
 gc.collect()
 
