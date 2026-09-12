@@ -459,6 +459,29 @@ def get_grain_and_tile_counts():
         pass
     return tile_counts, grain_counts
 
+@st.cache_data(ttl=30, show_spinner=False)
+def list_category_keys(category: str, page: int = 0, page_size: int = 24):
+    """Return (total_count, page_keys) for tiles in a given active_learning category."""
+    s3 = get_s3_client()
+    if not s3:
+        return 0, []
+    bucket = get_bucket_name()
+    prefix = f"Ostatni/Pollen_viability/active_learning/{category}/"
+    valid_ext = ('.jpg', '.jpeg', '.png', '.tif', '.tiff', '.bmp', '.webp')
+    try:
+        all_keys = []
+        paginator = s3.get_paginator('list_objects_v2')
+        for resp in paginator.paginate(Bucket=bucket, Prefix=prefix):
+            for obj in resp.get('Contents', []):
+                k = obj['Key']
+                if k.lower().endswith(valid_ext):
+                    all_keys.append(k)
+        all_keys.sort()
+        start = page * page_size
+        return len(all_keys), all_keys[start : start + page_size]
+    except Exception:
+        return 0, []
+
 def move_s3_file(key, target_category):
     try:
         s3 = get_s3_client()
@@ -518,7 +541,7 @@ ACTION_MAP = {
     "🗑️ Discard": "discarded"
 }
 ACTIONS = list(ACTION_MAP.keys())
-MODES = ["📱 Swipe Mode", "⌨️ Keyboard Mode", "🎨 Canvas Mode", "📋 Grid Mode", "👀 Review & Submit", "📖 Tutorial & Guide"]
+MODES = ["📱 Swipe Mode", "⌨️ Keyboard Mode", "🎨 Canvas Mode", "📋 Grid Mode", "👀 Review & Submit", "🗂️ Browse Categories", "📖 Tutorial & Guide"]
 
 # Sidebar Dashboard & Working Mode
 st.sidebar.title("🌸 Curator Dashboard")
@@ -1438,3 +1461,160 @@ elif mode == "📱 Swipe Mode":
                         st.toast("Tile moved to Discarded!")
                         st.rerun()
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# 🗂️ BROWSE CATEGORIES MODE
+# Shows tiles already sorted into active_learning/{category}/ with paging
+# and per-tile or bulk reassignment to any other category.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+elif mode == "🗂️ Browse Categories":
+    st.markdown("### 🗂️ Browse Accepted Tiles by Category")
+    st.caption("Review tiles already moved to an active-learning category and reassign them if needed.")
+
+    CAT_DISPLAY = {
+        "hard_positives": "🌟 Hard Positives",
+        "needs_labeling": "⚠️ Needs Labeling",
+        "hard_negatives": "🌑 Hard Negatives",
+        "discarded":      "🗑️ Discarded",
+    }
+    CAT_KEYS = list(CAT_DISPLAY.keys())
+    PAGE_SIZE = 24
+
+    # Per-category counts shown in tab labels
+    tc, _ = get_grain_and_tile_counts()
+    tab_labels = [f"{CAT_DISPLAY[c]} ({tc.get(c, '?')})" for c in CAT_KEYS]
+    tabs = st.tabs(tab_labels)
+
+    if "browse_page" not in st.session_state:
+        st.session_state.browse_page = {c: 0 for c in CAT_KEYS}
+
+    for tab, cat in zip(tabs, CAT_KEYS):
+        with tab:
+            page = st.session_state.browse_page.get(cat, 0)
+            total, page_keys = list_category_keys(cat, page, PAGE_SIZE)
+
+            if total == 0:
+                st.info(f"No tiles in **{CAT_DISPLAY[cat]}** yet.")
+                continue
+
+            n_pages = max(1, (total + PAGE_SIZE - 1) // PAGE_SIZE)
+
+            # ── Top bar: paging + bulk actions ────────────────────────────────
+            bar_l, bar_m, bar_r = st.columns([3, 2, 3])
+            with bar_l:
+                st.caption(
+                    f"Page **{page + 1}** / {n_pages} &nbsp;|&nbsp; "
+                    f"**{total:,}** tiles total"
+                )
+            with bar_m:
+                pcols = st.columns(2)
+                with pcols[0]:
+                    if st.button("◀ Prev", key=f"prev_{cat}", use_container_width=True,
+                                 disabled=(page == 0)):
+                        st.session_state.browse_page[cat] = page - 1
+                        list_category_keys.clear()
+                        st.rerun()
+                with pcols[1]:
+                    if st.button("Next ▶", key=f"next_{cat}", use_container_width=True,
+                                 disabled=(page >= n_pages - 1)):
+                        st.session_state.browse_page[cat] = page + 1
+                        list_category_keys.clear()
+                        st.rerun()
+            with bar_r:
+                other_cats = [c for c in CAT_KEYS if c != cat]
+                bulk_target = st.selectbox(
+                    "Bulk move page to",
+                    options=other_cats,
+                    format_func=lambda c: CAT_DISPLAY[c],
+                    key=f"bulk_target_{cat}",
+                    label_visibility="collapsed",
+                )
+                if st.button(
+                    f"↪️ Move all {len(page_keys)} → {CAT_DISPLAY[bulk_target]}",
+                    key=f"bulk_move_{cat}", use_container_width=True, type="primary"
+                ):
+                    moved = 0
+                    with st.spinner(f"Moving {len(page_keys)} tiles…"):
+                        for k in page_keys:
+                            if move_s3_file(k, bulk_target):
+                                moved += 1
+                    list_category_keys.clear()
+                    get_grain_and_tile_counts.clear()
+                    st.toast(f"✅ Moved {moved} tiles → {CAT_DISPLAY[bulk_target]}")
+                    st.rerun()
+
+            st.markdown("---")
+
+            # ── Fetch images + detections in parallel for this page ───────────
+            keys_missing = [k for k in page_keys if k not in st.session_state.batch_images]
+            if keys_missing:
+                with st.spinner(f"Loading {len(keys_missing)} tile images…"):
+                    with concurrent.futures.ThreadPoolExecutor(max_workers=6) as executor:
+                        for k, img_bytes, det_json in executor.map(fetch_tile_and_detections, keys_missing):
+                            if img_bytes:
+                                st.session_state.batch_images[k] = img_bytes
+                            if det_json is not None and k not in st.session_state.batch_results:
+                                try:
+                                    pil_img = Image.open(BytesIO(img_bytes)).convert("RGB")
+                                    det_result = DetectionResult(det_json, pil_img.width, pil_img.height)
+                                    st.session_state.batch_results[k] = [det_result]
+                                except Exception:
+                                    pass
+
+            # ── 4-column tile grid ────────────────────────────────────────────
+            n_cols = 4
+            grid = st.columns(n_cols)
+
+            for i, key in enumerate(page_keys):
+                with grid[i % n_cols]:
+                    filename = os.path.basename(key)
+
+                    # Image with optional detection overlay
+                    img_bytes = st.session_state.batch_images.get(key)
+                    if img_bytes:
+                        try:
+                            pil_img = Image.open(BytesIO(img_bytes)).convert("RGB")
+                            det_res  = st.session_state.batch_results.get(key)
+                            if det_res and len(det_res[0].boxes) > 0:
+                                cv_img = cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2BGR)
+                                boxes = det_res[0].boxes
+                                cls_colors = {0: (0, 200, 0), 1: (0, 0, 220)}
+                                for b in range(len(boxes)):
+                                    x1, y1, x2, y2 = [int(v) for v in boxes.xyxy[b]]
+                                    color = cls_colors.get(int(boxes.cls[b]), (0, 200, 200))
+                                    cv2.rectangle(cv_img, (x1, y1), (x2, y2), color, 2)
+                                pil_img = Image.fromarray(cv2.cvtColor(cv_img, cv2.COLOR_BGR2RGB))
+                            short_name = filename[:28] + ("…" if len(filename) > 28 else "")
+                            st.image(pil_img, use_container_width=True, caption=short_name)
+                        except Exception:
+                            st.caption("*(render error)*")
+                    else:
+                        st.caption("*(unavailable)*")
+
+                    # Detection grain summary
+                    det_res = st.session_state.batch_results.get(key)
+                    if det_res and len(det_res[0].boxes) > 0:
+                        n_v  = sum(1 for c in det_res[0].boxes.cls if int(c) == 0)
+                        n_nv = sum(1 for c in det_res[0].boxes.cls if int(c) == 1)
+                        st.caption(f"🟢 {n_v} viable  🔴 {n_nv} non-viable")
+
+                    # Per-tile reassignment
+                    safe_id = f"{cat}_{i}_{hash(key) % 99999}"
+                    new_cat = st.selectbox(
+                        "Move to →",
+                        options=[c for c in CAT_KEYS if c != cat],
+                        format_func=lambda c: CAT_DISPLAY[c],
+                        key=f"sel_{safe_id}",
+                        label_visibility="collapsed",
+                    )
+                    if st.button("↪️ Move", key=f"mv_{safe_id}", use_container_width=True):
+                        with st.spinner("Moving tile…"):
+                            move_s3_file(key, new_cat)
+                        list_category_keys.clear()
+                        get_grain_and_tile_counts.clear()
+                        st.session_state.batch_images.pop(key, None)
+                        st.session_state.batch_results.pop(key, None)
+                        st.toast(f"✅ Moved → {CAT_DISPLAY[new_cat]}")
+                        st.rerun()
+
+                    st.markdown("<div style='margin-bottom:12px'></div>", unsafe_allow_html=True)
