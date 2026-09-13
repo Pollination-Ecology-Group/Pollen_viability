@@ -381,7 +381,12 @@ def fetch_keys_from_s3():
     try:
         strategy = getattr(st.session_state, "queue_strategy_select", "🎯 High Non-Viable Dense")
         folder_data = get_all_s3_tile_keys()
-        
+
+        # ── Source image filter ───────────────────────────────────────────────
+        selected_folders = st.session_state.get("selected_image_folders", [])
+        if isinstance(folder_data, dict) and selected_folders:
+            folder_data = {k: v for k, v in folder_data.items() if k in selected_folders}
+
         valid_extensions = ('.jpg', '.jpeg', '.png', '.tif', '.tiff', '.bmp', '.webp')
         new_keys = []
         
@@ -529,7 +534,9 @@ if "batch_results" not in st.session_state:
 if "keyboard_idx" not in st.session_state:
     st.session_state.keyboard_idx = 0
 if "mode" not in st.session_state:
-    st.session_state.mode = "📱 Swipe Mode"
+    st.session_state.mode = "📋 Grid Mode"
+if "selected_image_folders" not in st.session_state:
+    st.session_state.selected_image_folders = []
 
 def set_active_mode(new_mode):
     st.session_state._pending_mode = new_mode
@@ -598,6 +605,60 @@ if sample_index:
 
 st.sidebar.markdown("---")
 
+# ── Source Image Filter ────────────────────────────────────────────────────────
+st.sidebar.markdown("#### 🔬 Source Image Filter")
+st.sidebar.caption("Restrict tile queue to specific CZI source images.")
+
+_folder_data_for_filter = get_all_s3_tile_keys()
+if isinstance(_folder_data_for_filter, dict) and _folder_data_for_filter:
+    _TILE_PREFIX = "Ostatni/Pollen_viability/tiles_640/"
+    # Build display_name → full folder prefix map
+    _folder_map = {
+        f.rstrip("/").replace(_TILE_PREFIX, "").rstrip("/"): f
+        for f in _folder_data_for_filter.keys()
+    }
+    _image_names = sorted(_folder_map.keys())
+
+    # Determine current selection (convert stored prefixes back to display names)
+    _current_selected = st.session_state.get("selected_image_folders", [])
+    _current_names = [
+        name for name, prefix in _folder_map.items()
+        if prefix in _current_selected
+    ]
+
+    _selected_names = st.sidebar.multiselect(
+        "Source CZI images",
+        options=_image_names,
+        default=_current_names,
+        placeholder="All images (no filter applied)",
+        key="image_filter_multiselect",
+        help="Type to search. Select one or more images to restrict the queue.",
+    )
+
+    _fi_col1, _fi_col2 = st.sidebar.columns(2)
+    with _fi_col1:
+        if st.button("🔄 Apply", use_container_width=True, key="btn_apply_image_filter",
+                     help="Reload queue with selected images only"):
+            st.session_state.selected_image_folders = [
+                _folder_map[n] for n in _selected_names
+            ]
+            fetch_keys_from_s3()
+            get_grain_and_tile_counts.clear()
+            st.rerun()
+    with _fi_col2:
+        _filter_active = bool(st.session_state.get("selected_image_folders", []))
+        if st.button("✖ Clear", use_container_width=True, key="btn_clear_image_filter",
+                     disabled=not _filter_active,
+                     help="Remove filter and show all images"):
+            st.session_state.selected_image_folders = []
+            fetch_keys_from_s3()
+            get_grain_and_tile_counts.clear()
+            st.rerun()
+else:
+    st.sidebar.caption("*(Image list not available — check S3 connection)*")
+
+st.sidebar.markdown("---")
+
 # Apply any pending mode change BEFORE the radio widget renders
 if "_pending_mode" in st.session_state:
     st.session_state.mode = st.session_state._pending_mode
@@ -630,6 +691,19 @@ with m_col3:
     st.metric("🟨 Aborted Grains", f"{grain_counts['aborted']:,}")
 with m_col4:
     st.metric("🖼️ Pending Batch", len(st.session_state.s3_keys))
+
+# Active filter badge
+_active_filter_folders = st.session_state.get("selected_image_folders", [])
+if _active_filter_folders:
+    _TILE_PFX = "Ostatni/Pollen_viability/tiles_640/"
+    _active_names = [
+        f.rstrip("/").replace(_TILE_PFX, "").rstrip("/")
+        for f in _active_filter_folders
+    ]
+    _names_str = "`, `".join(_active_names)
+    st.info(f"🔬 **Source filter active** — showing tiles from: `{_names_str}` "
+            f"({len(_active_filter_folders)} image{'s' if len(_active_filter_folders) != 1 else ''}). "
+            "Use the sidebar to change or clear.", icon="🔬")
 
 st.markdown("---")
 mode = st.session_state.mode
