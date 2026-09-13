@@ -1426,10 +1426,24 @@ elif mode == "📱 Swipe Mode":
                 with s_col2:
                     if st.button("💾 Save Labels & Next Tile", type="primary", key="btn_save_next_tile", use_container_width=True):
                         lines = []
+                        _tile_results = st.session_state.batch_results.get(current_key)
+                        _has_masks = (_tile_results and _tile_results[0].masks is not None
+                                      and len(_tile_results[0].masks.xyn) > 0)
                         for g in grains:
                             gid = g["id"]
                             if gid in st.session_state.swipe_labels:
                                 cls_id = st.session_state.swipe_labels[gid]
+                                # Prefer SAM polygon mask over bbox when available
+                                if _has_masks and gid < len(_tile_results[0].masks.xyn):
+                                    poly = _tile_results[0].masks.xyn[gid]
+                                    if len(poly) >= 3:
+                                        coords_str = " ".join(
+                                            f"{float(pt[0]):.6f} {float(pt[1]):.6f}"
+                                            for pt in poly
+                                        )
+                                        lines.append(f"{cls_id} {coords_str}")
+                                        continue
+                                # Fallback: YOLO bbox format
                                 xc, yc, w, h = g["yolo_coords"]
                                 lines.append(f"{cls_id} {xc} {yc} {w} {h}")
                         
