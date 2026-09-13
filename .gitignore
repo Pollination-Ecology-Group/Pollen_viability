@@ -15,3 +15,6 @@ detect_images/
 .Rhistory
 visualizations.zip
 _site/
+
+# Local dataset exports — all data lives on S3
+dataset/

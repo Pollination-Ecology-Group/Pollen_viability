@@ -62,24 +62,61 @@ def make_s3():
 
 
 def find_labeled_tiles(s3) -> list[dict]:
-    """Return list of {tile_key, label_key} for tiles with companion .txt labels."""
-    print("📋 Scanning S3 for labeled tiles …")
+    """Return list of {tile_key, label_key} for tiles with companion .txt labels.
+
+    Scans two sources:
+      1. tiles_640/   — Swipe Mode labels (.txt alongside .jpg)
+      2. active_learning/hard_positives/ — Grid/batch mode (jpg + segmentation txt)
+    """
+    AL_PREFIX = "Ostatni/Pollen_viability/active_learning/"
+    paginator  = s3.get_paginator('list_objects_v2')
+    labeled    = []
+
+    # ── Source 1: tiles_640/ (Swipe Mode) ─────────────────────────────────────
+    print("📋 Scanning tiles_640/ for Swipe-Mode labels …")
     all_keys = set()
-    paginator = s3.get_paginator('list_objects_v2')
     for page in paginator.paginate(Bucket=S3_BUCKET, Prefix=TILE_PREFIX):
         for obj in page.get('Contents', []):
             all_keys.add(obj['Key'])
 
-    labeled = []
     for key in all_keys:
         if not key.lower().endswith(VALID_EXT):
             continue
         label_key = key.rsplit('.', 1)[0] + '.txt'
         if label_key in all_keys:
-            labeled.append({'tile_key': key, 'label_key': label_key})
+            labeled.append({'tile_key': key, 'label_key': label_key,
+                            'source': 'swipe'})
+    print(f"   Found {len(labeled)} Swipe-Mode labeled tiles")
 
-    print(f"   Found {len(labeled)} labeled tiles")
-    return labeled
+    # ── Source 2: active_learning/hard_positives/ (Grid / batch mode) ─────────
+    print("📋 Scanning active_learning/hard_positives/ for batch labels …")
+    al_keys = set()
+    for page in paginator.paginate(Bucket=S3_BUCKET,
+                                   Prefix=AL_PREFIX + "hard_positives/"):
+        for obj in page.get('Contents', []):
+            al_keys.add(obj['Key'])
+
+    al_before = len(labeled)
+    for key in al_keys:
+        if not key.lower().endswith(VALID_EXT):
+            continue
+        label_key = key.rsplit('.', 1)[0] + '.txt'
+        if label_key in al_keys:
+            labeled.append({'tile_key': key, 'label_key': label_key,
+                            'source': 'batch'})
+    print(f"   Found {len(labeled) - al_before} batch-labeled tiles")
+
+    # Deduplicate by filename stem (same tile may appear in both)
+    seen = {}
+    unique = []
+    for item in labeled:
+        stem = os.path.basename(item['tile_key']).rsplit('.', 1)[0]
+        if stem not in seen:
+            seen[stem] = True
+            unique.append(item)
+
+    print(f"   Total unique labeled tiles: {len(unique)}")
+    return unique
 
 
 def download_pair(args):
