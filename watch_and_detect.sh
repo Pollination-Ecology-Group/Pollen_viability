@@ -1,16 +1,6 @@
 #!/bin/bash
-# watch_and_detect.sh
-# ──────────────────────────────────────────────────────────────────
-# Watches pollen-preprocess-job on K8s. Once it completes
-# (Succeeded or Failed), automatically launches the detection job.
-#
-# Usage:
-#   ./watch_and_detect.sh           # waits for preprocess, then detects
-#   ./watch_and_detect.sh --force   # same but forces re-detection of all tiles
-#
-# Keep this running in a terminal or tmux session.
-# ──────────────────────────────────────────────────────────────────
-set -e
+# watch_and_detect.sh — watches pollen-preprocess-job and auto-launches detection
+set -o pipefail   # pipelines fail on first error, but individual commands don't exit
 
 NAMESPACE="stenc-ns"
 POLL_INTERVAL=30   # seconds between checks
