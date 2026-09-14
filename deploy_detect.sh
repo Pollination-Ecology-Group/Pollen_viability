@@ -1,7 +1,12 @@
 #!/bin/bash
-# deploy_detect.sh — Run batch YOLO detection on all S3 tiles (K8s GPU cluster)
-# Usage: ./deploy_detect.sh [--force]
-#   --force   Set FORCE_REDETECT=1 to re-run detection on all tiles
+# deploy_detect.sh — Run FastSAM detection on all S3 tiles (K8s GPU cluster)
+#
+# Replaces the old YOLO-based detection with FastSAM (class-agnostic segmentation).
+# FastSAM writes _det.json files in the same format — Pinder reads them unchanged.
+#
+# Usage:
+#   ./deploy_detect.sh            # skip tiles that already have _det.json
+#   ./deploy_detect.sh --force    # overwrite ALL existing _det.json (re-detect everything)
 set -e
 
 NAMESPACE="stenc-ns"
@@ -23,47 +28,77 @@ if [ -f "./kubeconfig.yaml" ]; then
 fi
 
 echo "----------------------------------------------"
-echo "🌸 Pollen Detection Batch Job (K8s GPU cluster)"
+echo "🌸 Pollen SAM Detection Batch Job (K8s GPU cluster)"
 echo "----------------------------------------------"
 
 # ── Optional --force flag ──────────────────────────────────────────────────────
-FORCE_REDETECT="0"
+FORCE_FLAG=""
 if [[ "$1" == "--force" ]]; then
-    FORCE_REDETECT="1"
-    echo "⚠️  FORCE_REDETECT=1 — all tiles will be re-processed!"
+    FORCE_FLAG="--force"
+    echo "⚠️  --force — all existing _det.json will be overwritten!"
 fi
 
-# ── Upload detection script as ConfigMap ──────────────────────────────────────
-echo "☁️  1. Uploading detection script as ConfigMap..."
-$KUBECTL create configmap detect-script \
-    --from-file=run_detections_s3.py=src/run_detections_s3.py \
+# ── Upload FastSAM script as ConfigMap ────────────────────────────────────────
+echo "☁️  1. Uploading run_sam_s3.py as ConfigMap (sam-script)..."
+$KUBECTL create configmap sam-script \
+    --from-file=run_sam_s3.py=src/run_sam_s3.py \
     -n $NAMESPACE --dry-run=client -o yaml | $KUBECTL apply -f -
 
-# ── Patch FORCE_REDETECT if --force ───────────────────────────────────────────
-if [ "$FORCE_REDETECT" = "1" ]; then
-    echo "🔧 2. Patching FORCE_REDETECT=1 in job manifest..."
-    sed 's/value: "0"  # FORCE_REDETECT/value: "1"/' \
-        k8s/pollen-detect-job.yaml > /tmp/pollen-detect-job-force.yaml
-    JOB_YAML="/tmp/pollen-detect-job-force.yaml"
+# ── Upload FastSAM-s.pt weights to S3 (if not already there) ──────────────────
+echo "🔧 2. Checking FastSAM-s.pt on S3..."
+source .env 2>/dev/null || true
+MODEL_S3_KEY="Ostatni/Pollen_viability/trained_models/FastSAM-s.pt"
+MODEL_LOCAL="FastSAM-s.pt"
+
+if [ -f "$MODEL_LOCAL" ]; then
+    python3 - <<PYEOF
+import boto3, os
+from botocore.client import Config
+s3 = boto3.client('s3',
+    endpoint_url=os.environ.get('S3_ENDPOINT', 'https://s3.cl4.du.cesnet.cz'),
+    aws_access_key_id=os.environ.get('AWS_ACCESS_KEY_ID'),
+    aws_secret_access_key=os.environ.get('AWS_SECRET_ACCESS_KEY'),
+    config=Config(signature_version='s3v4'))
+bucket = os.environ.get('S3_BUCKET', 'bucket')
+key = 'Ostatni/Pollen_viability/trained_models/FastSAM-s.pt'
+try:
+    s3.head_object(Bucket=bucket, Key=key)
+    print('   FastSAM-s.pt already on S3 — skipping upload.')
+except Exception:
+    print('   Uploading FastSAM-s.pt to S3...')
+    s3.upload_file('FastSAM-s.pt', bucket, key)
+    print('   ✅ Uploaded.')
+PYEOF
 else
-    JOB_YAML="k8s/pollen-detect-job.yaml"
+    echo "   ⚠️  FastSAM-s.pt not found locally — K8s job will try to download from S3."
+    echo "      If it fails, copy FastSAM-s.pt to the repo root and re-run this script."
+fi
+
+# ── Patch --force into the job yaml if requested ──────────────────────────────
+JOB_YAML="k8s/pollen-sam-job.yaml"
+if [ "$FORCE_FLAG" = "--force" ]; then
+    echo "🔧 3. Patching --force into job command..."
+    sed 's/--all-folders/--all-folders --force/' "$JOB_YAML" > /tmp/pollen-sam-job-force.yaml
+    JOB_YAML="/tmp/pollen-sam-job-force.yaml"
+else
+    echo "🔧 3. Using job yaml as-is (skip existing _det.json)..."
 fi
 
 # ── Clean up old job ───────────────────────────────────────────────────────────
-echo "🧹 3. Cleaning up old detect job..."
-$KUBECTL delete job pollen-detect-job -n $NAMESPACE --ignore-not-found
+echo "🧹 4. Cleaning up old sam job..."
+$KUBECTL delete job pollen-sam-job -n $NAMESPACE --ignore-not-found
 
 # ── Launch job ─────────────────────────────────────────────────────────────────
-echo "🚀 4. Launching detection job on GPU cluster..."
+echo "🚀 5. Launching FastSAM detection job on GPU cluster..."
 $KUBECTL apply -f $JOB_YAML
 
 # ── Wait for pod ───────────────────────────────────────────────────────────────
-echo "⏳ 5. Waiting for pod to start..."
+echo "⏳ 6. Waiting for pod to start..."
 max_retries=300
 count=0
 echo -n "   Waiting (max 10m)..."
 while : ; do
-    POD_NAME=$($KUBECTL get pods -n $NAMESPACE -l job-name=pollen-detect-job \
+    POD_NAME=$($KUBECTL get pods -n $NAMESPACE -l job-name=pollen-sam-job \
         --sort-by=.metadata.creationTimestamp \
         -o jsonpath='{.items[-1:].metadata.name}' 2>/dev/null || echo "")
 
@@ -93,10 +128,10 @@ while : ; do
 done
 
 # ── Stream logs ────────────────────────────────────────────────────────────────
-echo "👀 6. Streaming logs (Ctrl+C to detach — job continues on cluster)..."
-$KUBECTL logs -f job/pollen-detect-job -n $NAMESPACE --ignore-errors || true
+echo "👀 7. Streaming logs (Ctrl+C to detach — job continues on cluster)..."
+$KUBECTL logs -f job/pollen-sam-job -n $NAMESPACE --ignore-errors || true
 
 echo ""
-echo "✅ Detection job complete!"
-echo "   Tiles in S3 now have companion _det.json detection files."
-echo "   Pinder (pinder.streamlit.app) will pick them up on next page load."
+echo "✅ FastSAM detection job complete!"
+echo "   All tiles now have companion _det.json files (FastSAM segmentation)."
+echo "   Pinder Swipe Mode will show grain crops for manual viable/NV labelling."
