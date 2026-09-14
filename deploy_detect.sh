@@ -46,7 +46,9 @@ $KUBECTL create configmap sam-script \
 
 # ── Upload FastSAM-s.pt weights to S3 (if not already there) ──────────────────
 echo "🔧 2. Checking FastSAM-s.pt on S3..."
-source .env 2>/dev/null || true
+set -a                            # auto-export all variables
+source .env 2>/dev/null || true   # load credentials from .env
+set +a                            # stop auto-exporting
 MODEL_S3_KEY="Ostatni/Pollen_viability/trained_models/FastSAM-s.pt"
 MODEL_LOCAL="FastSAM-s.pt"
 
