@@ -9,14 +9,18 @@ Swipe Mode can be used to manually classify each SAM-detected grain crop.
 
 Typical usage
 ─────────────
-  # Target top NV samples (for non-viable grains) + N random for viable:
+  # Target specific NV samples (from browse_czi_s3.py output):
   source .venv/bin/activate
   python src/run_sam_s3.py \
       --target-samples 1-6-J,7-9-F,6-1-F \
       --viable-limit 200
 
+  # Process ALL folders (run after browse_czi_s3.py to cover everything):
+  python src/run_sam_s3.py --all-folders
+
   # Force overwrite even if _det.json already exists:
   python src/run_sam_s3.py --target-samples 1-6-J --force
+  python src/run_sam_s3.py --all-folders --force
 
 Environment variables
 ─────────────────────
@@ -180,13 +184,16 @@ def upload_jsons(s3, items: dict):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Run FastSAM on targeted S3 tile subsets → write _det.json")
-    parser.add_argument("--target-samples", default="1-6-J,7-9-F,6-1-F",
+        description="Run FastSAM on S3 tile folders → write _det.json files")
+    parser.add_argument("--target-samples", default="",
                         help="Comma-separated sample IDs to target for NV tiles "
-                             "(e.g. '1-6-J,7-9-F,6-1-F')")
+                             "(e.g. '1-6-J,7-9-F,6-1-F'). Ignored if --all-folders set.")
+    parser.add_argument("--all-folders", action="store_true",
+                        help="Process ALL S3 tile folders (overrides --target-samples "
+                             "and --viable-limit — every folder is treated as a target).")
     parser.add_argument("--viable-limit", type=int, default=200,
                         help="Number of random non-targeted tiles to also process "
-                             "(provides viable grain variety)")
+                             "(provides viable grain variety). Ignored with --all-folders.")
     parser.add_argument("--force", action="store_true",
                         help="Overwrite existing _det.json files")
     parser.add_argument("--model", default=MODEL_PATH,
@@ -200,11 +207,19 @@ def main():
         raise SystemExit(f"❌ Model not found: {args.model}  "
                          f"(expected FastSAM-s.pt in repo root)")
 
-    target_ids = [s.strip() for s in args.target_samples.split(",") if s.strip()]
+    if not args.all_folders and not args.target_samples:
+        raise SystemExit("❌ Specify --target-samples <IDs> or use --all-folders.")
+
+    target_ids = [] if args.all_folders else [
+        s.strip() for s in args.target_samples.split(",") if s.strip()]
+
     print(f"\n🌸 FastSAM → S3 JSON Writer")
     print(f"   Model         : {args.model}")
-    print(f"   Target samples: {target_ids}")
-    print(f"   Viable limit  : {args.viable_limit} random tiles")
+    if args.all_folders:
+        print(f"   Mode          : ALL FOLDERS (--all-folders)")
+    else:
+        print(f"   Target samples: {target_ids}")
+        print(f"   Viable limit  : {args.viable_limit} random tiles")
     print(f"   Force overwrite: {args.force}")
     print(f"   conf={CONF}  iou={IOU}  min_area={MIN_AREA}px²  max_dim={MAX_DIM}px\n")
 
@@ -222,12 +237,19 @@ def main():
 
     # ── Select tile keys ──────────────────────────────────────────────────────
     all_folders = list_tile_folders(s3)
-    target_folders = [f for f in all_folders if folder_matches_sample(f, target_ids)]
-    other_folders  = [f for f in all_folders if f not in target_folders]
 
-    print(f"\n🎯 Targeted folders  : {len(target_folders)}")
-    for f in target_folders:
-        print(f"   {f.rstrip('/').split('/')[-1]}")
+    if args.all_folders:
+        # ── All-folders mode: treat every folder as a target ─────────────────
+        target_folders = all_folders
+        other_folders  = []
+        print(f"\n🌐 All-folders mode  : {len(target_folders)} folders")
+    else:
+        # ── Targeted mode ────────────────────────────────────────────────────
+        target_folders = [f for f in all_folders if folder_matches_sample(f, target_ids)]
+        other_folders  = [f for f in all_folders if f not in target_folders]
+        print(f"\n🎯 Targeted folders  : {len(target_folders)}")
+        for f in target_folders:
+            print(f"   {f.rstrip('/').split('/')[-1]}")
 
     # Collect all tile keys from targeted folders
     target_keys = []
@@ -235,9 +257,9 @@ def main():
         target_keys.extend(fetch_folder_keys(s3, folder))
     print(f"\n   → {len(target_keys):,} tile images in targeted folders")
 
-    # Random sample from non-targeted folders for viable variety
+    # Random sample from non-targeted folders for viable variety (targeted mode only)
     viable_keys = []
-    if args.viable_limit > 0:
+    if not args.all_folders and args.viable_limit > 0 and other_folders:
         random.shuffle(other_folders)
         for folder in other_folders:
             if len(viable_keys) >= args.viable_limit:
