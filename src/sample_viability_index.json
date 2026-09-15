@@ -1160,5 +1160,15 @@
     "non_viable": 0,
     "total_grains": 332,
     "non_viable_rate": 0.0
+  },
+  "28-8-E": {
+    "file_count": 1,
+    "viable": 0,
+    "non_viable": 9999,
+    "total_grains": 9999,
+    "non_viable_rate": 1.0,
+    "note": "Full CZI: 20260724_0079_28-8-E_AA025_2x_rep. Visually identified as highest non-viable density observed so far (2026-09-15). Counts are placeholder — run detection to confirm.",
+    "priority_label": "🔬 SUSPECTED HIGHEST NV",
+    "confirmed": false
   }
 }

@@ -674,7 +674,21 @@ if sample_index:
         )[:12]
         for s_id, s_info in sorted_samples:
             pct = s_info.get('non_viable_rate', 0) * 100
-            st.markdown(f"**`{s_id}`**: `{s_info.get('non_viable')} non-viable` ({pct:.1f}%)")
+            confirmed = s_info.get("confirmed", True)  # default True for legacy entries
+            priority_label = s_info.get("priority_label", "")
+            note = s_info.get("note", "")
+            if not confirmed:
+                # Unconfirmed placeholder — show with warning badge
+                nv_display = "unconfirmed"
+                badge = "⚠️ "
+                tooltip = f" — *{note}*" if note else ""
+                st.markdown(
+                    f"{badge}**`{s_id}`** {priority_label}: `{nv_display}`{tooltip}",
+                    help=note if note else None,
+                )
+            else:
+                label = f" {priority_label}" if priority_label else ""
+                st.markdown(f"**`{s_id}`**{label}: `{s_info.get('non_viable')} non-viable` ({pct:.1f}%)")
 
 st.sidebar.markdown("---")
 
