@@ -41,6 +41,7 @@ LOCAL_ROOT = 'Pollen_viability'
 DATASET_ROOT = os.path.join(LOCAL_ROOT, 'datasets/pollen_v1_seg')
 STAGING_AREA = os.path.join(LOCAL_ROOT, 'staged_area')
 SMUDGES_RAW = os.path.join(LOCAL_ROOT, 'smudges_raw')
+HARD_NEGATIVES = os.path.join(LOCAL_ROOT, 'hard_negatives')
 TRAIN_DIR = os.path.join(DATASET_ROOT, 'train')
 VAL_DIR = os.path.join(DATASET_ROOT, 'val')
 VIS_DIR = 'visualizations'
@@ -118,46 +119,54 @@ def merge_staged_data():
             
     print("✅ Merge complete.")
 
-def generate_synthetic_negatives():
-    print("🧪 Generating Synthetic Negatives...")
-    if not os.path.exists(SMUDGES_RAW):
-        print("⚠️ No raw smudges found.")
-        return
-
-    raw_files = [f for f in os.listdir(SMUDGES_RAW) if f.lower().endswith(('.jpg', '.png'))]
-    if not raw_files: return
-
+def process_all_negatives():
+    print("🧪 Processing all Hard Negatives and Smudges...")
+    total_count = 0
     CANVAS_SIZE = 640
     BG_COLOR = (200, 200, 200)
-    
-    count = 0
-    for fname in raw_files:
-        img_path = os.path.join(SMUDGES_RAW, fname)
-        img = cv2.imread(img_path)
-        if img is None: continue
-        
-        # Resize logic
-        h, w = img.shape[:2]
-        scale = min(CANVAS_SIZE/h, CANVAS_SIZE/w) * 0.8
-        new_w, new_h = int(w*scale), int(h*scale)
-        resized = cv2.resize(img, (new_w, new_h))
-        
-        canvas = np.full((CANVAS_SIZE, CANVAS_SIZE, 3), BG_COLOR, dtype=np.uint8)
-        y_off = (CANVAS_SIZE - new_h) // 2
-        x_off = (CANVAS_SIZE - new_w) // 2
-        canvas[y_off:y_off+new_h, x_off:x_off+new_w] = resized
-        
-        # Save
-        is_val = random.random() < 0.2
-        target_dir = VAL_DIR if is_val else TRAIN_DIR
-        
-        out_name = f"syn_neg_{fname}"
-        cv2.imwrite(os.path.join(target_dir, 'images', out_name), canvas)
-        # Empty label
-        with open(os.path.join(target_dir, 'labels', os.path.splitext(out_name)[0]+'.txt'), 'w') as f:
-            pass
-        count += 1
-    print(f"✅ Generated {count} synthetic samples.")
+
+    # 1. Process Smudges (Synthetic)
+    if os.path.exists(SMUDGES_RAW):
+        raw_files = [f for f in os.listdir(SMUDGES_RAW) if f.lower().endswith(('.jpg', '.png'))]
+        for fname in raw_files:
+            img_path = os.path.join(SMUDGES_RAW, fname)
+            img = cv2.imread(img_path)
+            if img is None: continue
+            
+            # Resize logic onto canvas
+            h, w = img.shape[:2]
+            scale = min(CANVAS_SIZE/h, CANVAS_SIZE/w) * 0.8
+            new_w, new_h = int(w*scale), int(h*scale)
+            resized = cv2.resize(img, (new_w, new_h))
+            
+            canvas = np.full((CANVAS_SIZE, CANVAS_SIZE, 3), BG_COLOR, dtype=np.uint8)
+            y_off = (CANVAS_SIZE - new_h) // 2
+            x_off = (CANVAS_SIZE - new_w) // 2
+            canvas[y_off:y_off+new_h, x_off:x_off+new_w] = resized
+            
+            is_val = random.random() < 0.2
+            target_dir = VAL_DIR if is_val else TRAIN_DIR
+            out_name = f"syn_neg_{fname}"
+            
+            cv2.imwrite(os.path.join(target_dir, 'images', out_name), canvas)
+            with open(os.path.join(target_dir, 'labels', os.path.splitext(out_name)[0]+'.txt'), 'w') as f: pass
+            total_count += 1
+            
+    # 2. Process Curated Hard Negatives (Direct Copy)
+    if os.path.exists(HARD_NEGATIVES):
+        hard_files = [f for f in os.listdir(HARD_NEGATIVES) if f.lower().endswith(('.jpg', '.png'))]
+        for fname in hard_files:
+            img_path = os.path.join(HARD_NEGATIVES, fname)
+            
+            is_val = random.random() < 0.2
+            target_dir = VAL_DIR if is_val else TRAIN_DIR
+            out_name = f"curated_neg_{fname}"
+            
+            shutil.copy2(img_path, os.path.join(target_dir, 'images', out_name))
+            with open(os.path.join(target_dir, 'labels', os.path.splitext(out_name)[0]+'.txt'), 'w') as f: pass
+            total_count += 1
+
+    print(f"✅ Integrated {total_count} total negative samples into dataset.")
 
 def visualize_dataset(num_samples=None):
     print("🎨 Generating Dataset Visualizations (Ground Truth)...")
@@ -339,10 +348,11 @@ def main():
         download_s3_prefix(s3, 'Ostatni/Pollen_viability/datasets/pollen_v1_seg', DATASET_ROOT)
         download_s3_prefix(s3, 'Ostatni/Pollen_viability/staging_area', STAGING_AREA)
         download_s3_prefix(s3, 'Ostatni/Pollen_viability/smudges_raw', SMUDGES_RAW)
+        download_s3_prefix(s3, 'Ostatni/Pollen_viability/active_learning/hard_negatives', HARD_NEGATIVES)
 
     # 2. Prep Data
     merge_staged_data()
-    generate_synthetic_negatives()
+    process_all_negatives()
     visualize_dataset(num_samples=None) # Generate GT samples for ALL images
 
     # 3. Train
@@ -352,7 +362,7 @@ def main():
         device = 0 if torch.cuda.is_available() else 'cpu'
         print(f"   Device: {device}")
         
-        model = YOLO('yolo11x-seg.pt')
+        model = YOLO('yolo11m-seg.pt')
         run_name = f"pollen_train_{datetime.now().strftime('%Y%m%d_%H%M')}"
         
         # ALWAYS overwrite data.yaml to ensure paths are correct for this container
