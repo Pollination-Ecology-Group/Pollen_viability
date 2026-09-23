@@ -36,15 +36,16 @@ AWS_SECRET_ACCESS_KEY = os.environ.get('AWS_SECRET_ACCESS_KEY')
 GMAIL_APP_PASSWORD = os.environ.get('GMAIL_APP_PASSWORD')
 RECEIVER_EMAIL = "jakubstenc@gmail.com"
 
-# Paths
-LOCAL_ROOT = 'Pollen_viability'
-DATASET_ROOT = os.path.join(LOCAL_ROOT, 'datasets/pollen_v1_seg')
-STAGING_AREA = os.path.join(LOCAL_ROOT, 'staged_area')
-SMUDGES_RAW = os.path.join(LOCAL_ROOT, 'smudges_raw')
+# Paths — dataset is built from CZI-derived sources only (no legacy Roboflow S4x data)
+LOCAL_ROOT    = 'Pollen_viability'
+DATASET_ROOT  = os.path.join(LOCAL_ROOT, 'datasets/pollen_czi')
+STAGING_AREA  = os.path.join(LOCAL_ROOT, 'staged_area')
+SMUDGES_RAW   = os.path.join(LOCAL_ROOT, 'smudges_raw')
 HARD_NEGATIVES = os.path.join(LOCAL_ROOT, 'hard_negatives')
-TRAIN_DIR = os.path.join(DATASET_ROOT, 'train')
-VAL_DIR = os.path.join(DATASET_ROOT, 'val')
-VIS_DIR = 'visualizations'
+HARD_POSITIVES = os.path.join(LOCAL_ROOT, 'hard_positives')
+TRAIN_DIR     = os.path.join(DATASET_ROOT, 'train')
+VAL_DIR       = os.path.join(DATASET_ROOT, 'val')
+VIS_DIR       = 'visualizations'
 
 def setup_s3():
     if not all([S3_BUCKET, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY]):
@@ -70,6 +71,74 @@ def download_s3_prefix(s3, prefix, local_dir):
             count += 1
             if count % 100 == 0: print(f"   Downloaded {count}...", end='\r')
     print(f"✅ Downloaded {count} new files.")
+
+def scaffold_dataset():
+    """Create the empty train/val directory structure from scratch."""
+    for split_dir in [TRAIN_DIR, VAL_DIR]:
+        os.makedirs(os.path.join(split_dir, 'images'), exist_ok=True)
+        os.makedirs(os.path.join(split_dir, 'labels'), exist_ok=True)
+    print(f"📁 Dataset scaffold created at {DATASET_ROOT}")
+
+
+def merge_hard_positives():
+    """Copy hard_positives image+label pairs into train/val as primary annotated data."""
+    if not os.path.exists(HARD_POSITIVES):
+        print("⚠️  hard_positives/ not found — no primary annotated data!")
+        return
+    pos_imgs = [f for f in os.listdir(HARD_POSITIVES)
+                if f.lower().endswith(('.jpg', '.png'))]
+    merged = 0
+    for fname in pos_imgs:
+        lbl_path = os.path.join(HARD_POSITIVES, os.path.splitext(fname)[0] + '.txt')
+        if not os.path.exists(lbl_path):
+            continue  # skip unannotated images
+        is_val     = random.random() < 0.2
+        target_dir = VAL_DIR if is_val else TRAIN_DIR
+        out_name   = f"hard_pos_{fname}"
+        shutil.copy2(os.path.join(HARD_POSITIVES, fname),
+                     os.path.join(target_dir, 'images', out_name))
+        shutil.copy2(lbl_path,
+                     os.path.join(target_dir, 'labels', os.path.splitext(out_name)[0] + '.txt'))
+        merged += 1
+    print(f"✅ Merged {merged} hard_positives pairs (primary annotated data).")
+
+
+def print_dataset_summary():
+    """Print a breakdown of how many images each source contributed."""
+    from collections import Counter
+    print("\n" + "═" * 55)
+    print("📊 Dataset Composition Summary")
+    print("═" * 55)
+    for split_name, split_dir in [('train', TRAIN_DIR), ('val', VAL_DIR)]:
+        img_dir = os.path.join(split_dir, 'images')
+        lbl_dir = os.path.join(split_dir, 'labels')
+        if not os.path.exists(img_dir):
+            continue
+        source_counts = Counter()
+        annot_counts  = Counter()  # class counts across all labels
+        total_grains  = 0
+        for fn in os.listdir(img_dir):
+            if fn.startswith('hard_pos_'):    source_counts['hard_positives'] += 1
+            elif fn.startswith('hard_neg_') or fn.startswith('curated_neg_'):
+                                              source_counts['hard_negatives'] += 1
+            elif fn.startswith('syn_neg_'):   source_counts['smudges_synthetic'] += 1
+            else:                             source_counts['staging_area'] += 1
+            lbl = os.path.join(lbl_dir, os.path.splitext(fn)[0] + '.txt')
+            if os.path.exists(lbl):
+                for line in open(lbl).read().strip().splitlines():
+                    parts = line.strip().split()
+                    if parts:
+                        annot_counts[int(parts[0])] += 1
+                        total_grains += 1
+        total_imgs = sum(source_counts.values())
+        print(f"  [{split_name}]  {total_imgs} images  |  {total_grains} grain annotations")
+        for src, n in sorted(source_counts.items(), key=lambda x: -x[1]):
+            print(f"    {src:<22}: {n:4d} images")
+        cls_names = {0: 'viable', 1: 'non_viable', 2: 'intermediate'}
+        for cls_id, cnt in sorted(annot_counts.items()):
+            print(f"    class {cls_id} ({cls_names.get(cls_id,'?'):<13}): {cnt:4d} annotations")
+    print("═" * 55 + "\n")
+
 
 def merge_staged_data():
     print("🔄 Checking for new data in staging area...")
@@ -152,7 +221,7 @@ def process_all_negatives():
             with open(os.path.join(target_dir, 'labels', os.path.splitext(out_name)[0]+'.txt'), 'w') as f: pass
             total_count += 1
             
-    # 2. Process Curated Hard Negatives (Direct Copy)
+    # 2. Process Curated Hard Negatives (Direct Copy, empty labels)
     if os.path.exists(HARD_NEGATIVES):
         hard_files = [f for f in os.listdir(HARD_NEGATIVES) if f.lower().endswith(('.jpg', '.png'))]
         for fname in hard_files:
@@ -165,6 +234,28 @@ def process_all_negatives():
             shutil.copy2(img_path, os.path.join(target_dir, 'images', out_name))
             with open(os.path.join(target_dir, 'labels', os.path.splitext(out_name)[0]+'.txt'), 'w') as f: pass
             total_count += 1
+
+    # 3. Process Curated Hard Positives (image + label pairs, already annotated)
+    if os.path.exists(HARD_POSITIVES):
+        pos_imgs = [f for f in os.listdir(HARD_POSITIVES) if f.lower().endswith(('.jpg', '.png'))]
+        merged = 0
+        for fname in pos_imgs:
+            img_path = os.path.join(HARD_POSITIVES, fname)
+            lbl_path = os.path.join(HARD_POSITIVES, os.path.splitext(fname)[0] + '.txt')
+            if not os.path.exists(lbl_path):
+                continue  # skip images without a companion label
+            
+            is_val = random.random() < 0.2
+            target_dir = VAL_DIR if is_val else TRAIN_DIR
+            out_name = f"hard_pos_{fname}"
+            
+            shutil.copy2(img_path, os.path.join(target_dir, 'images', out_name))
+            shutil.copy2(lbl_path, os.path.join(target_dir, 'labels', os.path.splitext(out_name)[0] + '.txt'))
+            merged += 1
+        print(f"   ✅ Merged {merged} hard positive image+label pairs.")
+        total_count += merged
+    else:
+        print("   ℹ️  No hard_positives directory found — skipping.")
 
     print(f"✅ Integrated {total_count} total negative samples into dataset.")
 
@@ -341,19 +432,32 @@ def main():
 
     s3 = setup_s3()
     
-    # 1. Sync Dataresults
-    if s3:
-        # We assume the bucket structure: Ostatni/Pollen_viability/datasets...
-        # Adjust prefixes to match user's S3 structure
-        download_s3_prefix(s3, 'Ostatni/Pollen_viability/datasets/pollen_v1_seg', DATASET_ROOT)
-        download_s3_prefix(s3, 'Ostatni/Pollen_viability/staging_area', STAGING_AREA)
-        download_s3_prefix(s3, 'Ostatni/Pollen_viability/smudges_raw', SMUDGES_RAW)
-        download_s3_prefix(s3, 'Ostatni/Pollen_viability/active_learning/hard_negatives', HARD_NEGATIVES)
+    # 1. Scaffold empty dataset structure (CZI-derived sources only)
+    scaffold_dataset()
 
-    # 2. Prep Data
+    # 2. Download all CZI-derived annotation sources from S3
+    if s3:
+        download_s3_prefix(s3, 'Ostatni/Pollen_viability/staging_area',
+                           STAGING_AREA)
+        download_s3_prefix(s3, 'Ostatni/Pollen_viability/smudges_raw',
+                           SMUDGES_RAW)
+        download_s3_prefix(s3, 'Ostatni/Pollen_viability/active_learning/hard_negatives',
+                           HARD_NEGATIVES)
+        download_s3_prefix(s3, 'Ostatni/Pollen_viability/active_learning/hard_positives',
+                           HARD_POSITIVES)
+
+    # 3. Assemble dataset
+    #    a) Primary annotated data — CZI tiles with labels from hard_positives/
+    merge_hard_positives()
+    #    b) New annotation batches — Roboflow ZIPs dropped into staging_area/
     merge_staged_data()
+    #    c) Background tiles — hard_negatives + synthetic smudges (empty labels)
     process_all_negatives()
-    visualize_dataset(num_samples=None) # Generate GT samples for ALL images
+
+    # 4. Print composition before training so we know what went in
+    print_dataset_summary()
+
+    visualize_dataset(num_samples=None)  # Ground-truth visualisation for all images
 
     # 3. Train
     if not args.dry_run:

@@ -1,7 +1,7 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: pollen-detect-job
+  name: pollen-inference-test-job
   namespace: stenc-ns
 spec:
   backoffLimit: 1
@@ -15,16 +15,20 @@ spec:
         seccompProfile:
           type: RuntimeDefault
       containers:
-      - name: pollen-detector
+      - name: pollen-inference-test
         image: ultralytics/ultralytics:latest
         workingDir: /tmp
         command:
           - /bin/bash
           - -c
           - |
-            pip install --user boto3 Pillow --quiet
-            cp /scripts/run_detections_s3.py /tmp/run_detections_s3.py
-            python /tmp/run_detections_s3.py
+            pip install --user boto3 Pillow python-dotenv --quiet
+
+            # Copy script from ConfigMap
+            cp /scripts/run_inference_test.py /tmp/run_inference_test.py
+
+            # Run the single-image inference test
+            python /tmp/run_inference_test.py
         securityContext:
           allowPrivilegeEscalation: false
           capabilities:
@@ -37,32 +41,29 @@ spec:
             value: "https://s3.cl4.du.cesnet.cz"
           - name: S3_BUCKET
             value: "bucket"
-          - name: TILE_PREFIX
-            value: "Ostatni/Pollen_viability/tiles_640/"
           - name: S3_MODEL_KEY
             value: "Ostatni/Pollen_viability/trained_models/pollen_train_20260923_1457/weights/best.pt"
           - name: MODEL_PATH
             value: "/tmp/best.pt"
-          - name: BATCH_SIZE
-            value: "32"
-          - name: FETCH_WORKERS
-            value: "16"
+          - name: TILE_PREFIX
+            value: "Ostatni/Pollen_viability/tiles_640/"
+          # To test a specific tile, uncomment and set TEST_TILE_KEY:
+          # - name: TEST_TILE_KEY
+          #   value: "Ostatni/Pollen_viability/tiles_640/some/folder/tile.jpg"
           - name: CONF
             value: "0.25"
           - name: IOU
             value: "0.70"
           - name: MAX_DIM
             value: "130"
-          - name: FORCE_REDETECT
-            value: "0"
         resources:
           requests:
-            memory: "16Gi"
-            cpu: "4"
+            memory: "4Gi"
+            cpu: "2"
             nvidia.com/gpu: "1"
           limits:
-            memory: "32Gi"
-            cpu: "8"
+            memory: "8Gi"
+            cpu: "4"
             nvidia.com/gpu: "1"
         volumeMounts:
         - name: script-volume
@@ -70,5 +71,5 @@ spec:
       volumes:
       - name: script-volume
         configMap:
-          name: detect-script
+          name: inference-test-script
       restartPolicy: Never
