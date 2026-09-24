@@ -1,0 +1,14 @@
+═══════════════════════════════════════════════
+  Pollen Viability — Inference Summary
+═══════════════════════════════════════════════
+  Slide   : 20260724_0001_27-3-B_AA025_n4x_Pollen_viability
+  Image   : 17452×17423 px
+  Tiles   : 961  (conf≥0.1)
+  Elapsed : 2545s  (0.4 tiles/s)
+
+  Total grains detected : 9677
+    viable         :  9669  (99.9%)
+    non_viable     :     8  (0.1%)
+
+  Viability rate : 99.9%
+═══════════════════════════════════════════════

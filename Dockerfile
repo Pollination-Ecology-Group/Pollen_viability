@@ -4,7 +4,7 @@ FROM ultralytics/ultralytics:latest
 WORKDIR /app
 
 # Install additional dependencies
-RUN pip install boto3 pandas czifile
+RUN pip install boto3 pandas czifile pyyaml
 
 # Copy application code
 COPY src/ ./
@@ -17,4 +17,4 @@ RUN chown -R 1000:1000 /app && \
 USER 1000
 
 # Run the detection script
-CMD ["python", "run_detection.py"]
+CMD ["python", "train_model.py"]

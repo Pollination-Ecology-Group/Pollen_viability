@@ -59,17 +59,22 @@ def setup_s3():
 
 def download_s3_prefix(s3, prefix, local_dir):
     bucket = s3.Bucket(S3_BUCKET)
-    print(f"⬇️ Downloading {prefix} -> {local_dir}")
+    print(f"⬇️ Downloading {prefix} → {local_dir}")
     count = 0
     for obj in bucket.objects.filter(Prefix=prefix):
+        # Skip S3 directory markers (keys ending with '/')
+        if obj.key.endswith('/'):
+            continue
         rel_path = os.path.relpath(obj.key, prefix)
-        if rel_path == "." or rel_path.startswith("_"): continue
+        if rel_path == "." or rel_path.startswith("_"):
+            continue
         dest_path = os.path.join(local_dir, rel_path)
         if not os.path.exists(dest_path):
             os.makedirs(os.path.dirname(dest_path), exist_ok=True)
             bucket.download_file(obj.key, dest_path)
             count += 1
-            if count % 100 == 0: print(f"   Downloaded {count}...", end='\r')
+            if count % 100 == 0:
+                print(f"   Downloaded {count}...", end='\r')
     print(f"✅ Downloaded {count} new files.")
 
 def scaffold_dataset():
@@ -80,16 +85,25 @@ def scaffold_dataset():
     print(f"📁 Dataset scaffold created at {DATASET_ROOT}")
 
 
-def merge_hard_positives():
-    """Copy hard_positives image+label pairs into train/val as primary annotated data."""
+def merge_hard_positives(exclude_bases: set = None):
+    """Copy hard_positives image+label pairs into train/val.
+
+    exclude_bases: set of tile basenames (no extension, no RF hash) already
+    added via staged ZIPs.  Tiles in this set are skipped to avoid duplicates.
+    """
     if not os.path.exists(HARD_POSITIVES):
         print("⚠️  hard_positives/ not found — no primary annotated data!")
         return
+    exclude_bases = exclude_bases or set()
     pos_imgs = [f for f in os.listdir(HARD_POSITIVES)
                 if f.lower().endswith(('.jpg', '.png'))]
-    merged = 0
+    merged = skipped = 0
     for fname in pos_imgs:
-        lbl_path = os.path.join(HARD_POSITIVES, os.path.splitext(fname)[0] + '.txt')
+        base = os.path.splitext(fname)[0]
+        if base in exclude_bases:
+            skipped += 1
+            continue  # already in dataset from staged ZIP (better annotation)
+        lbl_path = os.path.join(HARD_POSITIVES, base + '.txt')
         if not os.path.exists(lbl_path):
             continue  # skip unannotated images
         is_val     = random.random() < 0.2
@@ -100,6 +114,8 @@ def merge_hard_positives():
         shutil.copy2(lbl_path,
                      os.path.join(target_dir, 'labels', os.path.splitext(out_name)[0] + '.txt'))
         merged += 1
+    if skipped:
+        print(f"  ⚠️  Skipped {skipped} hard_positives already covered by staged ZIP.")
     print(f"✅ Merged {merged} hard_positives pairs (primary annotated data).")
 
 
@@ -140,53 +156,151 @@ def print_dataset_summary():
     print("═" * 55 + "\n")
 
 
-def merge_staged_data():
+
+# Canonical class ordering that the model and all inference scripts expect.
+CANONICAL_CLASSES = ['viable', 'non_viable', 'intermediate']
+
+def _build_class_remap(zip_data_yaml_path: str) -> dict:
+    """
+    Read a Roboflow-exported data.yaml and return a {src_id → dst_id} mapping
+    so that class IDs are remapped to CANONICAL_CLASSES ordering.
+
+    Roboflow exports alphabetically by default:
+        0=intermediate  1=non_viable  2=viable
+    We want:
+        0=viable        1=non_viable  2=intermediate
+
+    Also handles 'non-viable' (hyphen) as an alias for 'non_viable'.
+    """
+    import yaml
+
+    remap = {}
+    try:
+        with open(zip_data_yaml_path) as f:
+            meta = yaml.safe_load(f)
+        src_names = meta.get('names', [])
+        # Normalise: replace hyphens with underscores, lowercase
+        src_names = [n.lower().replace('-', '_') for n in src_names]
+        canonical_norm = [c.lower().replace('-', '_') for c in CANONICAL_CLASSES]
+        for src_id, name in enumerate(src_names):
+            if name in canonical_norm:
+                dst_id = canonical_norm.index(name)
+                remap[src_id] = dst_id
+            else:
+                print(f"   ⚠️  Unknown class '{name}' in export — keeping as id {src_id}")
+                remap[src_id] = src_id
+        print(f"   🗺️  Class remapping from export: {dict(zip(src_names, [remap[i] for i in range(len(src_names))]))}")
+    except Exception as e:
+        print(f"   ⚠️  Could not read data.yaml ({e}) — using identity mapping")
+    return remap
+
+
+def _remap_label_file(src_path: str, dst_path: str, remap: dict):
+    """Read a YOLO label file, remap class IDs, write to dst_path."""
+    lines_out = []
+    with open(src_path) as f:
+        for line in f:
+            parts = line.strip().split()
+            if not parts:
+                continue
+            src_cls = int(parts[0])
+            dst_cls = remap.get(src_cls, src_cls)
+            lines_out.append(f"{dst_cls} " + " ".join(parts[1:]))
+    with open(dst_path, 'w') as f:
+        f.write("\n".join(lines_out))
+
+
+def _strip_rf_hash(filename: str) -> str:
+    """Remove Roboflow's .rf.HASH suffix to recover the original tile basename.
+    e.g. 'tile_0_16128_jpg.rf.abc123.jpg' -> 'tile_0_16128'
+    """
+    import re
+    base = os.path.splitext(filename)[0]           # strip final .jpg/.png
+    base = re.sub(r'\.rf\.[a-f0-9]+$', '', base)  # strip .rf.HASH
+    base = re.sub(r'_jpg$|_png$', '', base)        # strip _jpg/_png artifact
+    return base
+
+
+def merge_staged_data() -> set:
     print("🔄 Checking for new data in staging area...")
-    if not os.path.exists(STAGING_AREA): return
-    
+    if not os.path.exists(STAGING_AREA):
+        return set()
+
     zips = glob.glob(os.path.join(STAGING_AREA, "*.zip"))
     if not zips:
-        print("ℹ️ No new zips found.")
-        return
+        print("ℹ️ No new zips found in staging area.")
+        return set()
 
-    # Process first zip found
-    zip_path = zips[0]
-    print(f"1️⃣ Processing: {os.path.basename(zip_path)}")
-    
-    temp_dir = os.path.join(LOCAL_ROOT, 'temp_merge')
-    if os.path.exists(temp_dir): shutil.rmtree(temp_dir)
-    os.makedirs(temp_dir, exist_ok=True)
-    
-    shutil.unpack_archive(zip_path, temp_dir)
-    
-    # Simple recursive finder
-    found_pairs = []
-    for root, _, files in os.walk(temp_dir):
-        for f in files:
-            if f.lower().endswith(('.jpg', '.png')):
-                base = os.path.splitext(f)[0]
-                label_path = os.path.join(root, base + ".txt")
-                if os.path.exists(label_path):
-                    found_pairs.append((os.path.join(root, f), label_path))
-    
-    print(f"   Found {len(found_pairs)} pairs.")
-    
-    # Merge logic
-    random.shuffle(found_pairs)
-    split_idx = int(len(found_pairs) * 0.2) # 20% val
-    val_batch = found_pairs[:split_idx]
-    train_batch = found_pairs[split_idx:]
-    
-    for batch, dest in [(train_batch, TRAIN_DIR), (val_batch, VAL_DIR)]:
-        img_dest = os.path.join(dest, 'images')
-        lbl_dest = os.path.join(dest, 'labels')
-        os.makedirs(img_dest, exist_ok=True)
-        os.makedirs(lbl_dest, exist_ok=True)
-        for img, lbl in batch:
-            shutil.copy2(img, img_dest)
-            shutil.copy2(lbl, lbl_dest)
-            
-    print("✅ Merge complete.")
+    staged_bases: set = set()  # stripped original basenames merged from all ZIPs
+    for zip_path in sorted(zips):
+        print(f"\n1️⃣ Processing: {os.path.basename(zip_path)}")
+
+        temp_dir = os.path.join(LOCAL_ROOT, 'temp_merge')
+        if os.path.exists(temp_dir):
+            shutil.rmtree(temp_dir)
+        os.makedirs(temp_dir, exist_ok=True)
+        shutil.unpack_archive(zip_path, temp_dir)
+
+        # ── Build class remapping from the ZIP's data.yaml ────────────────────
+        remap = {}
+        for root, _, files in os.walk(temp_dir):
+            if 'data.yaml' in files:
+                remap = _build_class_remap(os.path.join(root, 'data.yaml'))
+                break
+        if not remap:
+            print("   ⚠️  No data.yaml found in ZIP — using identity class mapping")
+
+        # ── Collect image+label pairs ──────────────────────────────────────────
+        found_pairs = []
+        for root, _, files in os.walk(temp_dir):
+            for f in files:
+                if f.lower().endswith(('.jpg', '.png')):
+                    base = os.path.splitext(f)[0]
+                    lbl = os.path.join(root, base + '.txt')
+                    if os.path.exists(lbl):
+                        found_pairs.append((os.path.join(root, f), lbl))
+
+        print(f"   Found {len(found_pairs)} image+label pairs.")
+
+        # Verify class counts after remapping
+        cls_counts: dict = {}
+        for _, lbl in found_pairs:
+            for line in open(lbl).read().strip().splitlines():
+                parts = line.strip().split()
+                if parts:
+                    dst = remap.get(int(parts[0]), int(parts[0]))
+                    name = CANONICAL_CLASSES[dst] if dst < len(CANONICAL_CLASSES) else f'cls{dst}'
+                    cls_counts[name] = cls_counts.get(name, 0) + 1
+        print(f"   Annotation counts after remapping: {cls_counts}")
+
+        # ── 80/20 train/val split ──────────────────────────────────────────────
+        random.shuffle(found_pairs)
+        split_idx   = int(len(found_pairs) * 0.2)
+        val_batch   = found_pairs[:split_idx]
+        train_batch = found_pairs[split_idx:]
+
+        for batch, dest_dir in [(train_batch, TRAIN_DIR), (val_batch, VAL_DIR)]:
+            img_dest = os.path.join(dest_dir, 'images')
+            lbl_dest = os.path.join(dest_dir, 'labels')
+            os.makedirs(img_dest, exist_ok=True)
+            os.makedirs(lbl_dest, exist_ok=True)
+            for img_path, lbl_path in batch:
+                fname    = os.path.basename(img_path)
+                out_base = os.path.splitext(fname)[0]
+                orig_base = _strip_rf_hash(fname)
+                shutil.copy2(img_path, os.path.join(img_dest, fname))
+                _remap_label_file(lbl_path,
+                                  os.path.join(lbl_dest, out_base + '.txt'),
+                                  remap)
+                staged_bases.add(orig_base)
+
+        shutil.rmtree(temp_dir, ignore_errors=True)
+        print(f"✅ Merged {len(found_pairs)} pairs "
+              f"({len(train_batch)} train / {len(val_batch)} val).")
+
+    print(f"   Total unique tile basenames from staged ZIPs: {len(staged_bases)}")
+    return staged_bases
+
 
 def process_all_negatives():
     print("🧪 Processing all Hard Negatives and Smudges...")
@@ -437,7 +551,7 @@ def main():
 
     # 2. Download all CZI-derived annotation sources from S3
     if s3:
-        download_s3_prefix(s3, 'Ostatni/Pollen_viability/staging_area',
+        download_s3_prefix(s3, 'Ostatni/Pollen_viability/staged_area',
                            STAGING_AREA)
         download_s3_prefix(s3, 'Ostatni/Pollen_viability/smudges_raw',
                            SMUDGES_RAW)
@@ -446,11 +560,11 @@ def main():
         download_s3_prefix(s3, 'Ostatni/Pollen_viability/active_learning/hard_positives',
                            HARD_POSITIVES)
 
-    # 3. Assemble dataset
-    #    a) Primary annotated data — CZI tiles with labels from hard_positives/
-    merge_hard_positives()
-    #    b) New annotation batches — Roboflow ZIPs dropped into staging_area/
-    merge_staged_data()
+    # 3. Assemble dataset (order matters: staged ZIPs first — better annotations)
+    #    a) Roboflow ZIPs from staged_area/ — all 3 classes, class-remapped
+    staged_bases = merge_staged_data()
+    #    b) hard_positives — viable-only tiles NOT already covered by staged ZIP
+    merge_hard_positives(exclude_bases=staged_bases)
     #    c) Background tiles — hard_negatives + synthetic smudges (empty labels)
     process_all_negatives()
 
