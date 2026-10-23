@@ -270,6 +270,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
   <li><a href="#step-1-upload-your-images" id="toc-step-1-upload-your-images" class="nav-link" data-scroll-target="#step-1-upload-your-images">Step 1 — Upload Your Images</a></li>
   <li><a href="#step-2-launch-the-detection-job" id="toc-step-2-launch-the-detection-job" class="nav-link" data-scroll-target="#step-2-launch-the-detection-job">Step 2 — Launch the Detection Job</a></li>
   <li><a href="#step-3-download-your-results" id="toc-step-3-download-your-results" class="nav-link" data-scroll-target="#step-3-download-your-results">Step 3 — Download Your Results</a></li>
+  <li><a href="#step-4-interactive-data-curation-dataset-balancing" id="toc-step-4-interactive-data-curation-dataset-balancing" class="nav-link" data-scroll-target="#step-4-interactive-data-curation-dataset-balancing">Step 4 — Interactive Data Curation &amp; Dataset Balancing</a></li>
   </ul></li>
   <li><a href="#troubleshooting" id="toc-troubleshooting" class="nav-link" data-scroll-target="#troubleshooting">Troubleshooting</a></li>
   </ul></li>
@@ -388,6 +389,13 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <p>Once the detection finishes (the terminal shows it has completed), your results are automatically uploaded to the S3 bucket.</p>
 <p>Open <strong>Cyberduck</strong> and navigate to: - <code>Ostatni/Pollen_viability/detected_images/</code> — <strong>Annotated images</strong> with coloured bounding boxes showing which pollen grains are viable (green) and non-viable (red). - <code>Ostatni/Pollen_viability/pollen_counting_results/</code> — <strong>CSV summary files</strong> (<code>pollen_counts.csv</code>) with counts and viability percentages per image.</p>
 <p>Download these files to your computer by right-clicking → <strong>Download</strong> in Cyberduck.</p>
+<hr>
+</section>
+<section id="step-4-interactive-data-curation-dataset-balancing" class="level3">
+<h3 class="anchored" data-anchor-id="step-4-interactive-data-curation-dataset-balancing">Step 4 — Interactive Data Curation &amp; Dataset Balancing</h3>
+<p>To review detections on mobile or desktop, curate active learning batches, or prioritize high non-viable pollen samples:</p>
+<p>👉 <strong><a href="../vignettes/curator_gui_tutorial.html">Follow the Pollen Curator GUI Tutorial</a></strong></p>
+<p>Run <code>./start_gui.sh</code> on your local machine to launch the interactive curator.</p>
 <hr>
 </section>
 </section>

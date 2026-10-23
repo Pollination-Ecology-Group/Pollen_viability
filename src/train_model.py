@@ -28,9 +28,21 @@ settings.update({
     'weights_dir': '/app/weights'
 })
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    if os.path.exists('.env'):
+        with open('.env') as _f:
+            for _line in _f:
+                _line = _line.strip()
+                if _line and not _line.startswith('#') and '=' in _line:
+                    _k, _v = _line.split('=', 1)
+                    os.environ.setdefault(_k.strip(), _v.strip())
+
 # --- CONFIGURATION FROM ENV ---
 S3_ENDPOINT = os.environ.get('S3_ENDPOINT', 'https://s3.cl4.du.cesnet.cz')
-S3_BUCKET = os.environ.get('S3_BUCKET')
+S3_BUCKET = os.environ.get('S3_BUCKET', 'peg-bucket')
 AWS_ACCESS_KEY_ID = os.environ.get('AWS_ACCESS_KEY_ID')
 AWS_SECRET_ACCESS_KEY = os.environ.get('AWS_SECRET_ACCESS_KEY')
 GMAIL_APP_PASSWORD = os.environ.get('GMAIL_APP_PASSWORD')
@@ -134,7 +146,8 @@ def print_dataset_summary():
         annot_counts  = Counter()  # class counts across all labels
         total_grains  = 0
         for fn in os.listdir(img_dir):
-            if fn.startswith('hard_pos_'):    source_counts['hard_positives'] += 1
+            if '_nvdup' in fn:                source_counts['oversampled_rare'] += 1
+            elif fn.startswith('hard_pos_'):  source_counts['hard_positives'] += 1
             elif fn.startswith('hard_neg_') or fn.startswith('curated_neg_'):
                                               source_counts['hard_negatives'] += 1
             elif fn.startswith('syn_neg_'):   source_counts['smudges_synthetic'] += 1
@@ -256,7 +269,13 @@ def merge_staged_data() -> set:
             for f in files:
                 if f.lower().endswith(('.jpg', '.png')):
                     base = os.path.splitext(f)[0]
+                    # Check same directory first, then sibling labels/ directory
                     lbl = os.path.join(root, base + '.txt')
+                    if not os.path.exists(lbl):
+                        parent = os.path.dirname(root)
+                        lbl_candidate = os.path.join(parent, 'labels', base + '.txt')
+                        if os.path.exists(lbl_candidate):
+                            lbl = lbl_candidate
                     if os.path.exists(lbl):
                         found_pairs.append((os.path.join(root, f), lbl))
 
@@ -279,24 +298,47 @@ def merge_staged_data() -> set:
         val_batch   = found_pairs[:split_idx]
         train_batch = found_pairs[split_idx:]
 
+        oversampled_count = 0
         for batch, dest_dir in [(train_batch, TRAIN_DIR), (val_batch, VAL_DIR)]:
             img_dest = os.path.join(dest_dir, 'images')
             lbl_dest = os.path.join(dest_dir, 'labels')
             os.makedirs(img_dest, exist_ok=True)
             os.makedirs(lbl_dest, exist_ok=True)
             for img_path, lbl_path in batch:
-                fname    = os.path.basename(img_path)
-                out_base = os.path.splitext(fname)[0]
+                fname     = os.path.basename(img_path)
+                out_base  = os.path.splitext(fname)[0]
                 orig_base = _strip_rf_hash(fname)
-                shutil.copy2(img_path, os.path.join(img_dest, fname))
-                _remap_label_file(lbl_path,
-                                  os.path.join(lbl_dest, out_base + '.txt'),
-                                  remap)
+                dest_img  = os.path.join(img_dest, fname)
+                dest_lbl  = os.path.join(lbl_dest, out_base + '.txt')
+
+                shutil.copy2(img_path, dest_img)
+                _remap_label_file(lbl_path, dest_lbl, remap)
                 staged_bases.add(orig_base)
+
+                # Oversample rare classes (non_viable=1, intermediate=2) in TRAIN split only
+                if dest_dir == TRAIN_DIR:
+                    has_rare = False
+                    with open(dest_lbl) as lf:
+                        for line in lf:
+                            p = line.strip().split()
+                            if p and int(p[0]) in (1, 2):
+                                has_rare = True
+                                break
+                    if has_rare:
+                        # 4 duplicate copies -> 5x effective representation in train set
+                        ext = os.path.splitext(fname)[1]
+                        for dup_i in range(1, 5):
+                            dup_img_name = f"{out_base}_nvdup{dup_i}{ext}"
+                            dup_lbl_name = f"{out_base}_nvdup{dup_i}.txt"
+                            shutil.copy2(dest_img, os.path.join(img_dest, dup_img_name))
+                            shutil.copy2(dest_lbl, os.path.join(lbl_dest, dup_lbl_name))
+                            oversampled_count += 1
 
         shutil.rmtree(temp_dir, ignore_errors=True)
         print(f"✅ Merged {len(found_pairs)} pairs "
               f"({len(train_batch)} train / {len(val_batch)} val).")
+        if oversampled_count:
+            print(f"   ⚡ Created {oversampled_count} oversampled train tiles for rare classes (non-viable / intermediate).")
 
     print(f"   Total unique tile basenames from staged ZIPs: {len(staged_bases)}")
     return staged_bases
@@ -348,28 +390,6 @@ def process_all_negatives():
             shutil.copy2(img_path, os.path.join(target_dir, 'images', out_name))
             with open(os.path.join(target_dir, 'labels', os.path.splitext(out_name)[0]+'.txt'), 'w') as f: pass
             total_count += 1
-
-    # 3. Process Curated Hard Positives (image + label pairs, already annotated)
-    if os.path.exists(HARD_POSITIVES):
-        pos_imgs = [f for f in os.listdir(HARD_POSITIVES) if f.lower().endswith(('.jpg', '.png'))]
-        merged = 0
-        for fname in pos_imgs:
-            img_path = os.path.join(HARD_POSITIVES, fname)
-            lbl_path = os.path.join(HARD_POSITIVES, os.path.splitext(fname)[0] + '.txt')
-            if not os.path.exists(lbl_path):
-                continue  # skip images without a companion label
-            
-            is_val = random.random() < 0.2
-            target_dir = VAL_DIR if is_val else TRAIN_DIR
-            out_name = f"hard_pos_{fname}"
-            
-            shutil.copy2(img_path, os.path.join(target_dir, 'images', out_name))
-            shutil.copy2(lbl_path, os.path.join(target_dir, 'labels', os.path.splitext(out_name)[0] + '.txt'))
-            merged += 1
-        print(f"   ✅ Merged {merged} hard positive image+label pairs.")
-        total_count += merged
-    else:
-        print("   ℹ️  No hard_positives directory found — skipping.")
 
     print(f"✅ Integrated {total_count} total negative samples into dataset.")
 
@@ -595,45 +615,72 @@ def main():
             # Assuming standard classes for this project
             f.write("names:\n  0: viable\n  1: non_viable\n  2: intermediate\n")
 
-        results = model.train(
-            data=yaml_path,
-            epochs=args.epochs,
-            patience=0, # Disable early stopping to ensure fixed epoch count
-            batch=args.batch,
-            imgsz=640,
-            device=device,
-            task='segment',
-            name=run_name,
-            project=os.path.join(os.getcwd(), 'runs/detect'),
-            agnostic_nms=True,
-            val=True,
-            degrees=180,
-            flipud=0.5,
-            fliplr=0.5,
-            mosaic=1.0,
-            close_mosaic=20
-        )
-        
-        # Capture the actual directory where YOLO saved the results
-        actual_save_dir = results.save_dir
-        print(f"📂 YOLO saved results to: {actual_save_dir}")
-        
-        # 4. Independent Evaluation
-        print("📊 Running Evaluation...")
-        metrics = model.val(split='val') # or 'test' if available
-        print(f"   mAP50-95: {metrics.box.map}")
-        
-        # 4b. Visualize Predictions
-        visualize_predictions(model, split='val', num_samples=None)        
-        # 5. Backup
-        if s3:
-            upload_results(s3, actual_save_dir, run_name)
-            
-            # 6. Notify
-            send_notification(
-                subject=f"🚀 Training Complete: {run_name}",
-                body=f"Hello Jakub,\n\nYour training run '{run_name}' has finished successfully.\nResults have been uploaded to S3."
+        try:
+            results = model.train(
+                data=yaml_path,
+                epochs=args.epochs,
+                patience=0, # Disable early stopping to ensure fixed epoch count
+                batch=args.batch,
+                imgsz=640,
+                device=device,
+                task='segment',
+                name=run_name,
+                project=os.path.join(os.getcwd(), 'runs/detect'),
+                agnostic_nms=True,
+                val=True,
+                cls=0.8,              # Cautious increase from default 0.5 to weight classification loss higher
+                copy_paste=0.4,       # In-domain segment copy-paste for polygon masks
+                copy_paste_mode='flip',
+                degrees=180,
+                flipud=0.5,
+                fliplr=0.5,
+                mosaic=1.0,
+                close_mosaic=20
             )
+            
+            # Capture the actual directory where YOLO saved the results
+            actual_save_dir = results.save_dir
+            print(f"📂 YOLO saved results to: {actual_save_dir}")
+            
+            # 4. Independent Evaluation
+            print("📊 Running Evaluation...")
+            metrics = model.val(split='val')
+            box_map50 = getattr(metrics.box, 'map50', 'N/A')
+            box_map = getattr(metrics.box, 'map', 'N/A')
+            seg_map50 = getattr(metrics.seg, 'map50', 'N/A') if hasattr(metrics, 'seg') and metrics.seg is not None else 'N/A'
+            seg_map = getattr(metrics.seg, 'map', 'N/A') if hasattr(metrics, 'seg') and metrics.seg is not None else 'N/A'
+            print(f"   Box mAP50: {box_map50} | Box mAP50-95: {box_map}")
+            
+            # 4b. Visualize Predictions
+            visualize_predictions(model, split='val', num_samples=None)        
+            # 5. Backup
+            if s3:
+                upload_results(s3, actual_save_dir, run_name)
+                
+                # 6. Notify
+                summary_body = (
+                    f"Hello Jakub,\n\n"
+                    f"Your training run '{run_name}' has finished successfully.\n\n"
+                    f"Validation Metrics:\n"
+                    f"  - Box mAP50:    {box_map50}\n"
+                    f"  - Box mAP50-95: {box_map}\n"
+                    f"  - Seg mAP50:    {seg_map50}\n"
+                    f"  - Seg mAP50-95: {seg_map}\n\n"
+                    f"Weights and evaluation plots uploaded to S3:\n"
+                    f"  peg-bucket/Ostatni/Pollen_viability/trained_models/{run_name}/\n"
+                )
+                send_notification(
+                    subject=f"🚀 Training Complete: {run_name} (Box mAP50: {box_map50:.3f})" if isinstance(box_map50, float) else f"🚀 Training Complete: {run_name}",
+                    body=summary_body
+                )
+        except Exception as e:
+            import traceback
+            tb = traceback.format_exc()
+            send_notification(
+                subject=f"❌ Training Failed: {run_name}",
+                body=f"Hello Jakub,\n\nYour training run '{run_name}' encountered an error:\n\n{tb}"
+            )
+            raise e
     else:
         print("⚠️ Dry run mode: Skipping actual training.")
 

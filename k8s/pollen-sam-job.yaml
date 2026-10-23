@@ -55,7 +55,7 @@ spec:
           - name: S3_ENDPOINT
             value: "https://s3.cl4.du.cesnet.cz"
           - name: S3_BUCKET
-            value: "bucket"
+            value: "peg-bucket"
           - name: TILE_PREFIX
             value: "Ostatni/Pollen_viability/tiles_640/"
           - name: S3_MODEL_KEY

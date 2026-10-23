@@ -33,7 +33,7 @@ spec:
             - name: S3_ENDPOINT
               value: "https://s3.cl4.du.cesnet.cz"
             - name: S3_BUCKET
-              value: "bucket"
+              value: "peg-bucket"
             - name: AWS_ACCESS_KEY_ID
               value: "1Y920BKC0SAWPNDE8RD6" # Pre-filled from previous context
             - name: AWS_SECRET_ACCESS_KEY

@@ -40,7 +40,7 @@ spec:
           - name: S3_ENDPOINT
             value: "https://s3.cl4.du.cesnet.cz"
           - name: S3_BUCKET
-            value: "bucket"
+            value: "peg-bucket"
           - name: S3_MODEL_KEY
             value: "Ostatni/Pollen_viability/trained_models/pollen_train_20260923_1457/weights/best.pt"
           - name: MODEL_PATH

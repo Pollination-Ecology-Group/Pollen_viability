@@ -15,7 +15,7 @@ pip install --force-reinstall opencv-python-headless
 
 echo "🔑 3. Exporting S3 Credentials..."
 export S3_ENDPOINT="https://s3.cl4.du.cesnet.cz"
-export S3_BUCKET="bucket"
+export S3_BUCKET="peg-bucket"
 export AWS_ACCESS_KEY_ID="1Y920BKC0SAWPNDE8RD6"
 export AWS_SECRET_ACCESS_KEY="SnKMQbJ8mRKVboPDymkYFaFTz7VBxysrsWwJRoMD"
 
