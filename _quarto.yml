@@ -14,6 +14,10 @@ website:
         text: Home
       - text: Guides
         menu:
+          - href: vignettes/pipeline_and_methods.md
+            text: "Methods & Pipeline Architecture"
+          - href: vignettes/quality_control_review.md
+            text: "Detection Quality Control"
           - href: vignettes/routine_detection_manual.md
             text: "Routine Detection Manual"
           - href: vignettes/kubernetes_workflow.md
@@ -33,12 +37,17 @@ website:
         text: "Home & Overview"
       - section: "Guides"
         contents:
+          - href: vignettes/pipeline_and_methods.md
+            text: "Methods & Computational Pipeline"
+          - href: vignettes/quality_control_review.md
+            text: "Detection Quality Control & Review"
           - href: vignettes/routine_detection_manual.md
             text: "Routine Detection Manual"
           - href: vignettes/kubernetes_workflow.md
             text: "Kubernetes Workflow"
           - href: vignettes/CESNET_connection_guide.md
             text: "CESNET Connection Guide"
+
       - section: "Results"
         contents:
           - href: outcomes/pollen_viability_report.qmd

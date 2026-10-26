@@ -128,6 +128,24 @@ Run `./start_gui.sh` on your local machine to launch the interactive curator.
 
 ---
 
+### Step 5 — Web-Based Quality Control & Bias Auditing (Cloud Apps)
+
+Before submitting or publishing results, human validation is conducted directly in the browser via our cloud review apps on the CERIT-SC cluster:
+
+* 🌸 **Pollen Viability QC Portal:** [https://viability-review-stenc.dyn.cloud.e-infra.cz](https://viability-review-stenc.dyn.cloud.e-infra.cz)
+  - Review blinded slide tiles across cytotypes.
+  - Press <kbd>Space</kbd> to view the raw Alexander stain; press <kbd>M</kbd> to toggle mask outlines.
+  - Click any false detection to change its class (`viable`, `non-viable`, `intermediate`) or strike it as non-pollen.
+  - Click anywhere on a missed grain to add a detection.
+  - Select tile verdict and click **Save & Next**.
+  - Login credentials: `eliska` or `jakub`.
+
+* 🌿 **Stomata Precision Review Portal:** [https://stomata-review-stenc.dyn.cloud.e-infra.cz](https://stomata-review-stenc.dyn.cloud.e-infra.cz)
+  - Perform vegetative stomatal morphometry QC and guard cell/pore caliper verification.
+  - Enables joint analysis of male gametophytic and vegetative cell gigas phenotypes.
+
+---
+
 ## Troubleshooting
 
 | Problem | Solution |

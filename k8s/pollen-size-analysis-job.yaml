@@ -1,0 +1,89 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: pollen-size-analysis-job
+  namespace: stenc-ns
+spec:
+  backoffLimit: 1
+  template:
+    metadata:
+      labels:
+        job-name: pollen-size-analysis-job
+    spec:
+      restartPolicy: Never
+      securityContext:
+        fsGroup: 1000
+        runAsGroup: 1000
+        runAsNonRoot: true
+        runAsUser: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: size-analyzer
+          image: ultralytics/ultralytics:latest
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/bash
+            - -c
+            - |
+              set -e
+              echo "📦 Installing boto3 & Pillow..."
+              pip install --user boto3 Pillow --quiet
+              mkdir -p /tmp/work/output/size_analysis /tmp/work/metadata
+              cp /scripts/pollen_size_analyzer.py /tmp/work/pollen_size_analyzer.py
+              cp /meta/plant_metadata_540.csv /tmp/work/metadata/plant_metadata_540.csv
+              cd /tmp/work
+              echo "🚀 Running pollen_size_analyzer on all slides..."
+              python pollen_size_analyzer.py --all --workers 16 --upload-s3 --out-dir output/size_analysis
+              echo "✅ Size analysis job finished!"
+          env:
+            - name: S3_ENDPOINT
+              value: https://s3.cl4.du.cesnet.cz
+            - name: S3_BUCKET
+              value: peg-bucket
+            - name: TILE_PREFIX
+              value: Ostatni/Pollen_viability/tiles_640/
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: s3-creds
+                  key: AWS_ACCESS_KEY_ID
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: s3-creds
+                  key: AWS_SECRET_ACCESS_KEY
+          resources:
+            requests:
+              cpu: "4"
+              memory: "16Gi"
+            limits:
+              cpu: "8"
+              memory: "32Gi"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: script-vol
+              mountPath: /scripts
+            - name: meta-vol
+              mountPath: /meta
+            - name: dshm
+              mountPath: /dev/shm
+            - name: tmp-dir
+              mountPath: /tmp
+      volumes:
+        - name: script-vol
+          configMap:
+            name: size-analysis-script
+        - name: meta-vol
+          configMap:
+            name: size-analysis-meta
+        - name: dshm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 4Gi
+        - name: tmp-dir
+          emptyDir:
+            sizeLimit: 30Gi

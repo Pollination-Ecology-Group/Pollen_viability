@@ -1,0 +1,48 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: pollen-detect-email-watcher
+  namespace: stenc-ns
+spec:
+  backoffLimit: 3
+  template:
+    spec:
+      serviceAccountName: job-watcher
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: watcher
+        image: python:3.12.7-slim
+        command:
+        - python
+        - /cfg/watch.py
+        - pollen-detect-job
+        env:
+        - name: GMAIL_APP_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: email-credentials
+              key: GMAIL_APP_PASSWORD
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 200m
+            memory: 128Mi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+        volumeMounts:
+        - name: cfg
+          mountPath: /cfg
+      volumes:
+      - name: cfg
+        configMap:
+          name: transfer-email-watcher
+      restartPolicy: OnFailure

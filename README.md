@@ -1,150 +1,242 @@
-# 🌸 Pollen Viability Detector (YOLOv8)
+# 🌸 Pollen Viability & Morphometry Analysis Pipeline
 
-![Python](https://img.shields.io/badge/Python-3.8%2B-blue)
-![YOLOv8](https://img.shields.io/badge/Model-YOLOv8-green)
-![Status](https://img.shields.io/badge/Status-Active-success)
+[![Python](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/)
+[![Model](https://img.shields.io/badge/Model-YOLO11m--seg-success.svg)](https://docs.ultralytics.com/)
+[![Kubernetes](https://img.shields.io/badge/Cluster-CESNET%20K8s-326ce5.svg)](https://kubernetes.io/)
+[![Storage](https://img.shields.io/badge/Storage-S3%20CESNET-orange.svg)](https://s3.cl4.du.cesnet.cz)
+[![Status](https://img.shields.io/badge/Status-Production%20Active-brightgreen.svg)](#)
 
-<img width="1332" height="1007" alt="image" src="https://github.com/user-attachments/assets/3410b492-e5e1-4c50-bd0d-1ddecb7e4805" />
+An automated high-throughput computer vision and morphological profiling framework designed to detect, classify, and physically measure pollen grains from high-resolution digital slide scans (**Zeiss Axio Scan**, Alexander Staining). 
 
-An automated computer vision pipeline for assessing pollen viability using the **Alexander Stain** technique. This project leverages YOLOv8 to detect and classify pollen grains as either **Viable** (Magenta/Purple) or **Non-Viable** (Green/Shriveled) from high-resolution microscope images.
+The platform supports evolutionary and ecological cytogenetic studies, specifically tracking pollen viability percentages, grain abundance, and cellular size scaling (cross-sectional area and equivalent diameter) across ploidy levels (**natural 2x, synthetic/oryzalin 2x, neo-tetraploid 4x, and natural 4x**), with automated integration of plant experimental metadata and confounding factors.
+
+---
 
 ## 📌 Table of Contents
-- [🌸 Pollen Viability Detector (YOLOv8)](#-pollen-viability-detector-yolov8)
+- [🌸 Pollen Viability \& Morphometry Analysis Pipeline](#-pollen-viability--morphometry-analysis-pipeline)
   - [📌 Table of Contents](#-table-of-contents)
   - [🔭 Project Overview](#-project-overview)
-  - [🔬 Methodology](#-methodology)
-    - [Key Strategies used in this model:](#key-strategies-used-in-this-model)
-  - [⚙️ Workflow Setup](#️-workflow-setup)
-    - [1. Connecting to CESNET](#1-connecting-to-cesnet)
-    - [2. Kubernetes Workflow](#2-kubernetes-workflow)
-    - [2. Environment Installation](#2-environment-installation)
-  - [🏷️ Labeling Guide (Roboflow)](#️-labeling-guide-roboflow)
-    - [1. Class: `viable` (Target)](#1-class-viable-target)
-    - [2. Class: `non_viable` (Target)](#2-class-non_viable-target)
-    - [3. Edge Cases \& Rules](#3-edge-cases--rules)
-  - [🏋️ Training (CESNET Cluster)](#️-training-cesnet-cluster)
-  - [🔍 Routine Detection](#-routine-detection)
+  - [🔬 Biological Background \& Staining Protocol](#-biological-background--staining-protocol)
+  - [🧠 Machine Learning Architecture \& Model Performance](#-machine-learning-architecture--model-performance)
+    - [Model Specification](#model-specification)
+    - [Validation Metrics (at 300 Epochs)](#validation-metrics-at-300-epochs)
+    - [Confusion Matrix \& Error Breakdown](#confusion-matrix--error-breakdown)
+  - [📐 Measurement, Stitching \& Artifact Filtration Methods](#-measurement-stitching--artifact-filtration-methods)
+    - [1. Optical Calibration](#1-optical-calibration)
+    - [2. Spatial Boundary Stitching Across Tile Cuts](#2-spatial-boundary-stitching-across-tile-cuts)
+    - [3. Whole-Scan Margin Exclusion](#3-whole-scan-margin-exclusion)
+    - [4. Clumping \& Overlap Filtration](#4-clumping--overlap-filtration)
+    - [5. Confounder \& Experimental Metadata Integration](#5-confounder--experimental-metadata-integration)
+  - [📊 Preliminary Biological Findings](#-preliminary-biological-findings)
+  - [🚀 Running the Pipeline](#-running-the-pipeline)
+    - [1. Local Environment Setup](#1-local-environment-setup)
+    - [2. Running Sizing \& Stitching on Detection Outputs](#2-running-sizing--stitching-on-detection-outputs)
+    - [3. Batch GPU Detection on Kubernetes](#3-batch-gpu-detection-on-kubernetes)
+  - [📁 Repository Structure](#-repository-structure)
+  - [📄 Collaborator Summary Report](#-collaborator-summary-report)
 
 ---
 
 ## 🔭 Project Overview
-This tool automates the tedious process of counting pollen grains on microscope slides. It uses deep learning to replicate the judgment of a biologist following the Alexander Stain protocol.
 
-* **Input:** High-resolution microscope images (TIF/JPG).
-* **Output:** Annotated images with bounding boxes, CSV summaries of counts, and viability percentages.
-* **Performance:** Optimized for large, crowded scans using tiling and global Non-Maximum Suppression (NMS).
+Microscopic evaluation of pollen viability is traditionally labor-intensive, error-prone, and limited to small sample sizes. When comparing ploidy transitions—such as newly synthesized autopolyploids (neo-4x) versus diploid ancestors (2x) and established natural polyploids (4x)—two quantitative traits are paramount:
+1. **Viability Percentage:** The proportion of functional, cytoplasm-replete gametes versus aborted, sterile grains.
+2. **Cell Size (Gigas Effect):** The physical cross-sectional area and diameter distribution, which scales proportionally with genome duplication.
 
----
-
-## 🔬 Methodology
-The project runs on the **CESNET MetaCentrum** high-performance computing cluster, utilizing NVIDIA A40/A100 GPUs for rapid training and inference.
-
-### Key Strategies used in this model:
-1.  **Mosaic Disabling:** We disable mosaic augmentation for the final 10 epochs of training. This stabilizes the training loss and prevents the model from hallucinating pollen in empty space (ghost detections).
-2.  **High-Res Tiling:** For inference, large microscope scans (>2000px) are sliced into overlapping tiles (1600x1600px). This prevents the "Squish Effect," ensuring small grains retain their texture and are not lost during resizing.
-3.  **Border Patrol:** To prevent double-counting grains on tile edges, we implement a custom logic that ignores edge detections, relying on the neighboring tile to capture the grain centrally.
+This pipeline automates the entire analytical lifecycle:
+* **Input:** Whole-slide CZI / high-resolution scans tiled at $640\times640$ pixels.
+* **Inference:** Polygon-level instance segmentation using YOLO11m-seg trained on curated Alexander-stained pollen slides.
+* **Post-processing:** Stitching split grains across tile cuts, excluding boundary cutoffs, filtering out clumps, and converting pixels to microns.
+* **Output:** Master slide-level summary tables (`pollen_slide_summaries.csv`) and individual grain morphology profiles (`pollen_grain_measurements.csv`), pre-joined with plant pedigree, population, and cytotype metadata.
 
 ---
 
-## ⚙️ Workflow Setup
+## 🔬 Biological Background & Staining Protocol
 
-This project has migrated from Google Colab to the **CESNET Cluster** for better performance and data privacy.
+The pipeline processes slides stained using the **Alexander Stain Protocol** (Alexander, 1969; modified for brassicaceous plants), which differentiates functional gametes based on cytoplasmic integrity and enzymatic retention:
 
-### 1. Connecting to CESNET
-Detailed instructions on how to set up your environment, connect via SSH, and manage files can be found in our connection guide:
+| Class | Appearance | Cytoplasm & Wall Status | Biological Interpretation |
+| :--- | :--- | :--- | :--- |
+| **Viable** (Class 0) | **Deep Magenta / Dark Red** | Intact protoplasm retaining Acid Fuchsin / Malachite Green | Fully developed, viable pollen grain with fertile cytoplasm. |
+| **Non-Viable** (Class 1) | **Pale Green / Faint Blue** | Protoplasm absent or severely retracted; only outer exine wall visible | Aborted, inviable, or empty pollen grain. |
+| **Intermediate** (Class 2) | **Partial Pink / Uneven Mottling** | Partially collapsed protoplasm or incomplete dye uptake | Sub-viable or developmentally arrested grain. |
 
-👉 **[CESNET Connection Guide](/vignettes/CESNET_connection_guide.md)** 
-
-### 2. Kubernetes Workflow
-For instructions on running detection and training jobs:
-👉 **[Kubernetes Workflow Guide](/vignettes/kubernetes_workflow.md)** 
-
-### 3. Pollen Curator GUI & Mobile Curation
-For instructions on using the mobile-friendly Streamlit GUI (`app_gui.py`), dataset balancing, and single-grain curation:
-👉 **[Pollen Curator GUI Tutorial](/vignettes/curator_gui_tutorial.md)**
-
-### 4. Environment Installation
-The environment uses a custom Jupyter kernel. Dependencies include `ultralytics`, `opencv-python-headless`, and `pandas`.
-*(See the `setup_environment.py` script in the repo for automated dependency handling)*.
+![Sample Detections](docs/figures/val_batch0_pred.jpg)
+*Figure 1: Example YOLO11m instance segmentation masks on Alexander-stained pollen grains.*
 
 ---
 
-## 🏷️ Labeling Guide (Roboflow)
+## 🧠 Machine Learning Architecture & Model Performance
 
-We use **Roboflow** for annotating datasets. If you are contributing to the dataset, please adhere to strict **Alexander Stain** criteria.
+### Model Specification
+* **Backbone & Head:** YOLO11 Medium Instance Segmentation (`yolo11m-seg.pt`), with polygon mask output heads.
+* **Input Resolution:** $640 \times 640$ pixels (extracted with minimal overlap from whole-slide micrographs).
+* **Training Schedule:** 300 epochs on Kubernetes NVIDIA GPU cluster; Cosine annealing learning rate; Mosaic augmentation active for 290 epochs and disabled during the final 10 epochs to preserve boundary fidelity.
+* **Optimal Operating Threshold:** Confidence $\mathbf{\text{CONF} = 0.55}$, Non-Maximum Suppression $\mathbf{\text{IOU} = 0.70}$ (derived from peak mask $F_1 = 0.88$).
 
-**Source:** *Pollen Viability Staining Guide (Alexander Stain)*
+### Validation Metrics (at 300 Epochs)
 
-### 1. Class: `viable` (Target)
-**Definition:** Pollen grains that contain healthy, full cytoplasm and are capable of fertilization.
+| Metric | Overall | Viable (Class 0) | Non-Viable (Class 1) | Intermediate (Class 2) |
+| :--- | :---: | :---: | :---: | :---: |
+| **Box mAP@50** | **0.939** | 0.982 | 0.933 | 0.901 |
+| **Box mAP@50-95** | **0.687** | 0.793 | 0.655 | 0.612 |
+| **Mask mAP@50** | **0.937** | 0.982 | 0.927 | 0.901 |
+| **Mask mAP@50-95** | **0.573** | 0.697 | 0.550 | 0.472 |
+| **Precision** | **0.865** | 0.957 | 0.840 | 0.798 |
+| **Recall** | **0.898** | 0.975 | 0.915 | 0.804 |
 
-* **Color:** Must be **Magenta-Red** or **Dark Purple**.
-* **Content:** The grain appears "full" and dense, indicating the presence of cytoplasm.
-* **Shape:** Typically regular, round, or plump.
-* **Rule of Thumb:** If it is dark red/purple and looks "full," label it **Viable**.
+### Confusion Matrix & Error Breakdown
 
-> **Example:** ![Viable Example](path/to/viable_example.jpg) *(Add your example image here)*
+![Confusion Matrix](docs/figures/confusion_matrix_normalized.png)
+*Figure 2: Normalized confusion matrix at the validation checkpoint.*
 
-### 2. Class: `non_viable` (Target)
-**Definition:** Pollen grains that are aborted, empty, or dead. They lack the cytoplasm required for fertilization.
-
-* **Color:** Primarily **Pale**.
-* **Content:** Appears empty; only the outer cell wall is visible.
-* **Shape:** Often shrivelled, collapsed, or significantly smaller than viable grains.
-* **Intermediate Cases:**
-    * **Pale Pink / Orange:** Grains that are very pale or only partially stained red are likely aborted. Label as **Non-Viable** unless they are fully dark.
-    * **Empty Shells:** Transparent or faint outlines with no colour.
-
-> **Example:** ![Non-Viable Example](path/to/non_viable_example.jpg) *(Add your example image here)*
-
-### 3. Edge Cases & Rules
-* **Clusters:** If grains are touching, draw a separate box for **each individual grain**. Do not draw one big box around a clump.
-* **Cut-off Grains:** If >50% of the grain is visible at the image edge, label it. If <50% is visible, ignore it.
-* **Debris:** Do not label dirt, bubbles, or stain blobs. Only label clear pollen grains.
+* **Viable Grains:** **$97.3\%$ correct classification** ($652/670$ true viable grains). $0\%$ misclassified as non-viable, $<0.2\%$ classified as intermediate, and only $2.5\%$ missed as background.
+* **Non-Viable Grains:** **$91.5\%$ correct classification** ($54/59$ true non-viable grains). Extremely clean boundary between viable and non-viable grains ensures negligible contamination of viability ratios.
+* **Background Rejection:** Operating at $\text{CONF} = 0.55$ eliminates spurious background detections and staining precipitates.
 
 ---
 
-## 🏋️ Training (CESNET Cluster)
+## 📐 Measurement, Stitching & Artifact Filtration Methods
 
-Training is now fully automated using Kubernetes jobs managed by `deploy_training.sh`.
+Microscope slide analysis requires addressing tile boundary artifacts, optical scale conversion, and clump filtering:
 
-**Workflow:**
-1.  **Script:** `src/train_model.py` handles the entire pipeline.
-2.  **Data:** Automatically syncs datasets and staging areas from S3.
-3.  **Configuration:**
-    *   **Epochs:** 300
-    *   **Image Size:** 640px
-    *   **Batch Size:** 16
-    *   **Augmentations:** Full rotation (180°), flips, and Mosaic (1.0).
-4.  **Process:** Merges new staged data, generates synthetic negatives, and trains YOLOv8x.
-5.  **Backup:** Results (weights, logs, visualizations) are automatically uploaded back to S3.
-6.  **Dynamic Save Directory Handling:** The script automatically captures the exact location where YOLOv8 saves training outputs (e.g., `runs/detect` vs `runs/segment`), ensuring that S3 backups always find the correct files regardless of YOLO version or task defaults.
+### 1. Optical Calibration
+All slides are scanned on a calibrated **Zeiss Axio Scan.Z1** slide scanner under standardized optical magnification:
+$$\text{Pixel Scale} = 0.877242\ \mu\text{m / pixel}$$
+$$\text{Area Scale} = (0.877242)^2 \approx 0.769554\ \mu\text{m}^2\text{ / pixel}^2$$
 
-**To Run:**
+Individual grain cross-sectional area $A$ is calculated via Green's theorem on polygon vertices, and equivalent circular diameter $D$ is computed as:
+$$D = 2 \cdot \sqrt{\frac{A}{\pi}}$$
+
+### 2. Spatial Boundary Stitching Across Tile Cuts
+When large slide images are diced into $640\times640$ px tiles, pollen grains falling on grid cutlines are severed into two or more parts across adjacent tiles.
+* The analyzer projects all tile-local polygon coordinates into a continuous global slide coordinate space:
+  $$(X_{\text{global}}, Y_{\text{global}}) = (X_{\text{tile}} + \Delta X_{\text{offset}}, Y_{\text{tile}} + \Delta Y_{\text{offset}})$$
+* An efficient $O(N)$ spatial grid hash indexes grains touching tile borders. Polygons meeting collinearity and spatial adjacency criteria ($dx \le 6\text{ px}$, overlap $> 8\text{ px}$) are merged into a single restored polygon.
+
+### 3. Whole-Scan Margin Exclusion
+Pollen grains lying on the outer margin of the entire slide scan are partially truncated by the camera field boundary.
+* **Rule:** Grains touching the whole-scan edge or exhibiting straight cut edges are **counted** for slide abundance and viability %, but flagged with `valid_for_size = False` to prevent distorting diameter distributions.
+
+### 4. Clumping & Overlap Filtration
+Overlapping grains and multi-grain clusters introduce positive size outliers:
+* **Solidity Filter:** Convex hull solidity $< 0.88$ identifies concave multi-grain boundaries.
+* **Aspect Ratio Filter:** Major-to-minor axis ratio $> 1.35$ identifies elongated doublets.
+* Both are flagged (`is_clump = True`) and isolated from single-grain morphometric comparisons.
+
+### 5. Confounder & Experimental Metadata Integration
+Every slide name (e.g. `20260724_0001_27-3-B_AA025_n4x_Pollen_viability.czi`) embeds:
+* `plant_ID` (`27-3-B`)
+* `population` (`AA025`)
+* `cytotype` (`n4x` = neo-4x, `2x` = natural 2x, `s2x` = synthetic 2x, `4x` = natural 4x)
+* Slide scan date (`20260724`) and replication status (`rep`).
+
+The pipeline automatically joins each grain with the master experimental register ([`metadata/plant_metadata_540.csv`](metadata/plant_metadata_540.csv)), attaching cultivation runs, chamber numbers, tray coordinates, and parental accessions for mixed-effects linear modeling.
+
+---
+
+## 📊 Preliminary Biological Findings
+
+Testing the calibrated pipeline on representative slides demonstrated a clear genome duplication signal (**cell gigas effect**):
+
+| Cytotype / Ploidy | Slide ID | Viable Median Area ($\mu\text{m}^2$) | Viable Median Diameter ($\mu\text{m}$) | Viability % | Total Grains Counted |
+| :--- | :--- | :---: | :---: | :---: | :---: |
+| **Natural Diploid (2x)** | `20260724_0006_27-3-D` | **$306.1\ \mu\text{m}^2$** | **$19.74\ \mu\text{m}$** | **$93.8\%$** | 1,482 |
+| **Neo-Tetraploid (n4x)** | `20260724_0001_27-3-B` | **$540.8\ \mu\text{m}^2$** | **$26.25\ \mu\text{m}$** | **$90.2\%$** | 1,168 |
+
+![Ploidy Comparison](docs/figures/ploidy_size_comparison.png)
+*Figure 3: Equivalent diameter distributions for viable pollen grains in natural diploid (2x) vs newly synthesized tetraploid (n4x).*
+
+### Key Observations:
+1. **Size Scaling:** Neo-tetraploid viable pollen grains exhibit a **$1.33\times$ increase in linear diameter** and a **$1.77\times$ increase in 2D cross-sectional area**, translating to approximately a **$2.38\times$ volumetric increase**, closely conforming to the theoretical doubling expected under whole-genome duplication (WGD).
+2. **Distinct Modality:** Clean separation between 2x and n4x size peaks validates the ability to detect unreduced gametes ($2n$ pollen) and ploidy shifts in mixed pollinations.
+
+---
+
+## 🚀 Running the Pipeline
+
+### 1. Local Environment Setup
 ```bash
-sudo ./deploy_training.sh
+git clone https://github.com/Pollination-Ecology-Group/Pollen_viability.git
+cd Pollen_viability
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+### 2. Running Sizing & Stitching on Detection Outputs
+Run the unified analyzer locally on cached or downloaded slide detection JSONs:
+```bash
+# Analyze a specific slide
+python src/pollen_size_analyzer.py --slide-name 20260724_0001_27-3-B_AA025_n4x_Pollen_viability
+
+# Batch process all slides from S3 and export master tables
+python src/pollen_size_analyzer.py --all-slides --output-dir output/size_analysis
+```
+
+Outputs generated:
+* `output/size_analysis/pollen_slide_summaries.csv`: Slide-level summary (counts, viability %, median sizes).
+* `output/size_analysis/pollen_grain_measurements.csv`: Individual grain-level table with morphological parameters and joined plant factors.
+
+### 3. Batch GPU Detection on Kubernetes
+To run batch inference on the full dataset stored on S3:
+```bash
+# 1. Update/apply detection script ConfigMap
+kubectl create configmap detect-script --from-file=run_detections_s3.py=src/run_detections_s3.py -n stenc-ns --dry-run=client -o yaml | kubectl apply -f -
+
+# 2. Deploy batch GPU job and email watcher
+kubectl apply -f k8s/pollen-detect-job.yaml
+kubectl apply -f k8s/pollen-detect-email-watcher.yaml
+
+# 3. Monitor live progress
+kubectl logs -l job-name=pollen-detect-job -n stenc-ns -f
+```
+
+### 4. Interactive Quality Control (QC) & Validation Web Apps
+To achieve publishable scientific rigor, human quality control and morphometry audits are conducted through lightweight web apps hosted directly on the CERIT-SC Kubernetes cluster:
+
+| Application | Live Cluster URL | Description | Authorized Users |
+| :--- | :--- | :--- | :---: |
+| 🌸 **Pollen Viability QC** | [viability-review-stenc.dyn.cloud.e-infra.cz](https://viability-review-stenc.dyn.cloud.e-infra.cz) | Blinded slide tile review. Correct false detections, add missed grains, quantify human vs. model viability bias. | `jakub`, `eliska` |
+| 🌿 **Stomata Precision Review** | [stomata-review-stenc.dyn.cloud.e-infra.cz](https://stomata-review-stenc.dyn.cloud.e-infra.cz) | Companion vegetative morphometry tool. Audits guard cell and pore calipers to cross-validate the gigas effect. | Open / Lab access |
+
+---
+
+## 📁 Repository Structure
+
+```text
+├── README.md                           # Main documentation & pipeline overview
+├── _quarto.yml                         # Quarto website & book configuration
+├── index.qmd                           # Quarto web documentation homepage
+├── best.pt                             # Current production weights (YOLO11m-seg)
+├── metadata/
+│   └── plant_metadata_540.csv          # Master registry for the 540 experimental plants
+├── src/
+│   ├── pollen_size_analyzer.py         # Spatial stitcher, size analyzer, & metadata joiner
+│   ├── run_detections_s3.py            # High-throughput batch GPU inference script
+│   └── infer_on_czi.py                 # Direct CZI reader & inference utility
+├── k8s/
+│   ├── pollen-detect-job.yaml          # GPU detection job manifest (Blackwell/A100)
+│   ├── pollen-detect-email-watcher.yaml# Email watcher job sending status alerts
+│   └── pollen-train-job.yaml           # Model training job manifest
+├── docs/
+│   ├── figures/                        # Metric curves, confusion matrices, and plots
+│   ├── pollen_viability_project_summary.qmd # Collaborator executive summary source
+│   └── pollen_viability_project_summary.pdf # Rendered PDF summary report
+├── outcomes/
+│   └── pollen_viability_report.qmd     # Statistical reporting & ploidy modeling
+└── vignettes/
+    ├── pipeline_and_methods.md         # Detailed mathematical & algorithmic methods
+    ├── routine_detection_manual.md     # Lab operator detection manual
+    ├── CESNET_connection_guide.md      # Cluster & S3 connection guide
+    └── kubernetes_workflow.md          # K8s job execution guide
 ```
 
 ---
 
-## 🔍 Routine Detection
-
-Detection is handled by `src/run_detection.py` and deployed via `deploy_pollen.sh`.
-
-👉 **[Routine Detection Manual](/vignettes/routine_detection_manual.md)**
-
-**Quickstart Pipeline:**
-1.  Upload images via Cyberduck to the S3 Bucket `detect_images/` folder.
-2.  Deploy the job:
-```bash
-sudo ./deploy_pollen.sh
-```
-3.  Sync results locally (automatic or manual):
-```bash
-python3 src/sync_results.py
-```
+## 📄 Collaborator Summary Report
+A standalone, formatted PDF summary report is prepared for co-authors and collaborators:
+* **[Download Collaborator Summary PDF](docs/pollen_viability_project_summary.pdf)**
 
 ---
-
-**License:** MIT
-
+*Maintained by the Pollination Ecology Group (PEG).*

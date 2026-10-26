@@ -1,0 +1,90 @@
+# Pollen Viability QC review app — separate from the Pollen_latitude app (pollen-review).
+# Deploy:  bash deploy_viability_review.sh   (creates the password secret + source ConfigMap first)
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: viability-review
+  namespace: stenc-ns
+  labels: {app: viability-review, project: pollen-viability}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: viability-review}
+  template:
+    metadata:
+      labels: {app: viability-review, project: pollen-viability}
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+      - name: app
+        image: python:3.12.7-slim
+        workingDir: /app
+        command: ["sh", "-c", "pip install --user --quiet --no-warn-script-location flask==3.0.3 boto3==1.35.36 waitress==3.0.0 && python -m waitress --port=8080 --threads=8 app:app"]
+        ports: [{containerPort: 8080}]
+        env:
+        - {name: HOME, value: /tmp}
+        - {name: S3_ENDPOINT, value: "https://s3.cl4.du.cesnet.cz"}
+        - {name: S3_BUCKET, value: "peg-bucket"}
+        - {name: REVIEW_PREFIX, value: "Ostatni/Pollen_viability/Review"}
+        - {name: CONF, value: "0.55"}
+        - name: REVIEW_USERS_JSON
+          valueFrom: {secretKeyRef: {name: viability-review-users, key: users.json}}
+        - name: AWS_ACCESS_KEY_ID
+          valueFrom: {secretKeyRef: {name: s3-credentials, key: access-key}}
+        - name: AWS_SECRET_ACCESS_KEY
+          valueFrom: {secretKeyRef: {name: s3-credentials, key: secret-key}}
+        readinessProbe:
+          httpGet: {path: /healthz, port: 8080}
+          initialDelaySeconds: 20
+          periodSeconds: 10
+        resources:
+          requests: {cpu: 100m, memory: 256Mi}
+          limits: {cpu: "1", memory: 1Gi}
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities: {drop: ["ALL"]}
+        volumeMounts:
+        - {name: app, mountPath: /app}
+        - {name: tmp, mountPath: /tmp}
+      volumes:
+      - name: app
+        configMap: {name: viability-review-src}
+      - name: tmp
+        emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: viability-review
+  namespace: stenc-ns
+spec:
+  selector: {app: viability-review}
+  ports: [{port: 80, targetPort: 8080}]
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: viability-review
+  namespace: stenc-ns
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    kubernetes.io/tls-acme: "true"
+    # Authentication is done inside the app (per-reviewer passwords = identity),
+    # because the ingress strips the Authorization header before it reaches the pod.
+spec:
+  ingressClassName: nginx
+  tls:
+  - hosts: [viability-review-stenc.dyn.cloud.e-infra.cz]
+    secretName: viability-review-stenc-dyn-cloud-e-infra-cz-tls
+  rules:
+  - host: viability-review-stenc.dyn.cloud.e-infra.cz
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service: {name: viability-review, port: {number: 80}}

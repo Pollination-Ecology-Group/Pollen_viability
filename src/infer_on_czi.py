@@ -37,11 +37,11 @@ S3_ENDPOINT  = os.environ.get('S3_ENDPOINT',  'https://s3.cl4.du.cesnet.cz')
 AWS_ACCESS   = os.environ.get('AWS_ACCESS_KEY_ID',  '1Y920BKC0SAWPNDE8RD6')
 AWS_SECRET   = os.environ.get('AWS_SECRET_ACCESS_KEY',
                                'SnKMQbJ8mRKVboPDymkYFaFTz7VBxysrsWwJRoMD')
-S3_BUCKET    = os.environ.get('S3_BUCKET', 'bucket')
+S3_BUCKET    = os.environ.get('S3_BUCKET', 'peg-bucket')
 S3_CZI_PFX  = 'Ostatni/Pollen_viability/Source'
 MODEL_PATH   = os.environ.get('MODEL_PATH',
                str(Path(__file__).parent.parent / 'best.pt'))
-S3_MODEL_KEY = 'Ostatni/Pollen_viability/trained_models/pollen_train_20260923_1457/weights/best.pt'
+S3_MODEL_KEY = 'Ostatni/Pollen_viability/trained_models/pollen_train_20261023_0756/weights/best.pt'
 
 TILE_SIZE    = 640
 OVERLAP      = 0.1          # 10% overlap — same as preprocess_czi.py
@@ -210,7 +210,8 @@ def run(args):
                         'class': cls_id,
                         'class_name': CLASS_MAP.get(cls_id, (f'cls{cls_id}',))[0],
                         'confidence': float(confs_v[i]),
-                        'bbox_tile': [float(v) for v in boxes[i]]
+                        'bbox_tile': [float(v) for v in boxes[i]],
+                        'mask_xyn': masks_v[i].tolist() if masks_v is not None and i < len(masks_v) else []
                     })
 
                 # Draw on tile and paste back into mosaic
@@ -260,7 +261,35 @@ def run(args):
                                     for k, v in cls_totals.items()},
                    'tiles': detections}, f, indent=2)
 
-    # ── 8. Summary ────────────────────────────────────────────────────────────
+    # ── 8. Robust Stitching & Size Analysis ───────────────────────────────────
+    size_res = None
+    try:
+        from pollen_size_analyzer import analyze_slide_detections, export_particles_csv
+        det_data_list = []
+        for t in detections:
+            ty = t['tile_y']
+            tx = t['tile_x']
+            b_list = []
+            m_list = []
+            for d in t['detections']:
+                bx = d['bbox_tile']
+                b_list.append([bx[0], bx[1], bx[2], bx[3], d['confidence'], d['class']])
+                m_list.append(d.get('mask_xyn', []))
+            det_data_list.append({
+                'tile_name': f"tile_{ty}_{tx}",
+                'y_offset': ty,
+                'x_offset': tx,
+                'boxes': b_list,
+                'masks_xyn': m_list
+            })
+        size_res = analyze_slide_detections(det_data_list, slide_name, conf_thresh=args.conf)
+        csv_path = out_dir / 'grain_measurements.csv'
+        export_particles_csv(size_res['particles'], size_res['metadata'], str(csv_path))
+        print(f"📊 Grain measurements & sizes saved → {csv_path}")
+    except Exception as e:
+        print(f"⚠️ Size analysis failed: {e}")
+
+    # ── 9. Summary ────────────────────────────────────────────────────────────
     summary_lines = [
         f"═══════════════════════════════════════════════",
         f"  Pollen Viability — Inference Summary",
@@ -270,12 +299,35 @@ def run(args):
         f"  Tiles   : {total_tiles}  (conf≥{args.conf})",
         f"  Elapsed : {elapsed:.0f}s  ({total_tiles/elapsed:.1f} tiles/s)",
         f"",
-        f"  Total grains detected : {total_grains}",
+        f"  Raw detections (pre-stitch) : {total_grains}",
     ]
     for cls_id in sorted(cls_totals):
         name = CLASS_MAP.get(cls_id, (f'cls{cls_id}',))[0]
         pct  = cls_totals[cls_id] / total_grains * 100 if total_grains else 0
         summary_lines.append(f"    {name:<15}: {cls_totals[cls_id]:5d}  ({pct:.1f}%)")
+
+    if size_res:
+        s = size_res['summary']
+        summary_lines.extend([
+            f"",
+            f"  ── Consolidated Grains (Post-Stitch & Dedup) ──",
+            f"  Total consolidated grains : {s['total_grains']}",
+            f"  Viable count              : {s['viable_count']} ({s['viability_pct']:.1f}%)",
+            f"  Non-viable count          : {s['non_viable_count']}",
+        ])
+        v = s['classes'].get('viable', {})
+        if v.get('count_valid_size', 0) > 0:
+            summary_lines.extend([
+                f"  Viable Size (n={v['count_valid_size']})        : Median Diam = {v['median_diameter_um']:.1f} µm (IQR {v['q25_diameter_um']:.1f}-{v['q75_diameter_um']:.1f} µm)",
+                f"                              : Median Area = {v['median_area_um2']:.0f} µm² (Mean {v['mean_area_um2']:.0f} ± {v['std_area_um2']:.0f})",
+            ])
+        nv = s['classes'].get('non_viable', {})
+        if nv.get('count_valid_size', 0) > 0:
+            summary_lines.extend([
+                f"  Non-Viable Size (n={nv['count_valid_size']})    : Median Diam = {nv['median_diameter_um']:.1f} µm",
+                f"                              : Median Area = {nv['median_area_um2']:.0f} µm²",
+            ])
+
     if total_grains > 1:
         viab  = cls_totals.get(0, 0)
         total = cls_totals.get(0, 0) + cls_totals.get(1, 0)
@@ -297,6 +349,6 @@ if __name__ == '__main__':
                      help='Substring to match against CZI filename on S3 (e.g. "27-3-B_AA025_n4x")')
     grp.add_argument('--key',     type=str,
                      help='Full S3 key of the CZI file')
-    parser.add_argument('--conf',  type=float, default=0.10,
-                        help='Confidence threshold (default: 0.10)')
+    parser.add_argument('--conf',  type=float, default=0.55,
+                        help='Confidence threshold (default: 0.55)')
     run(parser.parse_args())

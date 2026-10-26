@@ -1,145 +1,117 @@
-# 🌸 Pollen Viability Detector (YOLOv8)
+---
+title: "🌸 Pollen Viability & Morphometry Analysis Pipeline"
+subtitle: "Automated Deep-Learning Segmentation, Sizing, and Ploidy Trait Profiling"
+author: "Pollination Ecology Group (PEG)"
+date: last-modified
+format:
+  html:
+    theme: cosmo
+    toc: true
+    toc-depth: 3
+    code-fold: show
+---
 
-![Python](https://img.shields.io/badge/Python-3.8%2B-blue)
-![YOLOv8](https://img.shields.io/badge/Model-YOLOv8-green)
-![Status](https://img.shields.io/badge/Status-Active-success)
+::: {.callout-note}
+## Project Overview
+This repository provides an end-to-end framework for automating pollen viability scoring and cellular morphometry (cross-sectional area, diameter, circularity) on whole-slide digital scans (**Zeiss Axio Scan**, Alexander Staining) across cytogenetic cohorts (**natural 2x, synthetic 2x, neo-tetraploid 4x, and natural 4x**).
+:::
 
-<img width="1332" height="1007" alt="image" src="https://github.com/user-attachments/assets/3410b492-e5e1-4c50-bd0d-1ddecb7e4805" />
+## 🌟 Key Highlights
 
-An automated computer vision pipeline for assessing pollen viability using the **Alexander Stain** technique. This project leverages YOLOv8 to detect and classify pollen grains as either **Viable** (Magenta/Purple) or **Non-Viable** (Green/Shriveled) from high-resolution microscope images.
-
-## 📌 Table of Contents
-- [🌸 Pollen Viability Detector (YOLOv8)](#-pollen-viability-detector-yolov8)
-  - [📌 Table of Contents](#-table-of-contents)
-  - [🔭 Project Overview](#-project-overview)
-  - [🔬 Methodology](#-methodology)
-    - [Key Strategies used in this model:](#key-strategies-used-in-this-model)
-  - [⚙️ Workflow Setup](#️-workflow-setup)
-    - [1. Connecting to CESNET](#1-connecting-to-cesnet)
-    - [2. Kubernetes Workflow](#2-kubernetes-workflow)
-    - [2. Environment Installation](#2-environment-installation)
-  - [🏷️ Labeling Guide (Roboflow)](#️-labeling-guide-roboflow)
-    - [1. Class: `viable` (Target)](#1-class-viable-target)
-    - [2. Class: `non_viable` (Target)](#2-class-non_viable-target)
-    - [3. Edge Cases \& Rules](#3-edge-cases--rules)
-  - [🏋️ Training (CESNET Cluster)](#️-training-cesnet-cluster)
-  - [🔍 Routine Detection](#-routine-detection)
+* **High-Accuracy Segmentation:** Powered by **YOLO11 Medium Segmentation (`yolo11m-seg`)** achieving **Mask mAP50 = 0.937** and **Box mAP50 = 0.939** across viable, non-viable, and intermediate classes.
+* **Spatial Hash-Grid Stitcher:** Reunites pollen grains that were severed across adjacent $640\times640$ px tile cuts, preventing fragmented double-counting.
+* **Rigorous Artifact Filtration:** Automatically detects and isolates multi-grain clumps and flags scan-margin cutoffs (counted for viability %, excluded from size statistics).
+* **Calibrated Micrometric Sizing:** Optical calibration at $0.877242\ \mu\text{m/px}$ ($0.76955\ \mu\text{m}^2/\text{px}^2$) converts polygon pixel masks into real physical units.
+* **Master Experimental Metadata Linkage:** Automated joining with the 540-plant master registry (`plant_metadata_540.csv`), integrating cytotypes, maternal accessions, growth chambers, and cultivation runs.
 
 ---
 
-## 🔭 Project Overview
-This tool automates the tedious process of counting pollen grains on microscope slides. It uses deep learning to replicate the judgment of a biologist following the Alexander Stain protocol.
+## 🔬 Alexander Staining Criteria
 
-* **Input:** High-resolution microscope images (TIF/JPG).
-* **Output:** Annotated images with bounding boxes, CSV summaries of counts, and viability percentages.
-* **Performance:** Optimized for large, crowded scans using tiling and global Non-Maximum Suppression (NMS).
+Alexander staining distinguishes functional, cytoplasm-replete pollen grains from sterile, aborted grains:
 
----
+| Class | Staining Profile | Cytoplasm & Wall Status | Biological Fertility |
+| :--- | :--- | :--- | :--- |
+| **Viable (Class 0)** | **Magenta / Deep Purple** | Dense protoplasm retaining Acid Fuchsin | Functional, fertile gametophyte |
+| **Non-Viable (Class 1)** | **Pale Green / Faint Blue** | Protoplasm absent; only exine wall stained | Aborted, sterile grain |
+| **Intermediate (Class 2)** | **Mottled Pink / Orange** | Incompletely filled or degraded protoplasm | Sub-viable / arrested grain |
 
-## 🔬 Methodology
-The project runs on the **CESNET MetaCentrum** high-performance computing cluster, utilizing NVIDIA A40/A100 GPUs for rapid training and inference.
-
-### Key Strategies used in this model:
-1.  **Mosaic Disabling:** We disable mosaic augmentation for the final 10 epochs of training. This stabilizes the training loss and prevents the model from hallucinating pollen in empty space (ghost detections).
-2.  **High-Res Tiling:** For inference, large microscope scans (>2000px) are sliced into overlapping tiles (1600x1600px). This prevents the "Squish Effect," ensuring small grains retain their texture and are not lost during resizing.
-3.  **Border Patrol:** To prevent double-counting grains on tile edges, we implement a custom logic that ignores edge detections, relying on the neighboring tile to capture the grain centrally.
+![Alexander Stained Detections](docs/figures/val_batch0_pred.jpg)
 
 ---
 
-## ⚙️ Workflow Setup
+## 🧠 Model Performance & Validation Checkpoints
 
-This project has migrated from Google Colab to the **CESNET Cluster** for better performance and data privacy.
+Trained for 300 epochs on Kubernetes NVIDIA GPUs with mosaic augmentations stabilized in the final 10 epochs:
 
-### 1. Connecting to CESNET
-Detailed instructions on how to set up your environment, connect via SSH, and manage files can be found in our connection guide:
+| Class | Box mAP@50 | Mask mAP@50 | Precision | Recall |
+| :--- | :---: | :---: | :---: | :---: |
+| **All Classes** | **0.939** | **0.937** | **0.865** | **0.898** |
+| Viable (Class 0) | 0.982 | 0.982 | 0.957 | 0.975 |
+| Non-Viable (Class 1) | 0.933 | 0.927 | 0.840 | 0.915 |
+| Intermediate (Class 2) | 0.901 | 0.901 | 0.798 | 0.804 |
 
-👉 **[CESNET Connection Guide](/vignettes/CESNET_connection_guide.md)** 
+::: {layout-ncol=2}
+![Normalized Confusion Matrix](docs/figures/confusion_matrix_normalized.png)
 
-### 2. Kubernetes Workflow
-For instructions on running detection and training jobs:
-👉 **[Kubernetes Workflow Guide](/vignettes/kubernetes_workflow.md)** 
+![Training Metric Trajectory](docs/figures/results.png)
+:::
 
-### 2. Environment Installation
-The environment uses a custom Jupyter kernel. Dependencies include `ultralytics`, `opencv-python-headless`, and `pandas`.
-*(See the `setup_environment.py` script in the repo for automated dependency handling)*.
-
----
-
-## 🏷️ Labeling Guide (Roboflow)
-
-We use **Roboflow** for annotating datasets. If you are contributing to the dataset, please adhere to strict **Alexander Stain** criteria.
-
-**Source:** *Pollen Viability Staining Guide (Alexander Stain)*
-
-### 1. Class: `viable` (Target)
-**Definition:** Pollen grains that contain healthy, full cytoplasm and are capable of fertilization.
-
-* **Color:** Must be **Magenta-Red** or **Dark Purple**.
-* **Content:** The grain appears "full" and dense, indicating the presence of cytoplasm.
-* **Shape:** Typically regular, round, or plump.
-* **Rule of Thumb:** If it is dark red/purple and looks "full," label it **Viable**.
-
-> **Example:** ![Viable Example](path/to/viable_example.jpg) *(Add your example image here)*
-
-### 2. Class: `non_viable` (Target)
-**Definition:** Pollen grains that are aborted, empty, or dead. They lack the cytoplasm required for fertilization.
-
-* **Color:** Primarily **Pale**.
-* **Content:** Appears empty; only the outer cell wall is visible.
-* **Shape:** Often shrivelled, collapsed, or significantly smaller than viable grains.
-* **Intermediate Cases:**
-    * **Pale Pink / Orange:** Grains that are very pale or only partially stained red are likely aborted. Label as **Non-Viable** unless they are fully dark.
-    * **Empty Shells:** Transparent or faint outlines with no colour.
-
-> **Example:** ![Non-Viable Example](path/to/non_viable_example.jpg) *(Add your example image here)*
-
-### 3. Edge Cases & Rules
-* **Clusters:** If grains are touching, draw a separate box for **each individual grain**. Do not draw one big box around a clump.
-* **Cut-off Grains:** If >50% of the grain is visible at the image edge, label it. If <50% is visible, ignore it.
-* **Debris:** Do not label dirt, bubbles, or stain blobs. Only label clear pollen grains.
+At the operational threshold $\text{CONF} = 0.55$, **$97.3\%$ of viable grains** and **$91.5\%$ of non-viable grains** are accurately classified, with background false alarms reduced to near-zero.
 
 ---
 
-## 🏋️ Training (CESNET Cluster)
+## 📊 Ploidy Sizing Comparison (Gigas Effect)
 
-Training is now fully automated using Kubernetes jobs managed by `deploy_training.sh`.
+Preliminary validation on diploid (2x) vs neo-tetraploid (n4x) plants confirms proportional cell-size scaling with genome duplication:
 
-**Workflow:**
-1.  **Script:** `src/train_model.py` handles the entire pipeline.
-2.  **Data:** Automatically syncs datasets and staging areas from S3.
-3.  **Configuration:**
-    *   **Epochs:** 300
-    *   **Image Size:** 640px
-    *   **Batch Size:** 16
-    *   **Augmentations:** Full rotation (180°), flips, and Mosaic (1.0).
-4.  **Process:** Merges new staged data, generates synthetic negatives, and trains YOLOv8x.
-5.  **Backup:** Results (weights, logs, visualizations) are automatically uploaded back to S3.
+::: {layout-ncol=1}
+![Ploidy Size Distributions](docs/figures/ploidy_size_comparison.png)
+:::
 
-**To Run:**
-```bash
-sudo ./deploy_training.sh
-```
+* **Diploid (2x):** Median viable area = **$306.1\ \mu\text{m}^2$**, Median diameter = **$19.74\ \mu\text{m}$**, Viability = **$93.8\%$**.
+* **Neo-Tetraploid (n4x):** Median viable area = **$540.8\ \mu\text{m}^2$**, Median diameter = **$26.25\ \mu\text{m}$**, Viability = **$90.2\%$**.
+* **Scaling Ratio:** Linear diameter ratio = **$1.33\times$**; 3D volume ratio $\approx \mathbf{2.38\times}$, matching the theoretical doubling expected from whole-genome duplication.
 
 ---
 
-## 🔍 Routine Detection
+## 🔍 Interactive QC & Human Validation Apps
 
-Detection is handled by `src/run_detection.py` and deployed via `deploy_pollen.sh`.
+To guarantee rigorous data integrity for scientific publication, blinded human quality control and morphometry verification portals are hosted live on the CERIT-SC Kubernetes cluster:
 
-👉 **[Routine Detection Manual](/vignettes/routine_detection_manual.md)**
+::: {.grid}
 
-**Quickstart Pipeline:**
-1.  Upload images via Cyberduck to the S3 Bucket `detect_images/` folder.
-2.  Deploy the job:
-```bash
-sudo ./deploy_pollen.sh
-```
-3.  Sync results locally (automatic or manual):
-```bash
-python3 src/sync_results.py
-```
+::: {.g-col-12 .g-col-md-6}
+### 🌸 [Pollen Viability QC Review App](https://viability-review-stenc.dyn.cloud.e-infra.cz){target="_blank"}
+* **Live Cluster URL:** [`https://viability-review-stenc.dyn.cloud.e-infra.cz`](https://viability-review-stenc.dyn.cloud.e-infra.cz){target="_blank"}
+* **Objective:** Blinded human validation of automated pollen viability detections across experimental cohorts (`nat_2x`, `ory_2x`, `neo_4x`, `nat_4x`).
+* **Operator Features:**
+  - Fast keyboard shortcuts: toggle outlines (<kbd>M</kbd>), hold raw stain view (<kbd>Space</kbd>).
+  - Click false detections to reclassify (`viable`, `non-viable`, `intermediate`) or strike as non-pollen.
+  - Add missed grains (<kbd>⊕</kbd>) to correct under-detection.
+  - Real-time human vs. model viability percentage bias tracking and per-cytotype confusion analysis.
+* **Reviewers:** `jakub`, `eliska`.
+:::
+
+::: {.g-col-12 .g-col-md-6}
+### 🌿 [Stomata Morphometry QC App](https://stomata-review-stenc.dyn.cloud.e-infra.cz){target="_blank"}
+* **Live Cluster URL:** [`https://stomata-review-stenc.dyn.cloud.e-infra.cz`](https://stomata-review-stenc.dyn.cloud.e-infra.cz){target="_blank"}
+* **Objective:** Companion vegetative morphometry QC tool for leaf epidermis stomatal complexes.
+* **Operator Features:**
+  - Caliper measurement auditing for guard cell major/minor axes and stomatal pore dimensions.
+  - Side-by-side comparison of automated deep-learning contours against manual calipers.
+  - Cross-validates vegetative gigas traits alongside gametophytic pollen traits.
+:::
+
+:::
 
 ---
 
-**License:** MIT
+## 📚 Guides & Documentation
 
+Explore the detailed technical documentation:
+* [Methods & Computational Architecture](vignettes/pipeline_and_methods.md)
+* [Routine Detection Manual](vignettes/routine_detection_manual.md)
+* [Kubernetes Workflow Guide](vignettes/kubernetes_workflow.md)
+* [CESNET S3 Connection Guide](vignettes/CESNET_connection_guide.md)
+* [Collaborator Summary PDF](docs/pollen_viability_project_summary.pdf)

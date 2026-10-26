@@ -16,5 +16,12 @@ detect_images/
 visualizations.zip
 _site/
 
-# Local dataset exports — all data lives on S3
+# Local dataset exports & caches — all data lives on S3
 dataset/
+data/
+output/review/
+output/size_analysis/
+!output/size_analysis/pollen_slide_summaries.csv
+
+# QC review app passwords (never commit)
+review_app/.credentials

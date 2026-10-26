@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pollen Viability QC · Blind detection review</title>
+<meta name="description" content="Blinded human quality control of automated pollen viability detections across ploidy cytotypes.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0d1016; --panel:#151a23; --panel2:#1b2230; --line:#283142; --txt:#e6e9ef; --mut:#8b95a7;
+  --acc:#7c9cff; --v:#ff4fa3; --nv:#3ddc97; --im:#ffb547; --fp:#9aa3b2; --good:#3ddc97; --warn:#ffb547; --bad:#ff5d6c;
+}
+*{box-sizing:border-box} html,body{height:100%;margin:0} [hidden]{display:none !important}
+body{font-family:Inter,system-ui,sans-serif;background:radial-gradient(1200px 600px at 70% -10%,#1a2240 0%,var(--bg) 55%);color:var(--txt);font-size:14px}
+button{font:inherit;color:inherit;cursor:pointer;border:1px solid var(--line);background:var(--panel2);border-radius:9px;padding:7px 11px;transition:.15s}
+button:hover{border-color:var(--acc);transform:translateY(-1px)} button:disabled{opacity:.4;cursor:not-allowed;transform:none}
+kbd{font-size:11px;background:#0b0e14;border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;padding:0 5px;color:var(--mut)}
+header{display:flex;align-items:center;gap:18px;padding:12px 20px;border-bottom:1px solid var(--line);background:rgba(13,16,22,.7);backdrop-filter:blur(10px);position:sticky;top:0;z-index:5}
+header h1{font-size:16px;margin:0;font-weight:700;letter-spacing:.2px} header h1 span{color:var(--v)}
+.tabs{display:flex;gap:6px} .tabs button{border-radius:999px;padding:6px 14px} .tabs button.on{background:var(--acc);color:#0b0e14;border-color:var(--acc);font-weight:600}
+.grow{flex:1} .who{color:var(--mut)} .who b{color:var(--txt)}
+.prog{width:180px;height:8px;border-radius:9px;background:var(--panel2);overflow:hidden;border:1px solid var(--line)} .prog i{display:block;height:100%;background:linear-gradient(90deg,var(--acc),var(--v));transition:width .4s}
+main{display:grid;grid-template-columns:220px 1fr 320px;height:calc(100% - 57px)}
+aside{border-right:1px solid var(--line);overflow:auto;padding:10px}
+aside .it{display:flex;align-items:center;gap:8px;padding:7px 9px;border-radius:8px;cursor:pointer;color:var(--mut)}
+aside .it:hover{background:var(--panel)} aside .it.on{background:var(--panel2);color:var(--txt);outline:1px solid var(--line)}
+.dot{width:9px;height:9px;border-radius:50%;background:#3a4356;flex:none} .dot.good{background:var(--good)} .dot.minor{background:var(--warn)} .dot.poor{background:var(--bad)}
+.tag{font-size:10.5px;padding:1px 6px;border-radius:999px;border:1px solid var(--line);color:var(--mut)}
+.centre{display:flex;flex-direction:column;min-width:0}
+.bar{display:flex;align-items:center;gap:10px;padding:9px 14px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.bar label{display:flex;align-items:center;gap:6px;color:var(--mut)}
+.stagewrap{flex:1;overflow:auto;display:grid;place-items:center;padding:18px}
+.stage{position:relative;box-shadow:0 20px 60px rgba(0,0,0,.5);border-radius:6px;line-height:0}
+canvas{border-radius:6px;cursor:crosshair;display:block}
+.pop{position:absolute;z-index:4;min-width:200px;background:rgba(21,26,35,.96);backdrop-filter:blur(8px);border:1px solid var(--line);border-radius:12px;padding:8px;box-shadow:0 12px 40px rgba(0,0,0,.6);line-height:1.3;animation:pop .12s ease-out}
+@keyframes pop{from{opacity:0;transform:scale(.95)}to{opacity:1;transform:none}}
+.pop h4{margin:2px 4px 8px;font-size:12px;color:var(--mut);font-weight:600}
+.pop button{display:flex;width:100%;justify-content:space-between;align-items:center;margin:3px 0;background:transparent;border-color:transparent}
+.pop button:hover{background:var(--panel2);border-color:var(--line);transform:none}
+.sw{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:8px}
+.side{border-left:1px solid var(--line);overflow:auto;padding:16px;display:flex;flex-direction:column;gap:14px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+.card h3{margin:0 0 8px;font-size:12px;text-transform:uppercase;letter-spacing:.8px;color:var(--mut);font-weight:600}
+.kv{display:grid;grid-template-columns:1fr auto;gap:4px 10px} .kv span:nth-child(even){font-variant-numeric:tabular-nums;font-weight:600;text-align:right}
+.big{font-size:26px;font-weight:700;font-variant-numeric:tabular-nums}
+.verd{display:grid;grid-template-columns:repeat(3,1fr);gap:6px} .verd button{padding:9px 4px;font-weight:600}
+.verd button.on.good{background:rgba(61,220,151,.18);border-color:var(--good)} .verd button.on.minor{background:rgba(255,181,71,.18);border-color:var(--warn)} .verd button.on.poor{background:rgba(255,93,108,.18);border-color:var(--bad)}
+textarea{width:100%;min-height:58px;background:#0f131b;color:var(--txt);border:1px solid var(--line);border-radius:9px;padding:8px;font:inherit;resize:vertical}
+.save{width:100%;padding:12px;font-weight:700;background:linear-gradient(90deg,#5b7cff,#c94bff);border:none;color:#fff;border-radius:11px}
+.legend{display:flex;gap:14px;color:var(--mut);font-size:12.5px;align-items:center}
+.muted{color:var(--mut);font-size:12.5px;line-height:1.5}
+.page{grid-column:1/-1;overflow:auto;padding:26px 34px}
+.page h2{margin:0 0 6px} table{border-collapse:collapse;width:100%;margin:14px 0;font-variant-numeric:tabular-nums}
+th,td{padding:9px 10px;border-bottom:1px solid var(--line);text-align:right} th{color:var(--mut);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.5px} td:first-child,th:first-child{text-align:left}
+.pill{padding:2px 8px;border-radius:999px;font-weight:600} .pill.g{background:rgba(61,220,151,.15);color:var(--good)} .pill.a{background:rgba(255,181,71,.15);color:var(--warn)} .pill.r{background:rgba(255,93,108,.15);color:var(--bad)}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px}
+.help li{margin:6px 0;line-height:1.5} .toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--panel2);border:1px solid var(--line);padding:10px 16px;border-radius:10px;opacity:0;transition:.25s;pointer-events:none} .toast.show{opacity:1}
+.empty{display:grid;place-items:center;height:100%;color:var(--mut);text-align:center;line-height:1.7}
+</style>
+</head>
+<body>
+<header>
+  <h1>🌸 Pollen Viability <span>QC</span></h1>
+  <nav class="tabs">
+    <button id="tab-review" class="on" onclick="tab('review')">Review</button>
+    <button id="tab-results" onclick="tab('results')">Results</button>
+    <button id="tab-help" onclick="tab('help')">How to review</button>
+  </nav>
+  <a href="https://stomata-review-stenc.dyn.cloud.e-infra.cz" target="_blank" rel="noopener" style="text-decoration:none;display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:999px;border:1px solid var(--line);background:var(--panel2);color:var(--txt);font-size:12px;margin-left:6px;" title="Switch to Stomata QC Review App">🌿 Stomata Review ↗</a>
+  <div class="grow"></div>
+  <div class="prog" title="your progress"><i id="progbar" style="width:0"></i></div>
+  <div class="who" id="progtxt"></div>
+  <div class="who">Reviewer: <b id="me">…</b></div>
+</header>
+
+<main id="view-review">
+  <aside id="queue"></aside>
+  <section class="centre">
+    <div class="bar">
+      <button id="btn-prev" onclick="go(-1)" title="previous (←)">←</button>
+      <button id="btn-next" onclick="go(1)" title="next (→)">→</button>
+      <strong id="title">—</strong><span class="tag" id="density"></span><span class="tag" id="shared" hidden>shared tile</span>
+      <div class="grow"></div>
+      <label><input type="checkbox" id="chk-masks" checked onchange="S.showMasks=this.checked;draw()"> outlines <kbd>M</kbd></label>
+      <label>fill <input type="range" id="rng-op" min="0" max="0.7" step="0.05" value="0.25" oninput="S.opacity=+this.value;draw()"></label>
+      <label>zoom <input type="range" id="rng-zoom" min="1" max="3" step="0.1" value="1.4" oninput="S.zoom=+this.value;draw()"></label>
+    </div>
+    <div class="stagewrap" id="stagewrap">
+      <div class="stage" id="stage"><canvas id="cv"></canvas><div class="pop" id="pop" hidden></div></div>
+    </div>
+    <div class="bar legend">
+      <span><i class="sw" style="background:var(--v)"></i>viable</span>
+      <span><i class="sw" style="background:var(--nv)"></i>non-viable</span>
+      <span><i class="sw" style="background:var(--im)"></i>intermediate</span>
+      <span>dashed = your correction · ⊕ = missed grain you added · ✕ = not pollen</span>
+      <div class="grow"></div><span>hold <kbd>Space</kbd> to see the raw image</span>
+    </div>
+  </section>
+  <section class="side">
+    <div class="card">
+      <h3>Model on this tile</h3>
+      <div class="kv">
+        <span>Viable</span><span id="m-v">–</span>
+        <span>Non-viable</span><span id="m-nv">–</span>
+        <span>Intermediate</span><span id="m-i">–</span>
+        <span>Viability</span><span id="m-pct">–</span>
+      </div>
+    </div>
+    <div class="card">
+      <h3>Your corrections</h3>
+      <div class="kv">
+        <span>Not pollen (false)</span><span id="c-fp">0</span>
+        <span>Wrong class</span><span id="c-rc">0</span>
+        <span>Missed grains</span><span id="c-ms">0</span>
+        <span>Corrected viability</span><span id="c-pct">–</span>
+      </div>
+    </div>
+    <div class="card">
+      <h3>Overall verdict</h3>
+      <div class="verd">
+        <button class="good" onclick="setVerdict('good')">Good <kbd>A</kbd></button>
+        <button class="minor" onclick="setVerdict('minor')">Minor <kbd>S</kbd></button>
+        <button class="poor" onclick="setVerdict('poor')">Poor <kbd>D</kbd></button>
+      </div>
+      <label class="muted" style="display:flex;gap:8px;margin-top:10px"><input type="checkbox" id="chk-img" onchange="S.dirty=true"> Image problem (blur, staining, debris, bubble)</label>
+      <textarea id="comment" placeholder="Optional note…" oninput="S.dirty=true"></textarea>
+    </div>
+    <button class="save" id="btn-save" onclick="save()" disabled>Save &amp; next <kbd style="color:#fff;border-color:#fff6">Enter</kbd></button>
+    <p class="muted">Tiles are <b>blinded</b>: cytotype, plant and slide are hidden so expectations can't influence the check. Corrections are saved to S3 under your name.</p>
+  </section>
+</main>
+
+<main id="view-results" hidden><div class="page" id="results"></div></main>
+
+<main id="view-help" hidden><div class="page help">
+  <h2>How to review a tile (≈1–2 min each)</h2>
+  <p class="muted">You see a 640 × 640 px piece of a slide with the model's outlines. Your job is only to fix what is wrong — correct outlines need no action.</p>
+  <div class="grid2">
+    <div class="card"><h3>1 · Wrong outline</h3><ul>
+      <li><b>Click the outline</b> → choose the right class (viable / non-viable / intermediate) or <b>“Not a pollen grain”</b> (debris, bubble, stain blob).</li>
+      <li>One outline covering <b>two touching grains</b>: keep it, and add the second grain as missed.</li></ul></div>
+    <div class="card"><h3>2 · Missed grain</h3><ul>
+      <li><b>Click on the grain</b> where there is no outline → choose its class. A ⊕ marker appears.</li>
+      <li>Click a ⊕ marker again to remove it.</li>
+      <li>Ignore grains cut by the tile border if less than half is visible.</li></ul></div>
+    <div class="card"><h3>3 · Verdict & save</h3><ul>
+      <li><b>Good</b>: no or trivial errors · <b>Minor</b>: a few errors · <b>Poor</b>: systematic problem.</li>
+      <li>Tick <b>Image problem</b> if the image itself is bad. Then <b>Save &amp; next</b>.</li></ul></div>
+    <div class="card"><h3>Classes (Alexander stain)</h3><ul>
+      <li><span class="sw" style="background:var(--v)"></span><b>Viable</b>: full, dark magenta/purple.</li>
+      <li><span class="sw" style="background:var(--nv)"></span><b>Non-viable</b>: empty, pale green/blue, shrivelled.</li>
+      <li><span class="sw" style="background:var(--im)"></span><b>Intermediate</b>: partly stained / mottled.</li></ul></div>
+  </div>
+  <div class="card" style="margin-top:14px"><h3>Keyboard</h3><p class="muted">
+    <kbd>M</kbd> outlines on/off · hold <kbd>Space</kbd> raw image · <kbd>A</kbd>/<kbd>S</kbd>/<kbd>D</kbd> verdict · <kbd>Enter</kbd> save &amp; next · <kbd>←</kbd>/<kbd>→</kbd> navigate ·
+    in a menu: <kbd>1</kbd> viable, <kbd>2</kbd> non-viable, <kbd>3</kbd> intermediate, <kbd>X</kbd> not pollen, <kbd>C</kbd> correct, <kbd>Esc</kbd> close.</p></div>
+</div></main>
+<div class="toast" id="toast"></div>
+
+<script>
+const $ = s => document.querySelector(s);
+const COL = {viable:'#ff4fa3', non_viable:'#3ddc97', intermediate:'#ffb547'};
+const NAME = {viable:'Viable', non_viable:'Non-viable', intermediate:'Intermediate'};
+const RQ = new URLSearchParams(location.search).get('reviewer');
+const q = (extra='') => RQ ? `?reviewer=${encodeURIComponent(RQ)}${extra}` : (extra ? '?' + extra.slice(1) : '');
+const S = {items:[], idx:-1, cur:null, img:null, grains:[], marks:{}, missed:[], verdict:null, dirty:false,
+           zoom:1.4, showMasks:true, peek:false, opacity:0.25, hover:-1, t0:0};
+
+async function api(path, opts){ const r = await fetch(path + q(), opts); if(!r.ok) throw new Error(await r.text()); return r.json(); }
+function toast(t){ const el=$('#toast'); el.textContent=t; el.classList.add('show'); clearTimeout(el._t); el._t=setTimeout(()=>el.classList.remove('show'),1800); }
+
+async function init(){
+  const me = await api('/api/me'); $('#me').textContent = me.reviewer;
+  await loadQueue();
+  if(!S.items.length){ $('#stagewrap').innerHTML = `<div class="empty">No review set is published yet.<br><span class="muted">It will appear here once detection on all slides has finished.</span></div>`; return; }
+  const first = S.items.findIndex(i => !i.done); open(first >= 0 ? first : 0);
+}
+async function loadQueue(){
+  const d = await api('/api/items'); S.items = d.items; renderQueue();
+}
+function renderQueue(){
+  const done = S.items.filter(i=>i.done).length;
+  $('#progbar').style.width = (S.items.length ? 100*done/S.items.length : 0) + '%';
+  $('#progtxt').textContent = `${done} / ${S.items.length}`;
+  $('#queue').innerHTML = S.items.map((it,k)=>`<div class="it ${k===S.idx?'on':''}" onclick="open(${k})">
+     <i class="dot ${it.verdict||''}"></i><span>Tile ${it.order}</span><span class="grow"></span>${it.shared?'<span class="tag" title="also reviewed by a colleague">×2</span>':''}</div>`).join('');
+}
+async function open(k){
+  if(k<0 || k>=S.items.length) return;
+  if(S.dirty && !confirm('Discard unsaved corrections on this tile?')) return;
+  S.idx = k; renderQueue(); hidePop();
+  const d = await api('/api/item/' + S.items[k].id);
+  S.cur = d.item; S.marks = d.decision?.grains || {}; S.missed = d.decision?.missed || [];
+  S.verdict = d.decision?.verdict || null; S.dirty = false; S.t0 = Date.now();
+  $('#chk-img').checked = !!d.decision?.image_issue; $('#comment').value = d.decision?.comment || '';
+  $('#title').textContent = `Tile ${d.item.order} · ${d.item.slide_code}`;
+  $('#density').textContent = d.item.density + ' area'; $('#shared').hidden = !d.item.shared;
+  const img = new Image(); img.onload = () => {
+    S.img = img; const W = img.naturalWidth, H = img.naturalHeight;
+    S.grains = d.grains.map(g => { const pts = g.poly && g.poly.length>2 ? g.poly.map(p=>[p[0]*W,p[1]*H])
+          : [[g.box[0],g.box[1]],[g.box[2],g.box[1]],[g.box[2],g.box[3]],[g.box[0],g.box[3]]];
+          return {...g, pts, area:(g.box[2]-g.box[0])*(g.box[3]-g.box[1])}; });
+    draw(); refresh();
+  }; img.src = d.image_url;
+  setVerdict(S.verdict, true);
+}
+function go(dk){ open(S.idx + dk); }
+
+function stateOf(g){ return S.marks[g.i] || 'ok'; }
+function clsOf(g){ const s = stateOf(g); return s.startsWith('to_') ? s.slice(3) : g.cls; }
+function draw(){
+  const c = $('#cv'), ctx = c.getContext('2d'), img = S.img; if(!img) return;
+  const W = img.naturalWidth, H = img.naturalHeight, z = S.zoom;
+  c.width = Math.round(W*z); c.height = Math.round(H*z); ctx.imageSmoothingEnabled = z < 2;
+  ctx.drawImage(img, 0, 0, c.width, c.height);
+  if(!S.showMasks || S.peek) return;
+  S.grains.forEach((g, n) => {
+    const st = stateOf(g), col = st === 'fp' ? '#9aa3b2' : COL[clsOf(g)];
+    ctx.beginPath(); g.pts.forEach(([x,y],j)=> j ? ctx.lineTo(x*z,y*z) : ctx.moveTo(x*z,y*z)); ctx.closePath();
+    if(st !== 'fp' && S.opacity > 0){ ctx.globalAlpha = S.opacity; ctx.fillStyle = col; ctx.fill(); ctx.globalAlpha = 1; }
+    ctx.setLineDash(st === 'ok' ? [] : [5,4]); ctx.lineWidth = n === S.hover ? 3.2 : 1.8; ctx.strokeStyle = n === S.hover ? '#fff' : col; ctx.stroke();
+    if(st === 'fp'){ const cx=(g.box[0]+g.box[2])/2*z, cy=(g.box[1]+g.box[3])/2*z, r=6*z/1.4;
+      ctx.setLineDash([]); ctx.lineWidth=2.5; ctx.strokeStyle='#ff5d6c'; ctx.beginPath(); ctx.moveTo(cx-r,cy-r); ctx.lineTo(cx+r,cy+r); ctx.moveTo(cx+r,cy-r); ctx.lineTo(cx-r,cy+r); ctx.stroke(); }
+  });
+  ctx.setLineDash([4,3]);
+  S.missed.forEach(m => { const x=m.x*z, y=m.y*z, r=12*z;
+    ctx.lineWidth=2.2; ctx.strokeStyle=COL[m.cls]; ctx.beginPath(); ctx.arc(x,y,r,0,7); ctx.stroke();
+    ctx.setLineDash([]); ctx.beginPath(); ctx.moveTo(x-5,y); ctx.lineTo(x+5,y); ctx.moveTo(x,y-5); ctx.lineTo(x,y+5); ctx.stroke(); ctx.setLineDash([4,3]); });
+  ctx.setLineDash([]);
+}
+function inside(pt, poly){ let c=false; for(let i=0,j=poly.length-1;i<poly.length;j=i++){ const [xi,yi]=poly[i],[xj,yj]=poly[j];
+  if(((yi>pt[1])!==(yj>pt[1])) && (pt[0] < (xj-xi)*(pt[1]-yi)/(yj-yi)+xi)) c=!c; } return c; }
+function hit(x, y){
+  const mk = S.missed.findIndex(m => Math.hypot(m.x-x, m.y-y) < 13); if(mk >= 0) return {type:'missed', k:mk};
+  let best=-1, ba=1e12; S.grains.forEach((g,n)=>{ if(x>=g.box[0]-2&&x<=g.box[2]+2&&y>=g.box[1]-2&&y<=g.box[3]+2&&inside([x,y],g.pts)&&g.area<ba){best=n;ba=g.area;} });
+  return best >= 0 ? {type:'grain', k:best} : {type:'empty'};
+}
+const cv = $('#cv');
+cv.addEventListener('mousemove', e => { const h = hit(e.offsetX/S.zoom, e.offsetY/S.zoom); const n = h.type==='grain'?h.k:-1; if(n!==S.hover){ S.hover=n; draw(); } });
+cv.addEventListener('mouseleave', () => { S.hover=-1; draw(); });
+cv.addEventListener('click', e => {
+  const x = e.offsetX/S.zoom, y = e.offsetY/S.zoom, h = hit(x, y), pop = $('#pop');
+  let html = '';
+  if(h.type === 'grain'){ const g = S.grains[h.k], cur = clsOf(g), st = stateOf(g);
+    html = `<h4>Model: ${NAME[g.cls]} · conf ${g.conf.toFixed(2)}</h4>
+      <button onclick="mark(${h.k},'ok')"><span>✓ Correct${st==='ok'?' (current)':''}</span><kbd>C</kbd></button>
+      ${['viable','non_viable','intermediate'].map((c,j)=> c===g.cls ? '' :
+        `<button onclick="mark(${h.k},'to_${c}')"><span><i class="sw" style="background:${COL[c]}"></i>Actually ${NAME[c].toLowerCase()}</span><kbd>${j+1}</kbd></button>`).join('')}
+      <button onclick="mark(${h.k},'fp')"><span>✕ Not a pollen grain</span><kbd>X</kbd></button>`;
+    pop._keys = {c:()=>mark(h.k,'ok'), x:()=>mark(h.k,'fp'), 1:()=>g.cls!=='viable'&&mark(h.k,'to_viable'), 2:()=>g.cls!=='non_viable'&&mark(h.k,'to_non_viable'), 3:()=>g.cls!=='intermediate'&&mark(h.k,'to_intermediate')};
+  } else if(h.type === 'missed'){
+    html = `<h4>Missed ${NAME[S.missed[h.k].cls].toLowerCase()} grain</h4><button onclick="unmiss(${h.k})"><span>Remove marker</span><kbd>X</kbd></button>`;
+    pop._keys = {x:()=>unmiss(h.k)};
+  } else {
+    html = `<h4>Missed grain here?</h4>` + ['viable','non_viable','intermediate'].map((c,j)=>
+      `<button onclick="miss(${x.toFixed(1)},${y.toFixed(1)},'${c}')"><span><i class="sw" style="background:${COL[c]}"></i>${NAME[c]}</span><kbd>${j+1}</kbd></button>`).join('')
+      + `<button onclick="hidePop()"><span>Cancel</span><kbd>Esc</kbd></button>`;
+    pop._keys = {1:()=>miss(x,y,'viable'), 2:()=>miss(x,y,'non_viable'), 3:()=>miss(x,y,'intermediate')};
+  }
+  pop.innerHTML = html; pop.hidden = false;
+  const left = Math.min(e.offsetX + 14, cv.width - 215), top = Math.min(e.offsetY + 14, cv.height - pop.offsetHeight - 6);
+  pop.style.left = Math.max(4,left) + 'px'; pop.style.top = Math.max(4,top) + 'px';
+});
+function hidePop(){ const p=$('#pop'); p.hidden=true; p._keys=null; }
+function mark(n, st){ const g = S.grains[n]; if(st==='ok') delete S.marks[g.i]; else S.marks[g.i]=st; S.dirty=true; hidePop(); draw(); refresh(); }
+function miss(x, y, cls){ S.missed.push({x:+x, y:+y, cls}); S.dirty=true; hidePop(); draw(); refresh(); }
+function unmiss(k){ S.missed.splice(k,1); S.dirty=true; hidePop(); draw(); refresh(); }
+function setVerdict(v, silent){ S.verdict=v; if(!silent) S.dirty=true;
+  document.querySelectorAll('.verd button').forEach(b=>b.classList.toggle('on', !!v && b.classList.contains(v))); $('#btn-save').disabled = !v; }
+function refresh(){
+  const p={viable:0,non_viable:0,intermediate:0}, c={viable:0,non_viable:0,intermediate:0}; let fp=0, rc=0;
+  S.grains.forEach(g => { p[g.cls]++; const st=stateOf(g); if(st==='fp') fp++; else { if(st.startsWith('to_')) rc++; c[clsOf(g)]++; } });
+  S.missed.forEach(m => c[m.cls]++);
+  const np = p.viable+p.non_viable+p.intermediate, nc = c.viable+c.non_viable+c.intermediate;
+  $('#m-v').textContent=p.viable; $('#m-nv').textContent=p.non_viable; $('#m-i').textContent=p.intermediate;
+  $('#m-pct').textContent = np ? (100*p.viable/np).toFixed(1)+' %' : '–';
+  $('#c-fp').textContent=fp; $('#c-rc').textContent=rc; $('#c-ms').textContent=S.missed.length;
+  $('#c-pct').textContent = nc ? (100*c.viable/nc).toFixed(1)+' %' : '–';
+}
+async function save(){
+  if(!S.verdict) return;
+  const body = {verdict:S.verdict, image_issue:$('#chk-img').checked, comment:$('#comment').value,
+                grains:S.marks, missed:S.missed, elapsed_s:Math.round((Date.now()-S.t0)/1000)};
+  await api(`/api/item/${S.items[S.idx].id}/decision`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
+  S.items[S.idx].done = true; S.items[S.idx].verdict = S.verdict; S.dirty = false; toast('Saved ✓');
+  const nxt = S.items.findIndex((it,k)=>k>S.idx && !it.done);
+  if(nxt >= 0) open(nxt); else { renderQueue(); toast('All your tiles are reviewed — thank you! 🎉'); }
+}
+
+document.addEventListener('keydown', e => {
+  if(e.target.tagName === 'TEXTAREA' || $('#view-review').hidden) return;
+  const pop = $('#pop'), k = e.key.toLowerCase();
+  if(!pop.hidden && pop._keys){ if(k==='escape') return hidePop(); if(pop._keys[k]){ e.preventDefault(); return pop._keys[k](); } }
+  if(k===' '){ e.preventDefault(); if(!S.peek){ S.peek=true; draw(); } return; }
+  if(k==='m'){ const c=$('#chk-masks'); c.checked=!c.checked; S.showMasks=c.checked; draw(); }
+  else if(k==='a') setVerdict('good'); else if(k==='s') setVerdict('minor'); else if(k==='d') setVerdict('poor');
+  else if(k==='enter') save(); else if(k==='arrowright') go(1); else if(k==='arrowleft') go(-1);
+});
+document.addEventListener('keyup', e => { if(e.key===' '){ S.peek=false; draw(); } });
+window.addEventListener('beforeunload', e => { if(S.dirty){ e.preventDefault(); e.returnValue=''; } });
+
+function tab(t){ ['review','results','help'].forEach(x=>{ $('#view-'+x).hidden = x!==t; $('#tab-'+x).classList.toggle('on', x===t); }); if(t==='results') results(); }
+const f = (v, d=1, s='') => v===null||v===undefined ? '–' : (+v).toFixed(d)+s;
+const pct = v => v===null||v===undefined ? '–' : (100*v).toFixed(1)+' %';
+function biasPill(b){ if(b===null||b===undefined) return '–'; const a=Math.abs(b); return `<span class="pill ${a<2?'g':a<5?'a':'r'}">${b>0?'+':''}${b.toFixed(1)} pp</span>`; }
+async function results(){
+  const d = await api('/api/summary'), L = {nat_2x:'Natural 2x', ory_2x:'Synthetic 2x (oryzalin)', neo_4x:'Neo-4x', nat_4x:'Natural 4x', ALL:'All cytotypes'};
+  const rows = Object.entries(d.by_cytotype).map(([k,r]) => `<tr ${k==='ALL'?'style="font-weight:700"':''}><td>${L[k]||k}</td><td>${r.tiles}</td><td>${r.n_pred}</td>
+     <td>${pct(r.precision)}</td><td>${pct(r.recall)}</td><td>${pct(r.class_accuracy)}</td>
+     <td>${f(r.model_viability_pct,1,' %')}</td><td>${f(r.true_viability_pct,1,' %')}</td><td>${biasPill(r.viability_bias_pp)}</td></tr>`).join('');
+  const prog = Object.entries(d.progress).map(([r,p])=>`<div class="kv"><span>${r}</span><span>${p.done} / ${p.assigned}</span></div>`).join('');
+  const ag = d.agreement;
+  $('#results').innerHTML = `<h2>Detection quality by cytotype</h2>
+    <p class="muted">Computed from reviewers' corrections on blinded tiles (set <code>${d.set_id||'–'}</code>). The key number for the study is the
+    <b>viability bias</b> = model viability % − human-corrected viability %. If it is small and similar across cytotypes, ploidy comparisons are not distorted by the detector.</p>
+    <table><thead><tr><th>Cytotype</th><th>Tiles</th><th>Grains (model)</th><th>Precision</th><th>Recall</th><th>Class accuracy</th><th>Model viability</th><th>Human viability</th><th>Bias</th></tr></thead><tbody>${rows || '<tr><td colspan=9 class="muted">No reviews yet.</td></tr>'}</tbody></table>
+    <div class="grid2">
+      <div class="card"><h3>Progress</h3>${prog || '<span class="muted">–</span>'}</div>
+      <div class="card"><h3>Agreement between reviewers</h3>${ag ? `<div class="kv"><span>Shared tiles reviewed by both</span><span>${ag.n_tiles}</span>
+        <span>Mean |Δ corrected viability|</span><span>${f(ag.mean_abs_viability_diff_pp,1,' pp')}</span>
+        <span>Mean relative Δ grain count</span><span>${pct(ag.mean_rel_count_diff)}</span></div>` : '<span class="muted">Appears once shared tiles are reviewed by both.</span>'}</div>
+      <div class="card"><h3>Reading the table</h3><p class="muted"><b>Precision</b>: share of detections that are real grains. <b>Recall</b>: share of real grains found.
+        <b>Class accuracy</b>: correct viable/non-viable/intermediate among real detections. Bias: <span class="pill g">&lt;2 pp</span> <span class="pill a">2–5 pp</span> <span class="pill r">&gt;5 pp</span>.</p></div>
+    </div>
+    <p><a href="/api/export.csv${q()}"><button>⬇ Download all reviews (CSV)</button></a></p>`;
+}
+init().catch(err => { $('#stagewrap').innerHTML = `<div class="empty">Could not load: ${err.message}</div>`; });
+</script>
+</body>
+</html>

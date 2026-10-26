@@ -29,18 +29,15 @@ spec:
           allowPrivilegeEscalation: false
           capabilities:
             drop: ["ALL"]
-        envFrom:
-        - secretRef:
-            name: s3-creds
         env:
           - name: S3_ENDPOINT
             value: "https://s3.cl4.du.cesnet.cz"
           - name: S3_BUCKET
-            value: "bucket"
+            value: "peg-bucket"
           - name: TILE_PREFIX
             value: "Ostatni/Pollen_viability/tiles_640/"
           - name: S3_MODEL_KEY
-            value: "Ostatni/Pollen_viability/trained_models/pollen_train_20260923_1457/weights/best.pt"
+            value: "Ostatni/Pollen_viability/trained_models/pollen_train_20261023_0756/weights/best.pt"
           - name: MODEL_PATH
             value: "/tmp/best.pt"
           - name: BATCH_SIZE
@@ -48,13 +45,23 @@ spec:
           - name: FETCH_WORKERS
             value: "16"
           - name: CONF
-            value: "0.25"
+            value: "0.55"
           - name: IOU
             value: "0.70"
           - name: MAX_DIM
             value: "130"
           - name: FORCE_REDETECT
-            value: "0"
+            value: "1"
+          - name: AWS_ACCESS_KEY_ID
+            valueFrom:
+              secretKeyRef:
+                name: s3-creds
+                key: AWS_ACCESS_KEY_ID
+          - name: AWS_SECRET_ACCESS_KEY
+            valueFrom:
+              secretKeyRef:
+                name: s3-creds
+                key: AWS_SECRET_ACCESS_KEY
         resources:
           requests:
             memory: "16Gi"
@@ -67,8 +74,15 @@ spec:
         volumeMounts:
         - name: script-volume
           mountPath: /scripts
+        - name: dshm
+          mountPath: /dev/shm
       volumes:
       - name: script-volume
         configMap:
           name: detect-script
+      - name: dshm
+        emptyDir:
+          medium: Memory
+          sizeLimit: 8Gi
       restartPolicy: Never
+
