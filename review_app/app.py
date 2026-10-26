@@ -22,6 +22,7 @@ import json
 import os
 import threading
 import time
+import zipfile
 from collections import defaultdict
 from datetime import datetime, timezone
 
@@ -145,7 +146,8 @@ def blind(item, me, decisions):
     return {"id": item["id"], "order": item["order"], "slide_code": item["slide_code"],
             "density": item["density"], "n_pred": item["n_pred"],
             "flagged": item["selection"] == "flagged", "shared": len(item["assigned"]) > 1,
-            "done": mine is not None, "verdict": mine.get("verdict") if mine else None}
+            "done": mine is not None, "verdict": mine.get("verdict") if mine else None,
+            "relabel": bool(mine.get("relabel")) if mine else False}
 
 
 # ── metrics ─────────────────────────────────────────────────────────────────────────
@@ -256,6 +258,7 @@ def save(item_id):
         "reviewer": me_, "item_id": item_id, "set_id": m["set_id"],
         "saved": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "verdict": body.get("verdict"), "image_issue": bool(body.get("image_issue")),
+        "relabel": bool(body.get("relabel")),
         "comment": str(body.get("comment", ""))[:2000],
         "grains": {str(k): v for k, v in (body.get("grains") or {}).items()
                    if v in ("fp", "to_viable", "to_non_viable", "to_intermediate")},
@@ -280,7 +283,10 @@ def summary():
     tile_bias = defaultdict(list)
     progress = defaultdict(lambda: {"done": 0, "assigned": 0})
     verdicts = defaultdict(lambda: defaultdict(int))
+    n_relabel = 0
     for it in m["items"]:
+        if any(d.get("relabel") for d in dec.get(it["id"], {}).values()):
+            n_relabel += 1
         for r in it["assigned"]:
             progress[r]["assigned"] += 1
         for r, d in dec.get(it["id"], {}).items():
@@ -323,7 +329,7 @@ def summary():
                  "mean_rel_count_diff": sum(dn) / len(dn) if dn else None}
 
     return jsonify(set_id=m["set_id"], by_cytotype=by_cyt, progress=progress,
-                   verdicts=verdicts, agreement=agree,
+                   verdicts=verdicts, agreement=agree, n_relabel=n_relabel,
                    per_reviewer={r: {k: ratios(v) for k, v in g.items()} for r, g in per_rev.items()})
 
 
@@ -333,7 +339,7 @@ def export():
     buf = io.StringIO()
     w = csv.writer(buf)
     cols = ["set_id", "item_id", "reviewer", "slide_name", "plant_id", "population", "cytotype",
-            "cultivation_run", "selection", "flag_reason", "density", "verdict", "image_issue",
+            "cultivation_run", "selection", "flag_reason", "density", "verdict", "image_issue", "relabel",
             "n_pred", "n_true", "fp", "missed", "reclassified", "precision", "recall", "class_accuracy",
             "model_viability_pct", "true_viability_pct", "viability_bias_pp",
             "pred_viable", "pred_non_viable", "pred_intermediate",
@@ -347,7 +353,7 @@ def export():
             q = ratios(t)
             w.writerow([m["set_id"], it["id"], r, it["slide_name"], it["plant_id"], it["population"],
                         it["cytotype"], it["cultivation_run"], it["selection"], it["flag_reason"],
-                        it["density"], d.get("verdict"), int(d.get("image_issue", False)),
+                        it["density"], d.get("verdict"), int(d.get("image_issue", False)), int(d.get("relabel", False)),
                         q["n_pred"], q["n_true"], q["fp"], q["missed"], q["reclassified"],
                         q["precision"], q["recall"], q["class_accuracy"], q["model_viability_pct"],
                         q["true_viability_pct"], q["viability_bias_pp"],
@@ -356,6 +362,64 @@ def export():
                         json.dumps(t["reclass"]), d.get("comment", ""), d.get("saved")])
     return Response(buf.getvalue(), mimetype="text/csv",
                     headers={"Content-Disposition": f"attachment; filename=viability_qc_{m['set_id']}.csv"})
+
+
+@app.get("/api/relabel/export.csv")
+def export_relabel_csv():
+    m, dec = manifest(), all_decisions(max_age=0)
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(["item_id", "tile_filename", "s3_key", "slide_name", "plant_id", "population", "cytotype", "reviewer", "verdict", "comment", "flag_reason", "saved"])
+    for it in m["items"]:
+        for r, d in dec.get(it["id"], {}).items():
+            if d.get("relabel"):
+                w.writerow([it["id"], os.path.basename(it["tile_key"]), it["tile_key"], it.get("slide_name"), it.get("plant_id"), it.get("population"), it.get("cytotype"), r, d.get("verdict"), d.get("comment"), it.get("flag_reason"), d.get("saved")])
+    return Response(buf.getvalue(), mimetype="text/csv",
+                    headers={"Content-Disposition": f"attachment; filename=roboflow_relabel_{m['set_id']}.csv"})
+
+
+@app.get("/api/relabel/download.zip")
+def download_relabel_zip():
+    m, dec = manifest(), all_decisions(max_age=0)
+    flagged = []
+    seen = set()
+    for it in m["items"]:
+        for r, d in dec.get(it["id"], {}).items():
+            if d.get("relabel") and it["id"] not in seen:
+                seen.add(it["id"])
+                flagged.append((it, r, d))
+                break
+    if not flagged:
+        return Response("No tiles currently flagged for Roboflow relabeling.", status=404)
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        manifest_records = []
+        for it, r, d in flagged:
+            tile_key = it["tile_key"]
+            filename = os.path.basename(tile_key)
+            try:
+                obj = s3.get_object(Bucket=BUCKET, Key=tile_key)
+                zf.writestr(filename, obj["Body"].read())
+                manifest_records.append({
+                    "tile_filename": filename,
+                    "s3_key": tile_key,
+                    "item_id": it["id"],
+                    "slide_name": it.get("slide_name"),
+                    "plant_id": it.get("plant_id"),
+                    "population": it.get("population"),
+                    "cytotype": it.get("cytotype"),
+                    "flagged_by": r,
+                    "verdict": d.get("verdict"),
+                    "comment": d.get("comment"),
+                    "flag_reason": it.get("flag_reason"),
+                })
+            except Exception as e:
+                app.logger.error("Failed to read %s: %s", tile_key, e)
+        zf.writestr("roboflow_relabel_manifest.json", json.dumps(manifest_records, indent=2))
+    buf.seek(0)
+    return Response(buf.getvalue(), mimetype="application/zip",
+                    headers={"Content-Disposition": f"attachment; filename=roboflow_relabel_{m['set_id']}.zip"})
 
 
 if __name__ == "__main__":

@@ -55,9 +55,12 @@ textarea{width:100%;min-height:58px;background:#0f131b;color:var(--txt);border:1
 .page h2{margin:0 0 6px} table{border-collapse:collapse;width:100%;margin:14px 0;font-variant-numeric:tabular-nums}
 th,td{padding:9px 10px;border-bottom:1px solid var(--line);text-align:right} th{color:var(--mut);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.5px} td:first-child,th:first-child{text-align:left}
 .pill{padding:2px 8px;border-radius:999px;font-weight:600} .pill.g{background:rgba(61,220,151,.15);color:var(--good)} .pill.a{background:rgba(255,181,71,.15);color:var(--warn)} .pill.r{background:rgba(255,93,108,.15);color:var(--bad)}
-.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px}
 .help li{margin:6px 0;line-height:1.5} .toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--panel2);border:1px solid var(--line);padding:10px 16px;border-radius:10px;opacity:0;transition:.25s;pointer-events:none} .toast.show{opacity:1}
 .empty{display:grid;place-items:center;height:100%;color:var(--mut);text-align:center;line-height:1.7}
+.relabel-box{display:flex;align-items:center;gap:10px;margin-top:10px;padding:9px 12px;border-radius:9px;background:rgba(201,75,255,0.08);border:1px solid rgba(201,75,255,0.28);cursor:pointer;user-select:none;transition:all .15s}
+.relabel-box:hover{background:rgba(201,75,255,0.16);border-color:#c94bff}
+.relabel-box.checked{background:linear-gradient(90deg,rgba(124,156,255,0.22),rgba(201,75,255,0.28));border-color:#f0abfc;box-shadow:0 0 14px rgba(201,75,255,0.25)}
+.tag-relabel{background:rgba(201,75,255,0.2);border-color:rgba(201,75,255,0.45);color:#f0abfc;padding:0 5px;font-size:11px}
 </style>
 </head>
 <body>
@@ -125,6 +128,13 @@ th,td{padding:9px 10px;border-bottom:1px solid var(--line);text-align:right} th{
         <button class="poor" onclick="setVerdict('poor')">Poor <kbd>D</kbd></button>
       </div>
       <label class="muted" style="display:flex;gap:8px;margin-top:10px"><input type="checkbox" id="chk-img" onchange="S.dirty=true"> Image problem (blur, staining, debris, bubble)</label>
+      <div class="relabel-box" id="box-relabel" onclick="toggleRelabel(true)">
+        <input type="checkbox" id="chk-relabel" onclick="event.stopPropagation(); toggleRelabel(false)">
+        <div style="flex:1">
+          <strong style="display:flex;align-items:center;gap:6px;font-size:12.5px;color:#f0abfc;">🏷️ Flag for Roboflow Relabel <kbd>R</kbd></strong>
+          <span class="muted" style="font-size:11px;display:block;margin-top:1px;">Queue tile for active retraining &amp; annotation</span>
+        </div>
+      </div>
       <textarea id="comment" placeholder="Optional note…" oninput="S.dirty=true"></textarea>
     </div>
     <button class="save" id="btn-save" onclick="save()" disabled>Save &amp; next <kbd style="color:#fff;border-color:#fff6">Enter</kbd></button>
@@ -147,7 +157,8 @@ th,td{padding:9px 10px;border-bottom:1px solid var(--line);text-align:right} th{
       <li>Ignore grains cut by the tile border if less than half is visible.</li></ul></div>
     <div class="card"><h3>3 · Verdict & save</h3><ul>
       <li><b>Good</b>: no or trivial errors · <b>Minor</b>: a few errors · <b>Poor</b>: systematic problem.</li>
-      <li>Tick <b>Image problem</b> if the image itself is bad. Then <b>Save &amp; next</b>.</li></ul></div>
+      <li>Tick <b>Image problem</b> if the image itself is bad.</li>
+      <li>Tick <b>🏷️ Flag for Roboflow (<kbd>R</kbd>)</b> if the tile is a prime candidate for retraining &amp; annotation in Roboflow. Then <b>Save &amp; next</b>.</li></ul></div>
     <div class="card"><h3>Classes (Alexander stain)</h3><ul>
       <li><span class="sw" style="background:var(--v)"></span><b>Viable</b>: full, dark magenta/purple.</li>
       <li><span class="sw" style="background:var(--nv)"></span><b>Non-viable</b>: empty, pale green/blue, shrivelled.</li>
@@ -185,7 +196,7 @@ function renderQueue(){
   $('#progbar').style.width = (S.items.length ? 100*done/S.items.length : 0) + '%';
   $('#progtxt').textContent = `${done} / ${S.items.length}`;
   $('#queue').innerHTML = S.items.map((it,k)=>`<div class="it ${k===S.idx?'on':''}" onclick="open(${k})">
-     <i class="dot ${it.verdict||''}"></i><span>Tile ${it.order}</span><span class="grow"></span>${it.shared?'<span class="tag" title="also reviewed by a colleague">×2</span>':''}</div>`).join('');
+     <i class="dot ${it.verdict||''}"></i><span>Tile ${it.order}</span><span class="grow"></span>${it.relabel?'<span class="tag tag-relabel" title="Queued for Roboflow">🏷️</span>':''}${it.shared?'<span class="tag" title="also reviewed by a colleague">×2</span>':''}</div>`).join('');
 }
 async function open(k){
   if(k<0 || k>=S.items.length) return;
@@ -194,7 +205,10 @@ async function open(k){
   const d = await api('/api/item/' + S.items[k].id);
   S.cur = d.item; S.marks = d.decision?.grains || {}; S.missed = d.decision?.missed || [];
   S.verdict = d.decision?.verdict || null; S.dirty = false; S.t0 = Date.now();
-  $('#chk-img').checked = !!d.decision?.image_issue; $('#comment').value = d.decision?.comment || '';
+  $('#chk-img').checked = !!d.decision?.image_issue; 
+  $('#chk-relabel').checked = !!d.decision?.relabel;
+  updateRelabelUI();
+  $('#comment').value = d.decision?.comment || '';
   $('#title').textContent = `Tile ${d.item.order} · ${d.item.slide_code}`;
   $('#density').textContent = d.item.density + ' area'; $('#shared').hidden = !d.item.shared;
   const img = new Image(); img.onload = () => {
@@ -281,12 +295,26 @@ function refresh(){
 }
 async function save(){
   if(!S.verdict) return;
-  const body = {verdict:S.verdict, image_issue:$('#chk-img').checked, comment:$('#comment').value,
-                grains:S.marks, missed:S.missed, elapsed_s:Math.round((Date.now()-S.t0)/1000)};
+  const isRelabel = $('#chk-relabel').checked;
+  const body = {verdict:S.verdict, image_issue:$('#chk-img').checked, relabel:isRelabel,
+                comment:$('#comment').value, grains:S.marks, missed:S.missed,
+                elapsed_s:Math.round((Date.now()-S.t0)/1000)};
   await api(`/api/item/${S.items[S.idx].id}/decision`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
-  S.items[S.idx].done = true; S.items[S.idx].verdict = S.verdict; S.dirty = false; toast('Saved ✓');
+  S.items[S.idx].done = true; S.items[S.idx].verdict = S.verdict; S.items[S.idx].relabel = isRelabel;
+  S.dirty = false; toast(isRelabel ? 'Saved (🏷️ Queued for Roboflow) ✓' : 'Saved ✓');
   const nxt = S.items.findIndex((it,k)=>k>S.idx && !it.done);
   if(nxt >= 0) open(nxt); else { renderQueue(); toast('All your tiles are reviewed — thank you! 🎉'); }
+}
+function toggleRelabel(fromBox){
+  const c = $('#chk-relabel');
+  if(fromBox) c.checked = !c.checked;
+  S.dirty = true;
+  updateRelabelUI();
+  toast(c.checked ? '🏷️ Flagged for Roboflow' : 'Unflagged from Roboflow');
+}
+function updateRelabelUI(){
+  const c = $('#chk-relabel');
+  $('#box-relabel').classList.toggle('checked', c.checked);
 }
 
 document.addEventListener('keydown', e => {
@@ -295,6 +323,7 @@ document.addEventListener('keydown', e => {
   if(!pop.hidden && pop._keys){ if(k==='escape') return hidePop(); if(pop._keys[k]){ e.preventDefault(); return pop._keys[k](); } }
   if(k===' '){ e.preventDefault(); if(!S.peek){ S.peek=true; draw(); } return; }
   if(k==='m'){ const c=$('#chk-masks'); c.checked=!c.checked; S.showMasks=c.checked; draw(); }
+  else if(k==='r') toggleRelabel(true);
   else if(k==='a') setVerdict('good'); else if(k==='s') setVerdict('minor'); else if(k==='d') setVerdict('poor');
   else if(k==='enter') save(); else if(k==='arrowright') go(1); else if(k==='arrowleft') go(-1);
 });
@@ -312,10 +341,23 @@ async function results(){
      <td>${f(r.model_viability_pct,1,' %')}</td><td>${f(r.true_viability_pct,1,' %')}</td><td>${biasPill(r.viability_bias_pp)}</td></tr>`).join('');
   const prog = Object.entries(d.progress).map(([r,p])=>`<div class="kv"><span>${r}</span><span>${p.done} / ${p.assigned}</span></div>`).join('');
   const ag = d.agreement;
+  const relabelBox = `<div class="card" style="margin:16px 0;border-color:rgba(201,75,255,0.4);background:linear-gradient(180deg,rgba(201,75,255,0.08),var(--panel));">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
+      <div>
+        <h3 style="margin:0 0 4px;color:#f0abfc;font-size:14px;letter-spacing:normal;text-transform:none;">🏷️ Roboflow Relabeling Queue (<b>${d.n_relabel || 0}</b> tiles flagged)</h3>
+        <p class="muted" style="margin:0;font-size:12px;">Tiles flagged during review as problematic, ambiguous, or needing full polygon re-annotation in Roboflow.</p>
+      </div>
+      <div style="display:flex;gap:8px;">
+        <a href="/api/relabel/download.zip${q()}" download><button style="background:linear-gradient(90deg,#7c9cff,#c94bff);border:none;color:#fff;font-weight:600;">📦 Download Relabel Batch (.zip)</button></a>
+        <a href="/api/relabel/export.csv${q()}"><button>📄 Relabel CSV</button></a>
+      </div>
+    </div>
+  </div>`;
   $('#results').innerHTML = `<h2>Detection quality by cytotype</h2>
     <p class="muted">Computed from reviewers' corrections on blinded tiles (set <code>${d.set_id||'–'}</code>). The key number for the study is the
     <b>viability bias</b> = model viability % − human-corrected viability %. If it is small and similar across cytotypes, ploidy comparisons are not distorted by the detector.</p>
     <table><thead><tr><th>Cytotype</th><th>Tiles</th><th>Grains (model)</th><th>Precision</th><th>Recall</th><th>Class accuracy</th><th>Model viability</th><th>Human viability</th><th>Bias</th></tr></thead><tbody>${rows || '<tr><td colspan=9 class="muted">No reviews yet.</td></tr>'}</tbody></table>
+    ${relabelBox}
     <div class="grid2">
       <div class="card"><h3>Progress</h3>${prog || '<span class="muted">–</span>'}</div>
       <div class="card"><h3>Agreement between reviewers</h3>${ag ? `<div class="kv"><span>Shared tiles reviewed by both</span><span>${ag.n_tiles}</span>
@@ -324,7 +366,7 @@ async function results(){
       <div class="card"><h3>Reading the table</h3><p class="muted"><b>Precision</b>: share of detections that are real grains. <b>Recall</b>: share of real grains found.
         <b>Class accuracy</b>: correct viable/non-viable/intermediate among real detections. Bias: <span class="pill g">&lt;2 pp</span> <span class="pill a">2–5 pp</span> <span class="pill r">&gt;5 pp</span>.</p></div>
     </div>
-    <p><a href="/api/export.csv${q()}"><button>⬇ Download all reviews (CSV)</button></a></p>`;
+    <p style="margin-top:20px;"><a href="/api/export.csv${q()}"><button>⬇ Download all reviews (CSV)</button></a></p>`;
 }
 init().catch(err => { $('#stagewrap').innerHTML = `<div class="empty">Could not load: ${err.message}</div>`; });
 </script>
