@@ -47,7 +47,7 @@ spec:
           - name: CONF
             value: "0.55"
           - name: IOU
-            value: "0.70"
+            value: "0.45"
           - name: MAX_DIM
             value: "130"
           - name: FORCE_REDETECT

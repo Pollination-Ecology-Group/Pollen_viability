@@ -128,16 +128,53 @@ def reviewer():
     return g.reviewer
 
 
+def box_iou_and_containment(b1, b2):
+    ix1 = max(b1[0], b2[0])
+    iy1 = max(b1[1], b2[1])
+    ix2 = min(b1[2], b2[2])
+    iy2 = min(b1[3], b2[3])
+    iw = max(0.0, ix2 - ix1)
+    ih = max(0.0, iy2 - iy1)
+    inter = iw * ih
+    if inter <= 0:
+        return 0.0, 0.0
+    a1 = (b1[2] - b1[0]) * (b1[3] - b1[1])
+    a2 = (b2[2] - b2[0]) * (b2[3] - b2[1])
+    union = a1 + a2 - inter
+    iou = inter / union if union > 0 else 0.0
+    containment = inter / min(a1, a2) if min(a1, a2) > 0 else 0.0
+    return iou, containment
+
+
+def deduplicate_detections(candidates, iou_thresh=0.40, cont_thresh=0.75):
+    """Class-agnostic Non-Maximum Suppression and containment filtering."""
+    candidates = sorted(candidates, key=lambda c: c["conf"], reverse=True)
+    kept = []
+    for cand in candidates:
+        is_dup = False
+        for k in kept:
+            iou, cont = box_iou_and_containment(cand["box"], k["box"])
+            if iou > iou_thresh or cont > cont_thresh:
+                is_dup = True
+                break
+        if not is_dup:
+            kept.append(cand)
+    return kept
+
+
 def load_det(item):
     det = json.loads(s3.get_object(Bucket=BUCKET, Key=item["det_key"])["Body"].read())
     boxes, polys = det.get("boxes", []), det.get("masks_xyn", [])
-    grains = []
+    candidates = []
     for i, b in enumerate(boxes):
         if b[4] < CONF:
             continue
-        grains.append({"i": i, "box": b[:4], "conf": b[4], "cls": CLASSES[int(b[5])] if int(b[5]) < 3 else "intermediate",
-                       "poly": polys[i] if i < len(polys) else None})
-    return grains
+        cls_name = CLASSES[int(b[5])] if int(b[5]) < 3 else "intermediate"
+        poly = polys[i] if i < len(polys) else None
+        candidates.append({"box": b[:4], "conf": float(b[4]), "cls": cls_name, "poly": poly})
+    kept = deduplicate_detections(candidates, iou_thresh=0.40, cont_thresh=0.75)
+    return [{"i": idx, "box": g["box"], "conf": g["conf"], "cls": g["cls"], "poly": g["poly"]}
+            for idx, g in enumerate(kept)]
 
 
 def blind(item, me, decisions):

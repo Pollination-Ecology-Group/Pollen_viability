@@ -68,7 +68,7 @@ TILE_PREFIX    = os.environ.get("TILE_PREFIX",   "Ostatni/Pollen_viability/tiles
 MODEL_PATH     = os.environ.get("MODEL_PATH",    "best.pt")
 S3_MODEL_KEY   = os.environ.get("S3_MODEL_KEY",  "Ostatni/Pollen_viability/trained_models/pollen_train_20261023_0756/weights/best.pt")
 CONF           = float(os.environ.get("CONF",    "0.55"))
-IOU            = float(os.environ.get("IOU",     "0.70"))
+IOU            = float(os.environ.get("IOU",     "0.45"))
 MAX_DIM        = int(os.environ.get("MAX_DIM",   "130"))
 BATCH_SIZE     = int(os.environ.get("BATCH_SIZE","32"))
 FETCH_WORKERS  = int(os.environ.get("FETCH_WORKERS", "16"))
@@ -249,7 +249,7 @@ def main():
             with torch.no_grad():
                 batch_results = model(
                     valid_imgs, conf=CONF, iou=IOU,
-                    agnostic_nms=False, verbose=False, device=device
+                    agnostic_nms=True, verbose=False, device=device
                 )
         except Exception as e:
             print(f"  ⚠️  Inference failed on chunk [{chunk_start}]: {e}", flush=True)
