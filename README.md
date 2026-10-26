@@ -72,7 +72,7 @@ The pipeline processes slides stained using the **Alexander Stain Protocol** (Al
 * **Backbone & Head:** YOLO11 Medium Instance Segmentation (`yolo11m-seg.pt`), with polygon mask output heads.
 * **Input Resolution:** $640 \times 640$ pixels (extracted with minimal overlap from whole-slide micrographs).
 * **Training Schedule:** 300 epochs on Kubernetes NVIDIA GPU cluster; Cosine annealing learning rate; Mosaic augmentation active for 290 epochs and disabled during the final 10 epochs to preserve boundary fidelity.
-* **Optimal Operating Threshold:** Confidence $\mathbf{\text{CONF} = 0.55}$, Non-Maximum Suppression $\mathbf{\text{IOU} = 0.70}$ (derived from peak mask $F_1 = 0.88$).
+* **Optimal Operating Threshold:** Confidence $\mathbf{\text{CONF} = 0.55}$, Class-Agnostic Non-Maximum Suppression $\mathbf{\text{IOU} = 0.45}$ with containment filtering (eliminates duplicate anchor proposals in clusters; peak mask $F_1 = 0.88$).
 
 ### Validation Metrics (at 300 Epochs)
 
@@ -197,8 +197,11 @@ To achieve publishable scientific rigor, human quality control and morphometry a
 
 | Application | Live Cluster URL | Description | Authorized Users |
 | :--- | :--- | :--- | :---: |
-| 🌸 **Pollen Viability QC** | [viability-review-stenc.dyn.cloud.e-infra.cz](https://viability-review-stenc.dyn.cloud.e-infra.cz) | Blinded slide tile review. Correct false detections, add missed grains, quantify human vs. model viability bias. | `jakub`, `eliska` |
-| 🌿 **Stomata Precision Review** | [stomata-review-stenc.dyn.cloud.e-infra.cz](https://stomata-review-stenc.dyn.cloud.e-infra.cz) | Companion vegetative morphometry tool. Audits guard cell and pore calipers to cross-validate the gigas effect. | Open / Lab access |
+| 🌸 **Pollen Viability QC** | [viability-review-stenc.dyn.cloud.e-infra.cz](https://viability-review-stenc.dyn.cloud.e-infra.cz) | Blinded slide tile review (**191 tiles** across 72 slides, 30% inter-rater overlap). Class-agnostic NMS deduplication, missed grain recovery, Roboflow active learning relabel queue (<kbd>R</kbd>), and real-time viability bias quantification. | `jakub`, `eliska` |
+| 🌿 **Stomata Precision Review** | [stomata-review-stenc.dyn.cloud.e-infra.cz](https://stomata-review-stenc.dyn.cloud.e-infra.cz) | Companion vegetative morphometry tool. Audits guard cell and pore calipers, companion stomata detection, and border truncation flags to cross-validate gigas effects. | Open / Lab access |
+
+* **Publication Validation Set (`final_20261026_1614`):** 191 tiles stratified across all 4 cytotypes (`ory_2x`: 52, `nat_2x`: 51, `nat_4x`: 44, `neo_4x`: 44), comprising 144 random density tiles and 47 targeted outlier tiles. 57 tiles are evaluated in duplicate by both reviewers to measure inter-rater reliability.
+* **Active Learning Export:** Flagged edge cases can be streamed directly as `.zip` or exported as `.csv` from the Results dashboard for one-click ingestion into Roboflow.
 
 ---
 

@@ -40,14 +40,18 @@ Both review applications are hosted live on the university CERIT-SC Kubernetes c
 5. **Overlap**: 30 % of tiles go to both reviewers, so inter-rater agreement can be measured. The
    remaining tiles are split between them.
 
-Default size: 4 × 6 × 3 = 72 stratified tiles + ≤24 flagged tiles. Each person reviews about 60 tiles,
-at about 1–2 min per tile.
+### Production Validation Set (`final_20261026_1614`)
+* **Total Sample Size:** **191 tiles** sampled from **72 unique slides** spanning all four cytotypes (`ory_2x`: 52, `nat_2x`: 51, `nat_4x`: 44, `neo_4x`: 44).
+* **Composition:** 144 stratified random tiles (unbiased density baseline) + 47 flagged/outlier tiles (stress-testing difficult boundaries and staining extremes).
+* **Inter-Rater Reliability:** **57 overlapping tiles (30%)** are assigned blindly to both reviewers (`jakub` and `eliska`), yielding 124 assigned tiles per reviewer.
+* **Automatic Label Deduplication:** Model predictions undergo class-agnostic Non-Maximum Suppression ($\text{IoU} = 0.40$) and containment filtering ($\text{IoS} > 0.75$) to automatically suppress duplicate anchor proposals on clumped grains.
 
 ## What reviewers do
 
-- Click a wrong outline and pick the correct class, or *Not a pollen grain*.
-- Click a grain the model missed and pick its class.
-- Give a verdict (Good / Minor / Poor), optionally tick *image problem*, then save.
+- **Click a wrong outline** and pick the correct class (<kbd>V</kbd>: Viable, <kbd>N</kbd>: Non-viable, <kbd>I</kbd>: Intermediate), or mark as false positive (<kbd>X</kbd>: *Not a pollen grain*).
+- **Click a missed grain** in empty space to add its marker and select its class.
+- **Flag for Roboflow Relabeling:** Press <kbd>R</kbd> or toggle *„🏷️ Flag for Relabel“* if a tile exhibits novel debris, ambiguous staining, or dense clumps requiring retraining.
+- **Give an overall verdict:** <kbd>A</kbd> = Good, <kbd>S</kbd> = Minor, <kbd>D</kbd> = Poor, optionally tick *image problem*, then save with <kbd>Enter</kbd>.
 
 ## Metrics (Results tab, `/api/export.csv`)
 

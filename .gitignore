@@ -13,6 +13,8 @@ detect_images/
 *.pt
 *.log
 .Rhistory
+**/.Rhistory
+**/.RData
 visualizations.zip
 _site/
 

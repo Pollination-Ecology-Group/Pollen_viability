@@ -61,7 +61,7 @@ Object detection and contour extraction were performed using **Ultralytics YOLO1
 Inference was executed in parallel across NVIDIA GPU worker nodes within the CESNET Kubernetes cluster (`stenc-ns` namespace):
 * **Inference Parameters:**
   * **Confidence Threshold ($\text{CONF}$):** $0.55$ (optimized against validation annotations to balance precision and recall).
-  * **Non-Maximum Suppression ($\text{IOU}$):** $0.70$ (allows adjacent, touching pollen grains to be resolved as distinct instances while suppressing duplicate bounding boxes).
+  * **Non-Maximum Suppression ($\text{IOU}$):** $0.45$ class-agnostic NMS with containment suppression (resolves individual grains in clumps while suppressing duplicate bounding boxes and multi-grain proposals).
   * **Maximum Dimension ($\text{MAX\_DIM}$):** $130\ \text{px}$ (rejects large staining debris, coverslip dust fibers, and massive air-bubble boundaries).
 * **Tile JSON Output:** For every detected grain, the model emits:
   * Class identifier and classification confidence score ($c \ge 0.55$).
