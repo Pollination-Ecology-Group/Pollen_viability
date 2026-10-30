@@ -311,6 +311,7 @@ def save(item_id):
                    if v in ("fp", "to_viable", "to_non_viable", "to_intermediate")},
         "missed": [{"x": float(p["x"]), "y": float(p["y"]), "cls": p["cls"]}
                    for p in (body.get("missed") or []) if p.get("cls") in CLASSES],
+        "custom_grains": list(body.get("custom_grains") or []),
         "elapsed_s": body.get("elapsed_s"),
     }
     dec["tally"] = tally(grains, dec)

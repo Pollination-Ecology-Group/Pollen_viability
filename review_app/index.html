@@ -84,6 +84,50 @@ th,td{padding:9px 10px;border-bottom:1px solid var(--line);text-align:right} th{
 .langsw button{border:none;border-radius:999px;padding:4px 12px;background:transparent}
 .langsw button.on{background:var(--acc);color:#0b0e14;font-weight:600}
 .help-top{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+
+/* Labeling toolbar & tools */
+.tool-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  background: rgba(15, 23, 42, 0.45);
+  border-bottom: 1px solid var(--line);
+  flex-wrap: wrap;
+}
+.tool-btn, .cls-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: var(--panel2);
+  color: var(--txt);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.tool-btn:hover, .cls-btn:hover {
+  border-color: #38bdf8;
+  background: rgba(56, 189, 248, 0.1);
+}
+.tool-btn.active, .cls-btn.active {
+  background: #0284c7;
+  border-color: #38bdf8;
+  color: #fff;
+  box-shadow: 0 0 10px rgba(56, 189, 248, 0.3);
+}
+.tool-btn kbd, .cls-btn kbd {
+  font-size: 10px;
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: rgba(0,0,0,0.3);
+  border: 1px solid rgba(255,255,255,0.2);
+  color: #e2e8f0;
+}
+
 </style>
 </head>
 <body>
@@ -112,6 +156,18 @@ th,td{padding:9px 10px;border-bottom:1px solid var(--line);text-align:right} th{
       <label><input type="checkbox" id="chk-masks" checked onchange="S.showMasks=this.checked;draw()"> outlines <kbd>M</kbd></label>
       <label>fill <input type="range" id="rng-op" min="0" max="0.7" step="0.05" value="0.25" oninput="S.opacity=+this.value;draw()"></label>
       <label title="mouse wheel = zoom at cursor · drag = pan · + / − / 0">zoom <input type="range" id="rng-zoom" min="0.6" max="6" step="0.1" value="1.4" oninput="setZoom(+this.value)"><span id="zoom-val">1.4×</span></label>
+    </div>
+        <div class="tool-bar" id="tool-bar">
+      <button id="btn-tool-edit" class="tool-btn active" onclick="setLabelTool('edit')" title="Select & edit polygon vertices (E)">🖱️ Edit Points <kbd>E</kbd></button>
+      <button id="btn-tool-draw" class="tool-btn" onclick="setLabelTool('draw')" title="Click-click draw new polygon (P)">✏️ Draw Polygon <kbd>P</kbd></button>
+      <button id="btn-tool-del" class="tool-btn" onclick="deleteSelectedGrain()" title="Delete grain / mark false positive (Del/X)">🗑️ Delete <kbd>Del</kbd></button>
+      <div style="height:18px;width:1px;background:var(--line);margin:0 4px;"></div>
+      <span style="font-size:11px;color:var(--mut);font-weight:600;text-transform:uppercase;">Class:</span>
+      <button id="btn-cls-v" class="cls-btn active" onclick="setDrawClass('viable')"><i class="sw" style="background:var(--v)"></i>Viable <kbd>1</kbd></button>
+      <button id="btn-cls-nv" class="cls-btn" onclick="setDrawClass('non-viable')"><i class="sw" style="background:var(--nv)"></i>Non-viable <kbd>2</kbd></button>
+      <button id="btn-cls-im" class="cls-btn" onclick="setDrawClass('intermediate')"><i class="sw" style="background:var(--im)"></i>Intermediate <kbd>3</kbd></button>
+      <div class="grow"></div>
+      <span id="tool-status" style="font-size:11.5px;color:var(--mut);">🖱️ Click outline to edit points · drag points · click edge (+) to insert</span>
     </div>
     <div class="stagewrap" id="stagewrap">
       <div class="stage" id="stage"><canvas id="cv"></canvas><div class="pop" id="pop" hidden></div></div>
@@ -283,6 +339,12 @@ async function open(k){
     S.grains = d.grains.map(g => { const pts = g.poly && g.poly.length>2 ? g.poly.map(p=>[p[0]*W,p[1]*H])
           : [[g.box[0],g.box[1]],[g.box[2],g.box[1]],[g.box[2],g.box[3]],[g.box[0],g.box[3]]];
           return {...g, pts, area:(g.box[2]-g.box[0])*(g.box[3]-g.box[1])}; });
+    if (d.decision && d.decision.custom_grains) {
+      d.decision.custom_grains.forEach(cg => {
+        S.grains.push({ ...cg, i: cg.i || ('custom_' + Math.random().toString(36).slice(2)), conf: 1.0, isCustom: true });
+      });
+    }
+    selGrain = null; drawPts = []; mousePt = null; dragVertex = null; hoverVertex = null; hoverEdge = null;
     draw(); refresh();
   }; img.src = d.image_url;
   setVerdict(S.verdict, true);
@@ -292,6 +354,141 @@ function go(dk){ open(S.idx + dk); }
 
 function stateOf(g){ return S.marks[g.i] || 'ok'; }
 function clsOf(g){ const s = stateOf(g); return s.startsWith('to_') ? s.slice(3) : g.cls; }
+
+function setLabelTool(t) {
+  labelTool = t;
+  $('#btn-tool-edit').classList.toggle('active', t === 'edit');
+  $('#btn-tool-draw').classList.toggle('active', t === 'draw');
+  drawPts = [];
+  mousePt = null;
+  dragVertex = null;
+  const statusEl = $('#tool-status');
+  if (t === 'draw') {
+    $('#cv').style.cursor = 'crosshair';
+    if (statusEl) statusEl.textContent = '✏️ Click points to draw outline · click green start point or ⏎ to close · Esc cancels';
+    toast('Draw mode: click points around grain');
+  } else {
+    $('#cv').style.cursor = 'default';
+    if (statusEl) statusEl.textContent = '🖱️ Click outline to edit points · drag points · click edge (+) to insert';
+  }
+  draw();
+}
+
+function setDrawClass(cls) {
+  drawClass = cls;
+  $('#btn-cls-v').classList.toggle('active', cls === 'viable');
+  $('#btn-cls-nv').classList.toggle('active', cls === 'non-viable');
+  $('#btn-cls-im').classList.toggle('active', cls === 'intermediate');
+  if (selGrain !== null && S.grains[selGrain]) {
+    const g = S.grains[selGrain];
+    const key = 'to_' + cls.replace('-', '_');
+    S.marks[g.i] = key;
+    S.dirty = true;
+    draw();
+    refresh();
+    toast(`Changed to ${NAME[cls.replace('-', '_')] || cls}`);
+  }
+}
+
+function deleteSelectedGrain() {
+  if (selGrain !== null && S.grains[selGrain]) {
+    const g = S.grains[selGrain];
+    if (g.isCustom) {
+      S.grains.splice(selGrain, 1);
+      selGrain = null;
+      toast('Custom grain removed');
+    } else {
+      S.marks[g.i] = 'fp';
+      toast('Marked as not pollen');
+    }
+    S.dirty = true;
+    draw();
+    refresh();
+  } else {
+    toast('Click a grain outline first to select it');
+  }
+}
+
+function polygonArea(pts) {
+  let a = 0;
+  for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+    a += (pts[j][0] + pts[i][0]) * (pts[j][1] - pts[i][1]);
+  }
+  return a / 2;
+}
+
+function distToSegmentSquared(p, v, w) {
+  const l2 = (v[0] - w[0]) ** 2 + (v[1] - w[1]) ** 2;
+  if (l2 === 0) return (p[0] - v[0]) ** 2 + (p[1] - v[1]) ** 2;
+  let t = ((p[0] - v[0]) * (w[0] - v[0]) + (p[1] - v[1]) * (w[1] - v[1])) / l2;
+  t = Math.max(0, Math.min(1, t));
+  return (p[0] - (v[0] + t * (w[0] - v[0]))) ** 2 + (p[1] - (v[1] + t * (w[1] - v[1]))) ** 2;
+}
+
+function closestPointOnSegment(p, v, w) {
+  const l2 = (v[0] - w[0]) ** 2 + (v[1] - w[1]) ** 2;
+  if (l2 === 0) return [v[0], v[1]];
+  let t = ((p[0] - v[0]) * (w[0] - v[0]) + (p[1] - v[1]) * (w[1] - v[1])) / l2;
+  t = Math.max(0, Math.min(1, t));
+  return [Math.round(v[0] + t * (w[0] - v[0])), Math.round(v[1] + t * (w[1] - v[1]))];
+}
+
+function findHoverVertex(gx, gy) {
+  if (selGrain === null || !S.grains[selGrain]) return null;
+  const poly = S.grains[selGrain].pts;
+  const threshold = 10 / S.zoom;
+  for (let j = 0; j < poly.length; j++) {
+    if (Math.hypot(poly[j][0] - gx, poly[j][1] - gy) < threshold) {
+      return { grainIdx: selGrain, vertexIdx: j };
+    }
+  }
+  return null;
+}
+
+function findHoverEdge(gx, gy) {
+  if (selGrain === null || !S.grains[selGrain]) return null;
+  const poly = S.grains[selGrain].pts;
+  const threshold = (10 / S.zoom) ** 2;
+  let best = null, minDist = threshold;
+  for (let j = 0; j < poly.length; j++) {
+    const k = (j + 1) % poly.length;
+    const d = distToSegmentSquared([gx, gy], poly[j], poly[k]);
+    if (d < minDist) {
+      minDist = d;
+      best = { grainIdx: selGrain, edgeIdx: j, pt: closestPointOnSegment([gx, gy], poly[j], poly[k]) };
+    }
+  }
+  return best;
+}
+
+function finishDraw() {
+  if (drawPts.length < 3) {
+    toast('⚠️ Need at least 3 points for a polygon');
+    return;
+  }
+  const xs = drawPts.map(p => p[0]), ys = drawPts.map(p => p[1]);
+  const box = [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)];
+  const newGrain = {
+    i: 'custom_' + Date.now(),
+    box: box,
+    pts: drawPts.slice(),
+    cls: drawClass.replace('-', '_'),
+    conf: 1.0,
+    area: Math.abs(polygonArea(drawPts)),
+    isCustom: true
+  };
+  S.grains.push(newGrain);
+  selGrain = S.grains.length - 1;
+  S.marks[newGrain.i] = 'to_' + drawClass.replace('-', '_');
+  drawPts = [];
+  mousePt = null;
+  setLabelTool('edit');
+  S.dirty = true;
+  draw();
+  refresh();
+  toast(`✓ Added new ${NAME[drawClass.replace('-', '_')] || drawClass} pollen polygon`);
+}
+
 function draw(){
   const c = $('#cv'), ctx = c.getContext('2d'), img = S.img; if(!img) return;
   const W = img.naturalWidth, H = img.naturalHeight, z = S.zoom;
@@ -312,6 +509,129 @@ function draw(){
     ctx.lineWidth=2.2; ctx.strokeStyle=COL[m.cls]; ctx.beginPath(); ctx.arc(x,y,r,0,7); ctx.stroke();
     ctx.setLineDash([]); ctx.beginPath(); ctx.moveTo(x-5,y); ctx.lineTo(x+5,y); ctx.moveTo(x,y-5); ctx.lineTo(x,y+5); ctx.stroke(); ctx.setLineDash([4,3]); });
   ctx.setLineDash([]);
+
+  // Selected grain outline & vertex handles
+  if (selGrain !== null && S.grains[selGrain]) {
+    const g = S.grains[selGrain];
+    const poly = g.pts;
+    ctx.save();
+    ctx.beginPath();
+    poly.forEach(([x, y], j) => j ? ctx.lineTo(x * z, y * z) : ctx.moveTo(x * z, y * z));
+    ctx.closePath();
+    ctx.lineWidth = 3.2;
+    ctx.strokeStyle = '#38bdf8';
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(56, 189, 248, 0.15)';
+    ctx.fill();
+
+    // Vertex points
+    poly.forEach(([x, y], j) => {
+      const isHov = hoverVertex && hoverVertex.grainIdx === selGrain && hoverVertex.vertexIdx === j;
+      ctx.beginPath();
+      ctx.arc(x * z, y * z, isHov ? 6.5 : 4, 0, Math.PI * 2);
+      ctx.fillStyle = isHov ? '#06b6d4' : '#ffffff';
+      ctx.fill();
+      ctx.strokeStyle = isHov ? '#ffffff' : '#0f172a';
+      ctx.lineWidth = isHov ? 2.2 : 1.4;
+      ctx.stroke();
+
+      if (isHov) {
+        ctx.beginPath();
+        ctx.arc(x * z, y * z, 10, 0, Math.PI * 2);
+        ctx.strokeStyle = '#06b6d4';
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([2, 2]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+    });
+
+    // Insertion handle (+) on hovered edge
+    if (hoverEdge && hoverEdge.grainIdx === selGrain) {
+      const [qx, qy] = hoverEdge.pt;
+      ctx.beginPath();
+      ctx.arc(qx * z, qy * z, 5.5, 0, Math.PI * 2);
+      ctx.fillStyle = '#06b6d4';
+      ctx.fill();
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 1.8;
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.moveTo(qx * z - 2.5, qy * z);
+      ctx.lineTo(qx * z + 2.5, qy * z);
+      ctx.moveTo(qx * z, qy * z - 2.5);
+      ctx.lineTo(qx * z, qy * z + 2.5);
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 1.4;
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  // Draw Mode preview (click-click polygon)
+  if (labelTool === 'draw' && drawPts.length > 0) {
+    ctx.save();
+    const isSnapping = mousePt && drawPts.length >= 3 && Math.hypot(mousePt[0] - drawPts[0][0], mousePt[1] - drawPts[0][1]) < (12 / z);
+    ctx.beginPath();
+    drawPts.forEach(([x, y], j) => j ? ctx.lineTo(x * z, y * z) : ctx.moveTo(x * z, y * z));
+    if (mousePt) {
+      if (isSnapping) {
+        ctx.lineTo(drawPts[0][0] * z, drawPts[0][1] * z);
+      } else {
+        ctx.lineTo(mousePt[0] * z, mousePt[1] * z);
+      }
+    }
+    ctx.strokeStyle = '#06b6d4';
+    ctx.lineWidth = 2.2;
+    ctx.stroke();
+
+    if (isSnapping) {
+      ctx.fillStyle = 'rgba(6, 182, 212, 0.2)';
+      ctx.fill();
+    }
+
+    drawPts.forEach(([x, y], j) => {
+      ctx.beginPath();
+      if (j === 0) {
+        const r = isSnapping ? 8 : 5.5;
+        ctx.arc(x * z, y * z, r, 0, Math.PI * 2);
+        ctx.fillStyle = '#10b981';
+        ctx.fill();
+        ctx.strokeStyle = isSnapping ? '#ffffff' : '#047857';
+        ctx.lineWidth = isSnapping ? 2.5 : 1.5;
+        ctx.stroke();
+
+        if (isSnapping) {
+          ctx.beginPath();
+          ctx.arc(x * z, y * z, 13, 0, Math.PI * 2);
+          ctx.strokeStyle = '#10b981';
+          ctx.lineWidth = 2;
+          ctx.setLineDash([3, 3]);
+          ctx.stroke();
+          ctx.setLineDash([]);
+        }
+      } else {
+        ctx.arc(x * z, y * z, 3.8, 0, Math.PI * 2);
+        ctx.fillStyle = '#ffffff';
+        ctx.fill();
+        ctx.strokeStyle = '#06b6d4';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+      }
+    });
+
+    if (mousePt && !isSnapping) {
+      ctx.beginPath();
+      ctx.arc(mousePt[0] * z, mousePt[1] * z, 3.5, 0, Math.PI * 2);
+      ctx.fillStyle = '#06b6d4';
+      ctx.fill();
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
 }
 function inside(pt, poly){ let c=false; for(let i=0,j=poly.length-1;i<poly.length;j=i++){ const [xi,yi]=poly[i],[xj,yj]=poly[j];
   if(((yi>pt[1])!==(yj>pt[1])) && (pt[0] < (xj-xi)*(pt[1]-yi)/(yj-yi)+xi)) c=!c; } return c; }
@@ -321,31 +641,162 @@ function hit(x, y){
   return best >= 0 ? {type:'grain', k:best} : {type:'empty'};
 }
 const cv = $('#cv');
-cv.addEventListener('mousemove', e => { const h = hit(e.offsetX/S.zoom, e.offsetY/S.zoom); const n = h.type==='grain'?h.k:-1; if(n!==S.hover){ S.hover=n; draw(); } });
-cv.addEventListener('mouseleave', () => { S.hover=-1; draw(); });
+
+cv.addEventListener('contextmenu', e => {
+  if (labelTool === 'draw' || hoverVertex) e.preventDefault();
+});
+
+cv.addEventListener('mousedown', e => {
+  if (e.button === 1 || e.altKey) return; // panning
+  if (panDrag.down) return;
+  const gx = e.offsetX / S.zoom, gy = e.offsetY / S.zoom;
+
+  if (labelTool === 'draw') {
+    if (e.button === 2) {
+      if (drawPts.length) {
+        drawPts.pop();
+        draw();
+      }
+      e.preventDefault();
+      return;
+    }
+    if (e.button === 0) {
+      if (drawPts.length >= 3 && Math.hypot(gx - drawPts[0][0], gy - drawPts[0][1]) < (12 / S.zoom)) {
+        finishDraw();
+        return;
+      }
+      drawPts.push([Math.round(gx), Math.round(gy)]);
+      draw();
+    }
+    return;
+  }
+
+  // Edit mode:
+  if (hoverVertex) {
+    if (e.button === 2 || e.shiftKey) {
+      const poly = S.grains[hoverVertex.grainIdx].pts;
+      if (poly.length > 3) {
+        poly.splice(hoverVertex.vertexIdx, 1);
+        hoverVertex = null;
+        S.dirty = true;
+        draw();
+        toast('Vertex removed');
+      } else {
+        toast('Polygon must have at least 3 points');
+      }
+      e.preventDefault();
+      return;
+    }
+    dragVertex = { ...hoverVertex };
+    return;
+  }
+
+  if (hoverEdge) {
+    const poly = S.grains[hoverEdge.grainIdx].pts;
+    poly.splice(hoverEdge.edgeIdx + 1, 0, hoverEdge.pt);
+    hoverVertex = { grainIdx: hoverEdge.grainIdx, vertexIdx: hoverEdge.edgeIdx + 1 };
+    hoverEdge = null;
+    S.dirty = true;
+    draw();
+    toast('Vertex added on edge');
+    return;
+  }
+});
+
+cv.addEventListener('mousemove', e => {
+  const gx = e.offsetX / S.zoom, gy = e.offsetY / S.zoom;
+
+  if (labelTool === 'draw') {
+    mousePt = [Math.round(gx), Math.round(gy)];
+    draw();
+    return;
+  }
+
+  if (dragVertex && S.grains[dragVertex.grainIdx]) {
+    S.grains[dragVertex.grainIdx].pts[dragVertex.vertexIdx] = [Math.round(gx), Math.round(gy)];
+    const poly = S.grains[dragVertex.grainIdx].pts;
+    const xs = poly.map(p => p[0]), ys = poly.map(p => p[1]);
+    S.grains[dragVertex.grainIdx].box = [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)];
+    S.grains[dragVertex.grainIdx].area = Math.abs(polygonArea(poly));
+    S.grains[dragVertex.grainIdx].edited = true;
+    S.dirty = true;
+    draw();
+    return;
+  }
+
+  const prevHv = hoverVertex, prevHe = hoverEdge;
+  hoverVertex = findHoverVertex(gx, gy);
+  hoverEdge = hoverVertex ? null : findHoverEdge(gx, gy);
+
+  const h = hit(gx, gy);
+  const n = h.type === 'grain' ? h.k : -1;
+  if (n !== S.hover && !hoverVertex && !hoverEdge) {
+    S.hover = n;
+  }
+
+  if (hoverVertex) {
+    cv.style.cursor = 'grab';
+  } else if (hoverEdge) {
+    cv.style.cursor = 'copy';
+  } else if (labelTool === 'draw') {
+    cv.style.cursor = 'crosshair';
+  } else {
+    cv.style.cursor = h.type === 'grain' ? 'pointer' : 'default';
+  }
+
+  if (prevHv !== hoverVertex || prevHe !== hoverEdge || n !== S.hover) {
+    draw();
+  }
+});
+
+cv.addEventListener('mouseleave', () => {
+  if (labelTool === 'draw' && mousePt) {
+    mousePt = null;
+    draw();
+  }
+  S.hover = -1;
+  hoverVertex = null;
+  hoverEdge = null;
+  draw();
+});
+
+window.addEventListener('mouseup', () => {
+  if (dragVertex) dragVertex = null;
+});
+
 cv.addEventListener('click', e => {
-  if(panDrag.moved){ panDrag.moved = false; return; }   // end of a drag-pan, not a click
-  const x = e.offsetX/S.zoom, y = e.offsetY/S.zoom, h = hit(x, y), pop = $('#pop');
+  if (panDrag.moved) { panDrag.moved = false; return; }
+  if (labelTool === 'draw') return;
+  if (hoverVertex || hoverEdge || dragVertex) return;
+
+  const x = e.offsetX / S.zoom, y = e.offsetY / S.zoom, h = hit(x, y), pop = $('#pop');
   let html = '';
-  if(h.type === 'grain'){ const g = S.grains[h.k], cur = clsOf(g), st = stateOf(g);
-    html = `<h4>Model: ${NAME[g.cls]} · conf ${g.conf.toFixed(2)}</h4>
+  if (h.type === 'grain') {
+    selGrain = h.k;
+    const g = S.grains[h.k], cur = clsOf(g), st = stateOf(g);
+    setDrawClass(cur);
+    html = `<h4>Model: ${NAME[g.cls] || g.cls} · conf ${(g.conf||1.0).toFixed(2)}</h4>
       <button onclick="mark(${h.k},'ok')"><span>✓ Correct${st==='ok'?' (current)':''}</span><kbd>C</kbd></button>
       ${['viable','non_viable','intermediate'].map((c,j)=> c===g.cls ? '' :
         `<button onclick="mark(${h.k},'to_${c}')"><span><i class="sw" style="background:${COL[c]}"></i>Actually ${NAME[c].toLowerCase()}</span><kbd>${j+1}</kbd></button>`).join('')}
       <button onclick="mark(${h.k},'fp')"><span>✕ Not a pollen grain</span><kbd>X</kbd></button>`;
     pop._keys = {c:()=>mark(h.k,'ok'), x:()=>mark(h.k,'fp'), 1:()=>g.cls!=='viable'&&mark(h.k,'to_viable'), 2:()=>g.cls!=='non_viable'&&mark(h.k,'to_non_viable'), 3:()=>g.cls!=='intermediate'&&mark(h.k,'to_intermediate')};
-  } else if(h.type === 'missed'){
+  } else if (h.type === 'missed') {
+    selGrain = null;
     html = `<h4>Missed ${NAME[S.missed[h.k].cls].toLowerCase()} grain</h4><button onclick="unmiss(${h.k})"><span>Remove marker</span><kbd>X</kbd></button>`;
     pop._keys = {x:()=>unmiss(h.k)};
   } else {
+    selGrain = null;
     html = `<h4>Missed grain here?</h4>` + ['viable','non_viable','intermediate'].map((c,j)=>
       `<button onclick="miss(${x.toFixed(1)},${y.toFixed(1)},'${c}')"><span><i class="sw" style="background:${COL[c]}"></i>${NAME[c]}</span><kbd>${j+1}</kbd></button>`).join('')
+      + `<button onclick="setLabelTool('draw');hidePop()"><span>✏️ Draw Polygon</span><kbd>P</kbd></button>`
       + `<button onclick="hidePop()"><span>Cancel</span><kbd>Esc</kbd></button>`;
-    pop._keys = {1:()=>miss(x,y,'viable'), 2:()=>miss(x,y,'non_viable'), 3:()=>miss(x,y,'intermediate')};
+    pop._keys = {1:()=>miss(x,y,'viable'), 2:()=>miss(x,y,'non_viable'), 3:()=>miss(x,y,'intermediate'), p:()=>{setLabelTool('draw');hidePop();}};
   }
   pop.innerHTML = html; pop.hidden = false;
   const left = Math.min(e.offsetX + 14, cv.width - 215), top = Math.min(e.offsetY + 14, cv.height - pop.offsetHeight - 6);
   pop.style.left = Math.max(4,left) + 'px'; pop.style.top = Math.max(4,top) + 'px';
+  draw();
 });
 function hidePop(){ const p=$('#pop'); p.hidden=true; p._keys=null; }
 function mark(n, st){ const g = S.grains[n]; if(st==='ok') delete S.marks[g.i]; else S.marks[g.i]=st; S.dirty=true; hidePop(); draw(); refresh(); }
@@ -368,6 +819,9 @@ async function save(){
   const isRelabel = $('#chk-relabel').checked;
   const body = {verdict:S.verdict, image_issue:$('#chk-img').checked, relabel:isRelabel,
                 comment:$('#comment').value, grains:S.marks, missed:S.missed,
+                custom_grains: S.grains.filter(g => g.isCustom || g.edited).map(g => ({
+                  box: g.box, pts: g.pts, cls: clsOf(g), area: g.area, i: g.i
+                })),
                 elapsed_s:Math.round((Date.now()-S.t0)/1000)};
   await api(`/api/item/${S.items[S.idx].id}/decision`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
   S.items[S.idx].done = true; S.items[S.idx].verdict = S.verdict; S.items[S.idx].relabel = isRelabel;
@@ -398,6 +852,35 @@ document.addEventListener('keydown', e => {
   if(e.key === '-' || e.key === '_'){ e.preventDefault(); return setZoom(S.zoom/1.25); }
   if(e.key === '0'){ e.preventDefault(); return setZoom(1.4); }
   const pop = $('#pop'), k = e.key.toLowerCase();
+  if (labelTool === 'draw') {
+    if (k === 'enter') { finishDraw(); return; }
+    if (k === 'backspace' || k === 'delete') {
+      if (drawPts.length) { drawPts.pop(); draw(); }
+      return;
+    }
+    if (k === 'escape') { setLabelTool('edit'); return; }
+  }
+
+  if (k === 'p') { setLabelTool(labelTool === 'draw' ? 'edit' : 'draw'); return; }
+  if (k === 'e') { setLabelTool('edit'); return; }
+  if (k === '1') { setDrawClass('viable'); return; }
+  if (k === '2') { setDrawClass('non-viable'); return; }
+  if (k === '3') { setDrawClass('intermediate'); return; }
+  if (k === 'delete' || k === 'x') {
+    if (hoverVertex) {
+      const poly = S.grains[hoverVertex.grainIdx].pts;
+      if (poly.length > 3) {
+        poly.splice(hoverVertex.vertexIdx, 1);
+        hoverVertex = null;
+        S.dirty = true;
+        draw();
+        toast('Vertex removed');
+      }
+      return;
+    }
+    if (selGrain !== null) { deleteSelectedGrain(); return; }
+  }
+
   if(!pop.hidden && pop._keys){ if(k==='escape') return hidePop(); if(pop._keys[k]){ e.preventDefault(); return pop._keys[k](); } }
   if(k===' '){ e.preventDefault(); if(!S.peek){ S.peek=true; draw(); } return; }
   if(k==='m'){ const c=$('#chk-masks'); c.checked=!c.checked; S.showMasks=c.checked; draw(); }
@@ -484,6 +967,14 @@ window.addEventListener('mouseup', () => {
 
 /* ---------- Recently reviewed previews (side panel) ---------- */
 let returnTo = null, recentLimit = 9;
+let labelTool = 'edit';
+let drawClass = 'viable';
+let drawPts = [];
+let mousePt = null;
+let selGrain = null;
+let hoverVertex = null;
+let hoverEdge = null;
+let dragVertex = null;
 const VERD = {good:'Good', minor:'Minor', poor:'Poor'};
 function renderRecent(){
   const el = $('#recent-grid'); if(!el) return;
