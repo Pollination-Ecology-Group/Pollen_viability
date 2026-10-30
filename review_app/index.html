@@ -31,7 +31,9 @@ aside .it:hover{background:var(--panel)} aside .it.on{background:var(--panel2);c
 .centre{display:flex;flex-direction:column;min-width:0}
 .bar{display:flex;align-items:center;gap:10px;padding:9px 14px;border-bottom:1px solid var(--line);flex-wrap:wrap}
 .bar label{display:flex;align-items:center;gap:6px;color:var(--mut)}
-.stagewrap{flex:1;overflow:auto;display:grid;place-items:center;padding:18px}
+.stagewrap{flex:1;overflow:auto;display:flex;padding:18px}
+.stage{margin:auto}  /* margin:auto (not place-items) keeps the zoomed image fully scrollable */
+.stagewrap.panning,.stagewrap.panning canvas{cursor:grabbing}
 .stage{position:relative;box-shadow:0 20px 60px rgba(0,0,0,.5);border-radius:6px;line-height:0}
 canvas{border-radius:6px;cursor:crosshair;display:block}
 .pop{position:absolute;z-index:4;min-width:200px;background:rgba(21,26,35,.96);backdrop-filter:blur(8px);border:1px solid var(--line);border-radius:12px;padding:8px;box-shadow:0 12px 40px rgba(0,0,0,.6);line-height:1.3;animation:pop .12s ease-out}
@@ -61,6 +63,27 @@ th,td{padding:9px 10px;border-bottom:1px solid var(--line);text-align:right} th{
 .relabel-box:hover{background:rgba(201,75,255,0.16);border-color:#c94bff}
 .relabel-box.checked{background:linear-gradient(90deg,rgba(124,156,255,0.22),rgba(201,75,255,0.28));border-color:#f0abfc;box-shadow:0 0 14px rgba(201,75,255,0.25)}
 .tag-relabel{background:rgba(201,75,255,0.2);border-color:rgba(201,75,255,0.45);color:#f0abfc;padding:0 5px;font-size:11px}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px;margin-top:14px}
+#zoom-val{min-width:38px;font-variant-numeric:tabular-nums;color:var(--txt)}
+/* Recently reviewed previews */
+.recent-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.recent-card{position:relative;aspect-ratio:1;border-radius:8px;overflow:hidden;cursor:pointer;border:2px solid var(--line);background:#0b0e14;transition:.15s}
+.recent-card img{width:100%;height:100%;object-fit:cover;display:block}
+.recent-card:hover{border-color:var(--acc);transform:translateY(-1px)}
+.recent-card.good{border-color:var(--good)} .recent-card.minor{border-color:var(--warn)} .recent-card.poor{border-color:var(--bad)}
+.recent-card.on{outline:2px solid #fff;outline-offset:1px}
+.recent-card .cap{position:absolute;left:0;right:0;bottom:0;display:flex;justify-content:space-between;font-size:10px;font-weight:600;padding:9px 5px 3px;background:linear-gradient(transparent,rgba(0,0,0,.85))}
+.recent-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.recent-head h3{margin:0}
+.recent-foot{display:flex;gap:6px;margin-top:8px} .recent-foot button{flex:1;padding:5px}
+#btn-back{display:none;width:100%;margin-bottom:8px;background:var(--acc);color:#0b0e14;font-weight:600;border-color:var(--acc)}
+#btn-back.show{display:block}
+/* Bilingual help */
+.help[data-lang="cs"] .lang-en,.help[data-lang="en"] .lang-cs{display:none !important}
+.langsw{display:inline-flex;gap:4px;padding:3px;border:1px solid var(--line);border-radius:999px;background:var(--panel)}
+.langsw button{border:none;border-radius:999px;padding:4px 12px;background:transparent}
+.langsw button.on{background:var(--acc);color:#0b0e14;font-weight:600}
+.help-top{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
 </style>
 </head>
 <body>
@@ -69,7 +92,7 @@ th,td{padding:9px 10px;border-bottom:1px solid var(--line);text-align:right} th{
   <nav class="tabs">
     <button id="tab-review" class="on" onclick="tab('review')">Review</button>
     <button id="tab-results" onclick="tab('results')">Results</button>
-    <button id="tab-help" onclick="tab('help')">How to review</button>
+    <button id="tab-help" onclick="tab('help')" title="Guidelines / návod [?]">How to review · Návod <kbd>?</kbd></button>
   </nav>
   <a href="https://stomata-review-stenc.dyn.cloud.e-infra.cz" target="_blank" rel="noopener" style="text-decoration:none;display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:999px;border:1px solid var(--line);background:var(--panel2);color:var(--txt);font-size:12px;margin-left:6px;" title="Switch to Stomata QC Review App">🌿 Stomata Review ↗</a>
   <div class="grow"></div>
@@ -88,7 +111,7 @@ th,td{padding:9px 10px;border-bottom:1px solid var(--line);text-align:right} th{
       <div class="grow"></div>
       <label><input type="checkbox" id="chk-masks" checked onchange="S.showMasks=this.checked;draw()"> outlines <kbd>M</kbd></label>
       <label>fill <input type="range" id="rng-op" min="0" max="0.7" step="0.05" value="0.25" oninput="S.opacity=+this.value;draw()"></label>
-      <label>zoom <input type="range" id="rng-zoom" min="1" max="3" step="0.1" value="1.4" oninput="S.zoom=+this.value;draw()"></label>
+      <label title="mouse wheel = zoom at cursor · drag = pan · + / − / 0">zoom <input type="range" id="rng-zoom" min="0.6" max="6" step="0.1" value="1.4" oninput="setZoom(+this.value)"><span id="zoom-val">1.4×</span></label>
     </div>
     <div class="stagewrap" id="stagewrap">
       <div class="stage" id="stage"><canvas id="cv"></canvas><div class="pop" id="pop" hidden></div></div>
@@ -98,7 +121,7 @@ th,td{padding:9px 10px;border-bottom:1px solid var(--line);text-align:right} th{
       <span><i class="sw" style="background:var(--nv)"></i>non-viable</span>
       <span><i class="sw" style="background:var(--im)"></i>intermediate</span>
       <span>dashed = your correction · ⊕ = missed grain you added · ✕ = not pollen</span>
-      <div class="grow"></div><span>hold <kbd>Space</kbd> to see the raw image</span>
+      <div class="grow"></div><span>wheel = zoom · drag = pan · hold <kbd>Space</kbd> = raw image · <kbd>?</kbd> = help</span>
     </div>
   </section>
   <section class="side">
@@ -138,35 +161,77 @@ th,td{padding:9px 10px;border-bottom:1px solid var(--line);text-align:right} th{
       <textarea id="comment" placeholder="Optional note…" oninput="S.dirty=true"></textarea>
     </div>
     <button class="save" id="btn-save" onclick="save()" disabled>Save &amp; next <kbd style="color:#fff;border-color:#fff6">Enter</kbd></button>
+    <div class="card" id="recent-card">
+      <div class="recent-head"><h3>Recently reviewed</h3><span class="muted" id="recent-count"></span></div>
+      <button id="btn-back" onclick="goBack()" title="Return to the tile you were reviewing">↩ Back</button>
+      <div class="recent-grid" id="recent-grid"><span class="muted">–</span></div>
+      <div class="recent-foot"><button id="recent-more" onclick="recentLimit+=9;renderRecent()" hidden>more</button></div>
+      <p class="muted" style="margin:8px 0 0;font-size:11.5px">Click a preview to reopen and fix it; <kbd>Enter</kbd> then saves and brings you back.</p>
+    </div>
     <p class="muted">Tiles are <b>blinded</b>: cytotype, plant and slide are hidden so expectations can't influence the check. Corrections are saved to S3 under your name.</p>
   </section>
 </main>
 
 <main id="view-results" hidden><div class="page" id="results"></div></main>
 
-<main id="view-help" hidden><div class="page help">
-  <h2>How to review a tile (≈1–2 min each)</h2>
-  <p class="muted">You see a 640 × 640 px piece of a slide with the model's outlines. Your job is only to fix what is wrong — correct outlines need no action.</p>
-  <div class="grid2">
-    <div class="card"><h3>1 · Wrong outline</h3><ul>
-      <li><b>Click the outline</b> → choose the right class (viable / non-viable / intermediate) or <b>“Not a pollen grain”</b> (debris, bubble, stain blob).</li>
-      <li>One outline covering <b>two touching grains</b>: keep it, and add the second grain as missed.</li></ul></div>
-    <div class="card"><h3>2 · Missed grain</h3><ul>
-      <li><b>Click on the grain</b> where there is no outline → choose its class. A ⊕ marker appears.</li>
-      <li>Click a ⊕ marker again to remove it.</li>
-      <li>Ignore grains cut by the tile border if less than half is visible.</li></ul></div>
-    <div class="card"><h3>3 · Verdict & save</h3><ul>
-      <li><b>Good</b>: no or trivial errors · <b>Minor</b>: a few errors · <b>Poor</b>: systematic problem.</li>
-      <li>Tick <b>Image problem</b> if the image itself is bad.</li>
-      <li>Tick <b>🏷️ Flag for Roboflow (<kbd>R</kbd>)</b> if the tile is a prime candidate for retraining &amp; annotation in Roboflow. Then <b>Save &amp; next</b>.</li></ul></div>
-    <div class="card"><h3>Classes (Alexander stain)</h3><ul>
-      <li><span class="sw" style="background:var(--v)"></span><b>Viable</b>: full, dark magenta/purple.</li>
-      <li><span class="sw" style="background:var(--nv)"></span><b>Non-viable</b>: empty, pale green/blue, shrivelled.</li>
-      <li><span class="sw" style="background:var(--im)"></span><b>Intermediate</b>: partly stained / mottled.</li></ul></div>
+<main id="view-help" hidden><div class="page help" id="help-page" data-lang="en">
+  <div class="help-top">
+    <h2><span class="lang-en">How to review a tile (≈1–2 min each)</span><span class="lang-cs">Jak zkontrolovat dlaždici (≈1–2 min)</span></h2>
+    <div class="langsw" role="group" aria-label="Language">
+      <button data-lang="cs" onclick="setHelpLang('cs')">🇨🇿 CZ</button><button data-lang="en" onclick="setHelpLang('en')">🇬🇧 EN</button>
+    </div>
   </div>
-  <div class="card" style="margin-top:14px"><h3>Keyboard</h3><p class="muted">
-    <kbd>M</kbd> outlines on/off · hold <kbd>Space</kbd> raw image · <kbd>A</kbd>/<kbd>S</kbd>/<kbd>D</kbd> verdict · <kbd>Enter</kbd> save &amp; next · <kbd>←</kbd>/<kbd>→</kbd> navigate ·
-    in a menu: <kbd>1</kbd> viable, <kbd>2</kbd> non-viable, <kbd>3</kbd> intermediate, <kbd>X</kbd> not pollen, <kbd>C</kbd> correct, <kbd>Esc</kbd> close.</p></div>
+  <p class="muted">
+    <span class="lang-en">You see a 640 × 640 px piece of a slide (Alexander stain) with the model's outlines. Your job is only to fix what is wrong — correct outlines need no action. Tiles are <b>blinded</b> (no cytotype, plant or slide), so expectations cannot influence the check.</span>
+    <span class="lang-cs">Vidíš výřez sklíčka 640 × 640 px (Alexanderovo barvení) s obrysy od modelu. Opravuješ jen to, co je špatně – správné obrysy nech být. Dlaždice jsou <b>zaslepené</b> (bez cytotypu, rostliny a sklíčka), aby očekávání neovlivnila kontrolu.</span>
+  </p>
+  <div class="grid2">
+    <div class="card"><h3><span class="lang-en">1 · Wrong outline</span><span class="lang-cs">1 · Špatný obrys</span></h3><ul>
+      <li class="lang-en"><b>Click the outline</b> → choose the right class (viable / non-viable / intermediate) or <b>“Not a pollen grain”</b> (debris, bubble, stain blob).</li>
+      <li class="lang-cs"><b>Klikni na obrys</b> → vyber správnou třídu (viable / non-viable / intermediate) nebo <b>„Not a pollen grain“</b> (smetí, bublina, skvrna barviva).</li>
+      <li class="lang-en">One outline covering <b>two touching grains</b>: keep it, and add the second grain as missed.</li>
+      <li class="lang-cs">Jeden obrys přes <b>dvě dotýkající se zrna</b>: nech ho a druhé zrno přidej jako přehlédnuté.</li></ul></div>
+    <div class="card"><h3><span class="lang-en">2 · Missed grain</span><span class="lang-cs">2 · Přehlédnuté zrno</span></h3><ul>
+      <li class="lang-en"><b>Click on the grain</b> where there is no outline → choose its class. A ⊕ marker appears.</li>
+      <li class="lang-cs"><b>Klikni na zrno</b> bez obrysu → vyber třídu. Objeví se značka ⊕.</li>
+      <li class="lang-en">Click a ⊕ marker again to remove it.</li>
+      <li class="lang-cs">Opětovným klikem na ⊕ značku odstraníš.</li>
+      <li class="lang-en">Ignore grains cut by the tile border if less than half is visible.</li>
+      <li class="lang-cs">Zrna useknutá okrajem dlaždice ignoruj, pokud je vidět méně než polovina.</li></ul></div>
+    <div class="card"><h3><span class="lang-en">3 · Verdict &amp; save</span><span class="lang-cs">3 · Hodnocení a uložení</span></h3><ul>
+      <li class="lang-en"><b>Good</b>: no or trivial errors · <b>Minor</b>: a few errors · <b>Poor</b>: systematic problem.</li>
+      <li class="lang-cs"><b>Good</b>: žádné nebo drobné chyby · <b>Minor</b>: několik chyb · <b>Poor</b>: systematický problém.</li>
+      <li class="lang-en">Tick <b>Image problem</b> if the image itself is bad.</li>
+      <li class="lang-cs">Zaškrtni <b>Image problem</b>, pokud je špatný samotný snímek.</li>
+      <li class="lang-en">Tick <b>🏷️ Flag for Roboflow (<kbd>R</kbd>)</b> if the tile is a prime candidate for retraining. Then <b>Save &amp; next</b>.</li>
+      <li class="lang-cs">Zaškrtni <b>🏷️ Flag for Roboflow (<kbd>R</kbd>)</b>, pokud je dlaždice vhodná k přeanotování a dotrénování. Pak <b>Save &amp; next</b>.</li></ul></div>
+    <div class="card"><h3><span class="lang-en">Classes (Alexander stain)</span><span class="lang-cs">Třídy (Alexanderovo barvení)</span></h3><ul>
+      <li><span class="sw" style="background:var(--v)"></span><b>Viable</b>: <span class="lang-en">full, dark magenta/purple.</span><span class="lang-cs">plné, tmavě purpurové/fialové.</span></li>
+      <li><span class="sw" style="background:var(--nv)"></span><b>Non-viable</b>: <span class="lang-en">empty, pale green/blue, shrivelled.</span><span class="lang-cs">prázdné, bledě zelené/modré, scvrklé.</span></li>
+      <li><span class="sw" style="background:var(--im)"></span><b>Intermediate</b>: <span class="lang-en">partly stained / mottled.</span><span class="lang-cs">částečně obarvené / skvrnité.</span></li></ul></div>
+    <div class="card"><h3><span class="lang-en">Zoom &amp; navigation</span><span class="lang-cs">Zoom a pohyb</span></h3><ul>
+      <li class="lang-en"><b>Mouse wheel</b> zooms towards the cursor (0.6× – 6×); <kbd>+</kbd> / <kbd>−</kbd> / <kbd>0</kbd> work too.</li>
+      <li class="lang-cs"><b>Kolečko myši</b> přibližuje ke kurzoru (0,6× – 6×); fungují i <kbd>+</kbd> / <kbd>−</kbd> / <kbd>0</kbd>.</li>
+      <li class="lang-en"><b>Drag</b> the image (left or middle button) to pan; a plain click still opens the menu.</li>
+      <li class="lang-cs"><b>Tažením</b> obrázku (levé nebo prostřední tlačítko) se posouváš; obyčejný klik dál otevírá nabídku.</li>
+      <li class="lang-en">Hold <kbd>Space</kbd> to see the raw image without outlines.</li>
+      <li class="lang-cs">Podrž <kbd>Mezerník</kbd> pro snímek bez obrysů.</li></ul></div>
+    <div class="card"><h3><span class="lang-en">Fixing earlier tiles</span><span class="lang-cs">Oprava starších dlaždic</span></h3><ul>
+      <li class="lang-en">The <b>Recently reviewed</b> panel (right) shows previews of your saved tiles, coloured by verdict.</li>
+      <li class="lang-cs">Panel <b>Recently reviewed</b> (vpravo) ukazuje náhledy uložených dlaždic, barevně podle hodnocení.</li>
+      <li class="lang-en">Click one to reopen it, fix it and press <kbd>Enter</kbd> – you return to the tile you were working on (or use <b>↩ Back</b>).</li>
+      <li class="lang-cs">Klikni na náhled, oprav a stiskni <kbd>Enter</kbd> – vrátíš se na rozpracovanou dlaždici (nebo použij <b>↩ Back</b>).</li></ul></div>
+  </div>
+  <div class="card" style="margin-top:14px"><h3><span class="lang-en">Keyboard</span><span class="lang-cs">Klávesy</span></h3><p class="muted">
+    <kbd>M</kbd> <span class="lang-en">outlines on/off</span><span class="lang-cs">obrysy zap/vyp</span> ·
+    <kbd>Space</kbd> <span class="lang-en">(hold) raw image</span><span class="lang-cs">(držet) bez obrysů</span> ·
+    <kbd>A</kbd>/<kbd>S</kbd>/<kbd>D</kbd> <span class="lang-en">verdict</span><span class="lang-cs">hodnocení</span> ·
+    <kbd>R</kbd> Roboflow ·
+    <kbd>Enter</kbd> <span class="lang-en">save &amp; next</span><span class="lang-cs">uložit a další</span> ·
+    <kbd>←</kbd>/<kbd>→</kbd> <span class="lang-en">navigate</span><span class="lang-cs">předchozí/další</span> ·
+    <kbd>+</kbd>/<kbd>−</kbd>/<kbd>0</kbd> zoom ·
+    <kbd>?</kbd> <span class="lang-en">this help</span><span class="lang-cs">tento návod</span> ·
+    <span class="lang-en">in a menu:</span><span class="lang-cs">v nabídce:</span> <kbd>1</kbd> viable, <kbd>2</kbd> non-viable, <kbd>3</kbd> intermediate, <kbd>X</kbd> not pollen, <kbd>C</kbd> correct, <kbd>Esc</kbd> <span class="lang-en">close</span><span class="lang-cs">zavřít</span>.</p></div>
 </div></main>
 <div class="toast" id="toast"></div>
 
@@ -197,10 +262,12 @@ function renderQueue(){
   $('#progtxt').textContent = `${done} / ${S.items.length}`;
   $('#queue').innerHTML = S.items.map((it,k)=>`<div class="it ${k===S.idx?'on':''}" onclick="open(${k})">
      <i class="dot ${it.verdict||''}"></i><span>Tile ${it.order}</span><span class="grow"></span>${it.relabel?'<span class="tag tag-relabel" title="Queued for Roboflow">🏷️</span>':''}${it.shared?'<span class="tag" title="also reviewed by a colleague">×2</span>':''}</div>`).join('');
+  renderRecent();
 }
 async function open(k){
   if(k<0 || k>=S.items.length) return;
-  if(S.dirty && !confirm('Discard unsaved corrections on this tile?')) return;
+  if(S.dirty && !confirm('Discard unsaved corrections on this tile?')) return false;
+  returnTo = null;
   S.idx = k; renderQueue(); hidePop();
   const d = await api('/api/item/' + S.items[k].id);
   S.cur = d.item; S.marks = d.decision?.grains || {}; S.missed = d.decision?.missed || [];
@@ -219,6 +286,7 @@ async function open(k){
     draw(); refresh();
   }; img.src = d.image_url;
   setVerdict(S.verdict, true);
+  return true;
 }
 function go(dk){ open(S.idx + dk); }
 
@@ -228,6 +296,7 @@ function draw(){
   const c = $('#cv'), ctx = c.getContext('2d'), img = S.img; if(!img) return;
   const W = img.naturalWidth, H = img.naturalHeight, z = S.zoom;
   c.width = Math.round(W*z); c.height = Math.round(H*z); ctx.imageSmoothingEnabled = z < 2;
+  $('#zoom-val').textContent = z.toFixed(1) + '×';
   ctx.drawImage(img, 0, 0, c.width, c.height);
   if(!S.showMasks || S.peek) return;
   S.grains.forEach((g, n) => {
@@ -255,6 +324,7 @@ const cv = $('#cv');
 cv.addEventListener('mousemove', e => { const h = hit(e.offsetX/S.zoom, e.offsetY/S.zoom); const n = h.type==='grain'?h.k:-1; if(n!==S.hover){ S.hover=n; draw(); } });
 cv.addEventListener('mouseleave', () => { S.hover=-1; draw(); });
 cv.addEventListener('click', e => {
+  if(panDrag.moved){ panDrag.moved = false; return; }   // end of a drag-pan, not a click
   const x = e.offsetX/S.zoom, y = e.offsetY/S.zoom, h = hit(x, y), pop = $('#pop');
   let html = '';
   if(h.type === 'grain'){ const g = S.grains[h.k], cur = clsOf(g), st = stateOf(g);
@@ -301,7 +371,9 @@ async function save(){
                 elapsed_s:Math.round((Date.now()-S.t0)/1000)};
   await api(`/api/item/${S.items[S.idx].id}/decision`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
   S.items[S.idx].done = true; S.items[S.idx].verdict = S.verdict; S.items[S.idx].relabel = isRelabel;
+  S.items[S.idx].saved = new Date().toISOString();
   S.dirty = false; toast(isRelabel ? 'Saved (🏷️ Queued for Roboflow) ✓' : 'Saved ✓');
+  if(returnTo !== null && returnTo !== S.idx){ open(returnTo); return; }
   const nxt = S.items.findIndex((it,k)=>k>S.idx && !it.done);
   if(nxt >= 0) open(nxt); else { renderQueue(); toast('All your tiles are reviewed — thank you! 🎉'); }
 }
@@ -318,7 +390,13 @@ function updateRelabelUI(){
 }
 
 document.addEventListener('keydown', e => {
-  if(e.target.tagName === 'TEXTAREA' || $('#view-review').hidden) return;
+  if(e.target.tagName === 'TEXTAREA') return;
+  if(e.key === '?'){ e.preventDefault(); tab($('#view-help').hidden ? 'help' : 'review'); return; }
+  if(e.key === 'Escape' && !$('#view-help').hidden){ tab('review'); return; }
+  if($('#view-review').hidden) return;
+  if(e.key === '+' || e.key === '='){ e.preventDefault(); return setZoom(S.zoom*1.25); }
+  if(e.key === '-' || e.key === '_'){ e.preventDefault(); return setZoom(S.zoom/1.25); }
+  if(e.key === '0'){ e.preventDefault(); return setZoom(1.4); }
   const pop = $('#pop'), k = e.key.toLowerCase();
   if(!pop.hidden && pop._keys){ if(k==='escape') return hidePop(); if(pop._keys[k]){ e.preventDefault(); return pop._keys[k](); } }
   if(k===' '){ e.preventDefault(); if(!S.peek){ S.peek=true; draw(); } return; }
@@ -368,6 +446,79 @@ async function results(){
     </div>
     <p style="margin-top:20px;"><a href="/api/export.csv${q()}"><button>⬇ Download all reviews (CSV)</button></a></p>`;
 }
+/* ---------- Zoom at cursor + drag to pan ---------- */
+const wrap = $('#stagewrap');
+const panDrag = {down:false, moved:false, x:0, y:0, l:0, t:0};
+function setZoom(z, cx, cy){
+  if(!S.img) return;
+  z = Math.min(6, Math.max(0.6, z));
+  const wr = wrap.getBoundingClientRect();
+  if(cx == null){ cx = wr.left + wr.width/2; cy = wr.top + wr.height/2; }   // keyboard / slider: zoom at view centre
+  const r = cv.getBoundingClientRect(), ix = (cx - r.left)/S.zoom, iy = (cy - r.top)/S.zoom;
+  S.zoom = z; $('#rng-zoom').value = z; hidePop(); draw();
+  const r2 = cv.getBoundingClientRect();
+  wrap.scrollLeft += r2.left + ix*z - cx; wrap.scrollTop += r2.top + iy*z - cy;   // keep the point under the cursor fixed
+}
+wrap.addEventListener('wheel', e => {
+  if(!S.img || e.shiftKey) return;            // Shift+wheel keeps normal scrolling
+  e.preventDefault();
+  setZoom(S.zoom * (e.deltaY < 0 ? 1.15 : 1/1.15), e.clientX, e.clientY);
+}, {passive:false});
+wrap.addEventListener('mousedown', e => {
+  if(e.button !== 0 && e.button !== 1) return;
+  if(e.button === 1) e.preventDefault();
+  Object.assign(panDrag, {down:true, moved:false, x:e.clientX, y:e.clientY, l:wrap.scrollLeft, t:wrap.scrollTop, btn:e.button});
+});
+window.addEventListener('mousemove', e => {
+  if(!panDrag.down) return;
+  const dx = e.clientX - panDrag.x, dy = e.clientY - panDrag.y;
+  if(!panDrag.moved && Math.hypot(dx, dy) < 5) return;
+  panDrag.moved = true; wrap.classList.add('panning');
+  wrap.scrollLeft = panDrag.l - dx; wrap.scrollTop = panDrag.t - dy;
+});
+window.addEventListener('mouseup', () => {
+  if(!panDrag.down) return;
+  panDrag.down = false; wrap.classList.remove('panning');
+  if(panDrag.btn === 1) panDrag.moved = false;   // middle button never produces a click
+});
+
+/* ---------- Recently reviewed previews (side panel) ---------- */
+let returnTo = null, recentLimit = 9;
+const VERD = {good:'Good', minor:'Minor', poor:'Poor'};
+function renderRecent(){
+  const el = $('#recent-grid'); if(!el) return;
+  const done = S.items.map((it, k) => ({it, k})).filter(o => o.it.done)
+    .sort((a, b) => (b.it.saved || '').localeCompare(a.it.saved || '') || b.it.order - a.it.order);
+  $('#recent-count').textContent = done.length ? `${done.length} done` : '';
+  el.innerHTML = done.slice(0, recentLimit).map(({it, k}) =>
+    `<div class="recent-card ${it.verdict || ''} ${k === S.idx ? 'on' : ''}" onclick="openRecent(${k})" title="Tile ${it.order} · ${VERD[it.verdict] || '–'}${it.relabel ? ' · 🏷️ Roboflow' : ''}\nclick to reopen and fix">` +
+    `<img loading="lazy" src="/api/item/${it.id}/thumb${q()}" alt=""><div class="cap"><span>#${it.order}</span><span>${VERD[it.verdict] || ''}${it.relabel ? ' 🏷️' : ''}</span></div></div>`
+  ).join('') || '<span class="muted">Nothing reviewed yet.</span>';
+  $('#recent-more').hidden = done.length <= recentLimit;
+  const t = returnTo !== null ? S.items[returnTo] : null;
+  $('#btn-back').classList.toggle('show', !!t);
+  if(t) $('#btn-back').textContent = `↩ Back to tile ${t.order}`;
+}
+async function openRecent(k){
+  if(k === S.idx) return;
+  const cur = S.items[S.idx];
+  const back = returnTo !== null ? returnTo : (cur && !cur.done ? S.idx : null);   // remember the tile being worked on
+  if((await open(k)) === false) return;
+  returnTo = back; renderRecent();
+  if(back !== null) toast('Enter saves and returns to your tile');
+}
+function goBack(){ if(returnTo !== null) open(returnTo); }
+
+/* ---------- Help language (cs / en), remembered in this browser ---------- */
+function setHelpLang(l){
+  if(l !== 'cs' && l !== 'en') l = 'en';
+  $('#help-page').dataset.lang = l;
+  document.querySelectorAll('.langsw button').forEach(b => b.classList.toggle('on', b.dataset.lang === l));
+  try{ localStorage.setItem('helpLang', l); }catch(e){}
+}
+setHelpLang((() => { try{ const v = localStorage.getItem('helpLang'); if(v) return v; }catch(e){}
+  return (navigator.language || '').toLowerCase().startsWith('cs') ? 'cs' : 'en'; })());
+
 init().catch(err => { $('#stagewrap').innerHTML = `<div class="empty">Could not load: ${err.message}</div>`; });
 </script>
 </body>

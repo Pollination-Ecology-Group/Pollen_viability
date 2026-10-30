@@ -29,7 +29,7 @@ from datetime import datetime, timezone
 import boto3
 from botocore.config import Config
 from botocore.exceptions import ClientError
-from flask import Flask, Response, abort, g, jsonify, request, send_from_directory
+from flask import Flask, Response, abort, g, jsonify, redirect, request, send_from_directory
 
 BUCKET = os.environ.get("S3_BUCKET", "peg-bucket")
 PREFIX = os.environ.get("REVIEW_PREFIX", "Ostatni/Pollen_viability/Review").rstrip("/")
@@ -184,7 +184,8 @@ def blind(item, me, decisions):
             "density": item["density"], "n_pred": item["n_pred"],
             "flagged": item["selection"] == "flagged", "shared": len(item["assigned"]) > 1,
             "done": mine is not None, "verdict": mine.get("verdict") if mine else None,
-            "relabel": bool(mine.get("relabel")) if mine else False}
+            "relabel": bool(mine.get("relabel")) if mine else False,
+            "saved": mine.get("saved") if mine else None}
 
 
 # ── metrics ─────────────────────────────────────────────────────────────────────────
@@ -282,6 +283,15 @@ def item(item_id):
     url = s3.generate_presigned_url("get_object", Params={"Bucket": BUCKET, "Key": it["tile_key"]}, ExpiresIn=URL_TTL)
     return jsonify(item=blind(it, me_, {item_id: {me_: prev}} if prev else {}),
                    image_url=url, grains=load_det(it), decision=prev)
+
+
+@app.get("/api/item/<item_id>/thumb")
+def item_thumb(item_id):
+    """Redirect to the tile image (previews in the 'Recently reviewed' panel)."""
+    manifest()
+    it = cache["by_id"].get(item_id) or abort(404)
+    return redirect(s3.generate_presigned_url("get_object", Params={"Bucket": BUCKET, "Key": it["tile_key"]},
+                                             ExpiresIn=URL_TTL))
 
 
 @app.post("/api/item/<item_id>/decision")
