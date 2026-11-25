@@ -30,13 +30,14 @@ aside .it:hover{background:var(--panel)} aside .it.on{background:var(--panel2);c
 .tag{font-size:10.5px;padding:1px 6px;border-radius:999px;border:1px solid var(--line);color:var(--mut)}
 .centre{display:flex;flex-direction:column;min-width:0}
 .bar{display:flex;align-items:center;gap:10px;padding:9px 14px;border-bottom:1px solid var(--line);flex-wrap:wrap}
-.bar label{display:flex;align-items:center;gap:6px;color:var(--mut)}
+.bar label{display:flex;align-items:center;gap:5px;color:var(--mut);font-size:13px}
+.bar input[type="range"]{width:86px;accent-color:var(--acc);cursor:pointer}
 .stagewrap{flex:1;overflow:auto;display:flex;padding:18px}
 .stage{margin:auto}  /* margin:auto (not place-items) keeps the zoomed image fully scrollable */
 .stagewrap.panning,.stagewrap.panning canvas{cursor:grabbing}
 .stage{position:relative;box-shadow:0 20px 60px rgba(0,0,0,.5);border-radius:6px;line-height:0}
 canvas{border-radius:6px;cursor:crosshair;display:block}
-.pop{position:absolute;z-index:4;min-width:200px;background:rgba(21,26,35,.96);backdrop-filter:blur(8px);border:1px solid var(--line);border-radius:12px;padding:8px;box-shadow:0 12px 40px rgba(0,0,0,.6);line-height:1.3;animation:pop .12s ease-out}
+.pop{position:absolute;z-index:4;min-width:240px;background:rgba(21,26,35,.96);backdrop-filter:blur(8px);border:1px solid var(--line);border-radius:12px;padding:8px;box-shadow:0 12px 40px rgba(0,0,0,.6);line-height:1.3;animation:pop .12s ease-out}
 @keyframes pop{from{opacity:0;transform:scale(.95)}to{opacity:1;transform:none}}
 .pop h4{margin:2px 4px 8px;font-size:12px;color:var(--mut);font-weight:600}
 .pop button{display:flex;width:100%;justify-content:space-between;align-items:center;margin:3px 0;background:transparent;border-color:transparent}
@@ -84,50 +85,14 @@ th,td{padding:9px 10px;border-bottom:1px solid var(--line);text-align:right} th{
 .langsw button{border:none;border-radius:999px;padding:4px 12px;background:transparent}
 .langsw button.on{background:var(--acc);color:#0b0e14;font-weight:600}
 .help-top{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
-
-/* Labeling toolbar & tools */
-.tool-bar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 14px;
-  background: rgba(15, 23, 42, 0.45);
-  border-bottom: 1px solid var(--line);
-  flex-wrap: wrap;
-}
-.tool-btn, .cls-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 10px;
-  border-radius: 6px;
-  border: 1px solid var(--line);
-  background: var(--panel2);
-  color: var(--txt);
-  font-size: 12px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-.tool-btn:hover, .cls-btn:hover {
-  border-color: #38bdf8;
-  background: rgba(56, 189, 248, 0.1);
-}
-.tool-btn.active, .cls-btn.active {
-  background: #0284c7;
-  border-color: #38bdf8;
-  color: #fff;
-  box-shadow: 0 0 10px rgba(56, 189, 248, 0.3);
-}
-.tool-btn kbd, .cls-btn kbd {
-  font-size: 10px;
-  padding: 1px 4px;
-  border-radius: 3px;
-  background: rgba(0,0,0,0.3);
-  border: 1px solid rgba(255,255,255,0.2);
-  color: #e2e8f0;
-}
-
+/* Size Extremes single-grain audit */
+.ext-cats{display:flex;flex-direction:column;gap:6px}
+.ext-btn{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;text-align:left;padding:9px 11px;border-radius:9px;background:var(--panel2);border:1px solid var(--line)}
+.ext-btn small{display:block;color:var(--mut);font-size:11px;font-weight:400;margin-top:1px}
+.ext-btn.on.bio{background:rgba(61,220,151,.18);border-color:var(--good)}
+.ext-btn.on.amb{background:rgba(255,181,71,.18);border-color:var(--warn)}
+.ext-btn.on.art{background:rgba(255,93,108,.18);border-color:var(--bad)}
+.dot.bio{background:var(--good)} .dot.amb{background:var(--warn)} .dot.art{background:var(--bad)}
 </style>
 </head>
 <body>
@@ -136,9 +101,11 @@ th,td{padding:9px 10px;border-bottom:1px solid var(--line);text-align:right} th{
   <nav class="tabs">
     <button id="tab-review" class="on" onclick="tab('review')">Review</button>
     <button id="tab-results" onclick="tab('results')">Results</button>
+    <button id="tab-extremes" onclick="tab('extremes')" title="Blind audit of extreme small &amp; large pollen sizes">📏 Size Extremes</button>
     <button id="tab-help" onclick="tab('help')" title="Guidelines / návod [?]">How to review · Návod <kbd>?</kbd></button>
   </nav>
   <a href="https://stomata-review-stenc.dyn.cloud.e-infra.cz" target="_blank" rel="noopener" style="text-decoration:none;display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:999px;border:1px solid var(--line);background:var(--panel2);color:var(--txt);font-size:12px;margin-left:6px;" title="Switch to Stomata QC Review App">🌿 Stomata Review ↗</a>
+  <a href="https://viability-label-stenc.dyn.cloud.e-infra.cz" target="_blank" rel="noopener" style="text-decoration:none;display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:999px;border:1px solid rgba(16,185,129,0.4);background:rgba(16,185,129,0.12);color:#34d399;font-size:12px;font-weight:600;margin-left:6px;" title="Open Dedicated SAM Polygon Labeling App">🏷️ Labeling App (SAM) ↗</a>
   <div class="grow"></div>
   <div class="prog" title="your progress"><i id="progbar" style="width:0"></i></div>
   <div class="who" id="progtxt"></div>
@@ -149,25 +116,16 @@ th,td{padding:9px 10px;border-bottom:1px solid var(--line);text-align:right} th{
   <aside id="queue"></aside>
   <section class="centre">
     <div class="bar">
-      <button id="btn-prev" onclick="go(-1)" title="previous (←)">←</button>
-      <button id="btn-next" onclick="go(1)" title="next (→)">→</button>
+      <button id="btn-prev" onclick="go(-1)" title="previous tile (←)">←</button>
+      <button id="btn-next" onclick="go(1)" title="next tile (→)">→</button>
+      <button id="btn-skip-top" onclick="skipNext()" title="Skip to next unreviewed tile without saving (K)">Skip ⏭ <kbd>K</kbd></button>
       <strong id="title">—</strong><span class="tag" id="density"></span><span class="tag" id="shared" hidden>shared tile</span>
+      <button id="btn-to-labeler" onclick="openInLabeler()" style="display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:7px;border:1px solid rgba(56,189,248,0.45);background:rgba(56,189,248,0.12);color:#38bdf8;font-size:11.5px;font-weight:600;margin-left:8px;" title="Open this specific tile in SAM Polygon Labeler for ground-truth retraining">🏷️ Edit in SAM Labeler ↗</button>
       <div class="grow"></div>
-      <label><input type="checkbox" id="chk-masks" checked onchange="S.showMasks=this.checked;draw()"> outlines <kbd>M</kbd></label>
-      <label>fill <input type="range" id="rng-op" min="0" max="0.7" step="0.05" value="0.25" oninput="S.opacity=+this.value;draw()"></label>
+      <label title="Show/hide grain border outlines while keeping fill [M]"><input type="checkbox" id="chk-masks" checked onchange="S.showMasks=this.checked;saveViewPrefs();draw()"> outlines <kbd>M</kbd></label>
+      <label title="Outline stroke opacity (0% – 100%)">outline <input type="range" id="rng-line-op" min="0" max="1" step="0.05" value="0.9" oninput="S.lineOpacity=+this.value;saveViewPrefs();draw()"></label>
+      <label title="Polygon interior fill opacity (0% – 70%)">fill <input type="range" id="rng-op" min="0" max="0.7" step="0.05" value="0.25" oninput="S.opacity=+this.value;saveViewPrefs();draw()"></label>
       <label title="mouse wheel = zoom at cursor · drag = pan · + / − / 0">zoom <input type="range" id="rng-zoom" min="0.6" max="6" step="0.1" value="1.4" oninput="setZoom(+this.value)"><span id="zoom-val">1.4×</span></label>
-    </div>
-        <div class="tool-bar" id="tool-bar">
-      <button id="btn-tool-edit" class="tool-btn active" onclick="setLabelTool('edit')" title="Select & edit polygon vertices (E)">🖱️ Edit Points <kbd>E</kbd></button>
-      <button id="btn-tool-draw" class="tool-btn" onclick="setLabelTool('draw')" title="Click-click draw new polygon (P)">✏️ Draw Polygon <kbd>P</kbd></button>
-      <button id="btn-tool-del" class="tool-btn" onclick="deleteSelectedGrain()" title="Delete grain / mark false positive (Del/X)">🗑️ Delete <kbd>Del</kbd></button>
-      <div style="height:18px;width:1px;background:var(--line);margin:0 4px;"></div>
-      <span style="font-size:11px;color:var(--mut);font-weight:600;text-transform:uppercase;">Class:</span>
-      <button id="btn-cls-v" class="cls-btn active" onclick="setDrawClass('viable')"><i class="sw" style="background:var(--v)"></i>Viable <kbd>1</kbd></button>
-      <button id="btn-cls-nv" class="cls-btn" onclick="setDrawClass('non-viable')"><i class="sw" style="background:var(--nv)"></i>Non-viable <kbd>2</kbd></button>
-      <button id="btn-cls-im" class="cls-btn" onclick="setDrawClass('intermediate')"><i class="sw" style="background:var(--im)"></i>Intermediate <kbd>3</kbd></button>
-      <div class="grow"></div>
-      <span id="tool-status" style="font-size:11.5px;color:var(--mut);">🖱️ Click outline to edit points · drag points · click edge (+) to insert</span>
     </div>
     <div class="stagewrap" id="stagewrap">
       <div class="stage" id="stage"><canvas id="cv"></canvas><div class="pop" id="pop" hidden></div></div>
@@ -176,7 +134,7 @@ th,td{padding:9px 10px;border-bottom:1px solid var(--line);text-align:right} th{
       <span><i class="sw" style="background:var(--v)"></i>viable</span>
       <span><i class="sw" style="background:var(--nv)"></i>non-viable</span>
       <span><i class="sw" style="background:var(--im)"></i>intermediate</span>
-      <span>dashed = your correction · ⊕ = missed grain you added · ✕ = not pollen</span>
+      <span>dashed = class edit · <b style="color:#38bdf8">⬠</b> = bad polygon · <b style="color:#c084fc">?</b> = uncertain · <b style="color:#94a3b8">◌</b> = blurred · ⊕ = missed · ✕ = not pollen</span>
       <div class="grow"></div><span>wheel = zoom · drag = pan · hold <kbd>Space</kbd> = raw image · <kbd>?</kbd> = help</span>
     </div>
   </section>
@@ -195,6 +153,8 @@ th,td{padding:9px 10px;border-bottom:1px solid var(--line);text-align:right} th{
       <div class="kv">
         <span>Not pollen (false)</span><span id="c-fp">0</span>
         <span>Wrong class</span><span id="c-rc">0</span>
+        <span>Incorrect polygon</span><span id="c-bp">0</span>
+        <span>Blurred / Uncertain</span><span id="c-bu">0 / 0</span>
         <span>Missed grains</span><span id="c-ms">0</span>
         <span>Corrected viability</span><span id="c-pct">–</span>
       </div>
@@ -210,13 +170,17 @@ th,td{padding:9px 10px;border-bottom:1px solid var(--line);text-align:right} th{
       <div class="relabel-box" id="box-relabel" onclick="toggleRelabel(true)">
         <input type="checkbox" id="chk-relabel" onclick="event.stopPropagation(); toggleRelabel(false)">
         <div style="flex:1">
-          <strong style="display:flex;align-items:center;gap:6px;font-size:12.5px;color:#f0abfc;">🏷️ Flag for Roboflow Relabel <kbd>R</kbd></strong>
+          <strong style="display:flex;align-items:center;gap:6px;font-size:12.5px;color:#f0abfc;">🏷️ Flag for Relabel <kbd>R</kbd></strong>
           <span class="muted" style="font-size:11px;display:block;margin-top:1px;">Queue tile for active retraining &amp; annotation</span>
+          <a id="link-relabel-open" href="#" onclick="openInLabeler(); return false;" style="display:none;font-size:11.5px;color:#38bdf8;text-decoration:none;margin-top:4px;font-weight:600;">➔ Open this tile in SAM Labeler now ↗</a>
         </div>
       </div>
       <textarea id="comment" placeholder="Optional note…" oninput="S.dirty=true"></textarea>
     </div>
-    <button class="save" id="btn-save" onclick="save()" disabled>Save &amp; next <kbd style="color:#fff;border-color:#fff6">Enter</kbd></button>
+    <div style="display:flex;gap:8px;">
+      <button id="btn-skip" onclick="skipNext()" style="flex:0 0 auto;padding:10px 14px;" title="Skip to next unreviewed tile without saving [K]">Skip ⏭ <kbd>K</kbd></button>
+      <button class="save" id="btn-save" onclick="save()" style="flex:1;" disabled>Save &amp; next <kbd style="color:#fff;border-color:#fff6">Enter</kbd></button>
+    </div>
     <div class="card" id="recent-card">
       <div class="recent-head"><h3>Recently reviewed</h3><span class="muted" id="recent-count"></span></div>
       <button id="btn-back" onclick="goBack()" title="Return to the tile you were reviewing">↩ Back</button>
@@ -229,6 +193,79 @@ th,td{padding:9px 10px;border-bottom:1px solid var(--line);text-align:right} th{
 </main>
 
 <main id="view-results" hidden><div class="page" id="results"></div></main>
+
+<main id="view-extremes" hidden>
+  <aside id="ext-queue"></aside>
+  <section class="centre" id="ext-audit-centre">
+    <div class="bar">
+      <button onclick="extGo(-1)" title="previous extreme grain (←)">←</button>
+      <button onclick="extGo(1)" title="next extreme grain (→)">→</button>
+      <button onclick="extSkip()" title="Skip to next unreviewed grain (K)">Skip ⏭ <kbd>K</kbd></button>
+      <strong id="ext-title">—</strong><span class="tag" id="ext-cls-tag"></span>
+      <button onclick="extOpenLabeler()" style="display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:7px;border:1px solid rgba(56,189,248,0.45);background:rgba(56,189,248,0.12);color:#38bdf8;font-size:11.5px;font-weight:600;margin-left:6px;" title="Open this tile in SAM Labeler">🏷️ SAM Labeler ↗</button>
+      <button id="btn-ext-sum" onclick="toggleExtSummary(true)" style="padding:5px 11px;border-radius:7px;border-color:var(--acc);color:var(--acc);font-size:12px;font-weight:600;margin-left:4px;">📊 Breakdown &amp; CSV</button>
+      <div class="grow"></div>
+      <label title="Show/hide grain contour [M]"><input type="checkbox" id="ext-chk-masks" checked onchange="E.showMasks=this.checked;extDraw()"> outlines <kbd>M</kbd></label>
+      <label title="Zoom (mouse wheel / + / − / 0)">zoom <input type="range" id="ext-rng-zoom" min="0.8" max="6" step="0.1" value="2.4" oninput="extSetZoom(+this.value)"><span id="ext-zoom-val">2.4×</span></label>
+    </div>
+    <div class="stagewrap" id="ext-stagewrap">
+      <div class="stage"><canvas id="ext-cv"></canvas></div>
+    </div>
+    <div class="bar legend">
+      <span><b style="color:#38bdf8">⌖ cyan ring</b> = target extreme grain to classify · faint outlines = slide neighbours</span>
+      <div class="grow"></div><span>keys <kbd>1</kbd>–<kbd>6</kbd> classify &amp; advance · hold <kbd>Space</kbd> = raw image · wheel = zoom · drag = pan</span>
+    </div>
+  </section>
+  <section class="side" id="ext-audit-side">
+    <div class="card">
+      <h3>Target Grain Morphometry</h3>
+      <div class="kv">
+        <span>Model class</span><span id="ext-m-cls">–</span>
+        <span>Confidence</span><span id="ext-m-conf">–</span>
+        <span>Area</span><span id="ext-m-area">–</span>
+        <span>Equiv. diameter</span><span id="ext-m-diam">–</span>
+        <span>Solidity · Aspect</span><span id="ext-m-shape">–</span>
+      </div>
+    </div>
+    <div class="card">
+      <h3>What is this extreme object?</h3>
+      <div class="ext-cats" id="ext-cats">
+        <button class="ext-btn bio" data-cat="true_single" onclick="extChoose('true_single')">
+          <div><b>✓ True single grain (sharp)</b><small>Biologically real size &amp; accurate contour</small></div><kbd>1</kbd>
+        </button>
+        <button class="ext-btn bio" data-cat="swollen_single" onclick="extChoose('swollen_single')">
+          <div><b>🫧 Swollen / flattened single</b><small>Real single grain, coverslip-pressed or swollen</small></div><kbd>2</kbd>
+        </button>
+        <button class="ext-btn amb" data-cat="blurred_halo" onclick="extChoose('blurred_halo')">
+          <div><b>◌ Blurred / Z-plane halo</b><small>Real grain, optical defocus inflates mask area</small></div><kbd>3</kbd>
+        </button>
+        <button class="ext-btn art" data-cat="clump_or_bad_poly" onclick="extChoose('clump_or_bad_poly')">
+          <div><b>⬠ Clump / bad polygon</b><small>2+ touching grains merged or wrong contour</small></div><kbd>4</kbd>
+        </button>
+        <button class="ext-btn art" data-cat="debris_fp" onclick="extChoose('debris_fp')">
+          <div><b>✕ Debris / bubble (Not pollen)</b><small>Stain precipitate, anther wall, artifact</small></div><kbd>5</kbd>
+        </button>
+        <button class="ext-btn amb" data-cat="wrong_class" onclick="extChoose('wrong_class')">
+          <div><b>🔄 Real grain, wrong class</b><small>True grain, viable ↔ non-viable swapped</small></div><kbd>6</kbd>
+        </button>
+      </div>
+      <label class="muted" style="display:flex;align-items:center;gap:8px;margin:10px 0 6px"><input type="checkbox" id="ext-auto-next" checked> Auto-save &amp; advance on click / <kbd>1</kbd>–<kbd>6</kbd></label>
+      <textarea id="ext-comment" placeholder="Optional note on this grain…" style="min-height:46px"></textarea>
+      <button class="save" id="ext-btn-save" onclick="extSave(true)" style="margin-top:8px" disabled>Save &amp; next <kbd style="color:#fff;border-color:#fff6">Enter</kbd></button>
+    </div>
+    <div class="card">
+      <h3>Your Extremes Progress</h3>
+      <div class="kv">
+        <span>Audited</span><span id="ext-p-done">0 / 0</span>
+        <span>Biologically real (#1+#2)</span><span id="ext-p-bio">–</span>
+        <span>Blur / Clump / Debris</span><span id="ext-p-art">–</span>
+      </div>
+      <button onclick="toggleExtSummary(true)" style="width:100%;margin-top:10px;border-color:var(--acc);color:var(--acc);font-weight:600;">📊 View Full Unblinded Breakdown</button>
+    </div>
+    <p class="muted"><b>Blinded audit:</b> cytotype, slide, plant, and tail percentile are hidden while scoring so ploidy expectations cannot bias the check.</p>
+  </section>
+  <div class="page" id="ext-summary-page" hidden></div>
+</main>
 
 <main id="view-help" hidden><div class="page help" id="help-page" data-lang="en">
   <div class="help-top">
@@ -243,10 +280,10 @@ th,td{padding:9px 10px;border-bottom:1px solid var(--line);text-align:right} th{
   </p>
   <div class="grid2">
     <div class="card"><h3><span class="lang-en">1 · Wrong outline</span><span class="lang-cs">1 · Špatný obrys</span></h3><ul>
-      <li class="lang-en"><b>Click the outline</b> → choose the right class (viable / non-viable / intermediate) or <b>“Not a pollen grain”</b> (debris, bubble, stain blob).</li>
-      <li class="lang-cs"><b>Klikni na obrys</b> → vyber správnou třídu (viable / non-viable / intermediate) nebo <b>„Not a pollen grain“</b> (smetí, bublina, skvrna barviva).</li>
-      <li class="lang-en">One outline covering <b>two touching grains</b>: keep it, and add the second grain as missed.</li>
-      <li class="lang-cs">Jeden obrys přes <b>dvě dotýkající se zrna</b>: nech ho a druhé zrno přidej jako přehlédnuté.</li></ul></div>
+      <li class="lang-en"><b>Click the outline</b> → choose the right class (<kbd>1</kbd>/<kbd>2</kbd>/<kbd>3</kbd>), <b>“Incorrect polygon”</b> (<kbd>P</kbd>, contour too big/small/merged), <b>“Observer uncertain”</b> (<kbd>U</kbd>, impossible to tell viable vs non-viable), <b>“Blurred grain”</b> (<kbd>B</kbd>, out of focus), or <b>“Not a pollen grain”</b> (<kbd>X</kbd>, debris/bubble).</li>
+      <li class="lang-cs"><b>Klikni na obrys</b> → vyber správnou třídu (<kbd>1</kbd>/<kbd>2</kbd>/<kbd>3</kbd>), <b>„Incorrect polygon“</b> (<kbd>P</kbd>, nepřesný polygon – přesahuje nebo nebere celé zrno), <b>„Observer uncertain“</b> (<kbd>U</kbd>, ani pozorovatel nepozná viable vs non-viable), <b>„Blurred grain“</b> (<kbd>B</kbd>, rozmazané zrno) nebo <b>„Not a pollen grain“</b> (<kbd>X</kbd>, smetí/bublina).</li>
+      <li class="lang-en">One outline covering <b>two touching grains</b>: mark it <b>Incorrect polygon</b> (<kbd>P</kbd>) and add the second grain as missed.</li>
+      <li class="lang-cs">Jeden obrys přes <b>dvě dotýkající se zrna</b>: označ <b>Incorrect polygon</b> (<kbd>P</kbd>) a druhé zrno přidej jako přehlédnuté.</li></ul></div>
     <div class="card"><h3><span class="lang-en">2 · Missed grain</span><span class="lang-cs">2 · Přehlédnuté zrno</span></h3><ul>
       <li class="lang-en"><b>Click on the grain</b> where there is no outline → choose its class. A ⊕ marker appears.</li>
       <li class="lang-cs"><b>Klikni na zrno</b> bez obrysu → vyber třídu. Objeví se značka ⊕.</li>
@@ -287,7 +324,10 @@ th,td{padding:9px 10px;border-bottom:1px solid var(--line);text-align:right} th{
     <kbd>←</kbd>/<kbd>→</kbd> <span class="lang-en">navigate</span><span class="lang-cs">předchozí/další</span> ·
     <kbd>+</kbd>/<kbd>−</kbd>/<kbd>0</kbd> zoom ·
     <kbd>?</kbd> <span class="lang-en">this help</span><span class="lang-cs">tento návod</span> ·
-    <span class="lang-en">in a menu:</span><span class="lang-cs">v nabídce:</span> <kbd>1</kbd> viable, <kbd>2</kbd> non-viable, <kbd>3</kbd> intermediate, <kbd>X</kbd> not pollen, <kbd>C</kbd> correct, <kbd>Esc</kbd> <span class="lang-en">close</span><span class="lang-cs">zavřít</span>.</p></div>
+    <span class="lang-en">in a menu:</span><span class="lang-cs">v nabídce:</span> <kbd>1</kbd> viable, <kbd>2</kbd> non-viable, <kbd>3</kbd> intermediate, <kbd>P</kbd> <span class="lang-en">incorrect polygon</span><span class="lang-cs">špatný polygon</span>, <kbd>U</kbd> <span class="lang-en">uncertain</span><span class="lang-cs">nejisté</span>, <kbd>B</kbd> <span class="lang-en">blurred</span><span class="lang-cs">rozmazané</span>, <kbd>X</kbd> not pollen, <kbd>C</kbd> correct, <kbd>Esc</kbd> <span class="lang-en">close</span><span class="lang-cs">zavřít</span>.</p></div>
+  <div class="card" style="margin-top:14px"><h3><span class="lang-en">📏 Size Extremes Audit (optional check)</span><span class="lang-cs">📏 Kontrola velikostních extrémů (volitelné)</span></h3><p class="muted">
+    <span class="lang-en">The <b>📏 Size Extremes</b> tab shows blinded grains sampled from the smallest (&le;P2) and largest (P95–P99 and &ge;P99) tails across all cytotypes, centered inside a cyan target ring. Press <kbd>1</kbd>–<kbd>6</kbd> to classify whether the extreme size is a <b>true sharp single grain</b> (<kbd>1</kbd>), <b>swollen/flattened single grain</b> (<kbd>2</kbd>), <b>blurred Z-plane halo</b> (<kbd>3</kbd>), <b>clump / bad polygon</b> (<kbd>4</kbd>), <b>debris / bubble</b> (<kbd>5</kbd>), or <b>wrong viability class</b> (<kbd>6</kbd>).</span>
+    <span class="lang-cs">Záložka <b>📏 Size Extremes</b> zobrazuje zaslepená zrna z nejmenších (&le;P2) a největších (P95–P99 a &ge;P99) velikostních okrajů napříč cytotypy v modrém zaměřovacím kruhu. Klávesami <kbd>1</kbd>–<kbd>6</kbd> určíš, zda jde o <b>skutečné ostré zrno</b> (<kbd>1</kbd>), <b>zploštělé/nabobtnalé zrno</b> (<kbd>2</kbd>), <b>rozostřené halo</b> (<kbd>3</kbd>), <b>shluk / špatný polygon</b> (<kbd>4</kbd>), <b>nečistotu / bublinu</b> (<kbd>5</kbd>) nebo <b>opačnou třídu viability</b> (<kbd>6</kbd>).</span></p></div>
 </div></main>
 <div class="toast" id="toast"></div>
 
@@ -298,16 +338,38 @@ const NAME = {viable:'Viable', non_viable:'Non-viable', intermediate:'Intermedia
 const RQ = new URLSearchParams(location.search).get('reviewer');
 const q = (extra='') => RQ ? `?reviewer=${encodeURIComponent(RQ)}${extra}` : (extra ? '?' + extra.slice(1) : '');
 const S = {items:[], idx:-1, cur:null, img:null, grains:[], marks:{}, missed:[], verdict:null, dirty:false,
-           zoom:1.4, showMasks:true, peek:false, opacity:0.25, hover:-1, t0:0};
+           zoom:1.4, showMasks:true, peek:false, opacity:0.25, lineOpacity:0.9, hover:-1, t0:0};
+try{
+  const vp = JSON.parse(localStorage.getItem('viabReviewPrefs') || '{}');
+  if(typeof vp.opacity === 'number') S.opacity = vp.opacity;
+  if(typeof vp.lineOpacity === 'number') S.lineOpacity = vp.lineOpacity;
+  if(typeof vp.showMasks === 'boolean') S.showMasks = vp.showMasks;
+}catch(e){}
+function saveViewPrefs(){
+  try{ localStorage.setItem('viabReviewPrefs', JSON.stringify({opacity:S.opacity, lineOpacity:S.lineOpacity, showMasks:S.showMasks})); }catch(e){}
+}
 
 async function api(path, opts){ const r = await fetch(path + q(), opts); if(!r.ok) throw new Error(await r.text()); return r.json(); }
 function toast(t){ const el=$('#toast'); el.textContent=t; el.classList.add('show'); clearTimeout(el._t); el._t=setTimeout(()=>el.classList.remove('show'),1800); }
 
 async function init(){
+  $('#rng-op').value = S.opacity;
+  $('#rng-line-op').value = S.lineOpacity;
+  $('#chk-masks').checked = S.showMasks;
   const me = await api('/api/me'); $('#me').textContent = me.reviewer;
   await loadQueue();
   if(!S.items.length){ $('#stagewrap').innerHTML = `<div class="empty">No review set is published yet.<br><span class="muted">It will appear here once detection on all slides has finished.</span></div>`; return; }
-  const first = S.items.findIndex(i => !i.done); open(first >= 0 ? first : 0);
+  const urlParams = new URLSearchParams(location.search);
+  const reqTile = urlParams.get('tile');
+  let startIdx = -1;
+  if(reqTile){
+    startIdx = S.items.findIndex(i => i.id === reqTile || (i.stem && i.stem === reqTile) || (i.tile_key && i.tile_key.includes(reqTile)));
+  }
+  if(startIdx < 0){
+    startIdx = S.items.findIndex(i => !i.done);
+  }
+  selectTile(startIdx >= 0 ? startIdx : 0);
+  if(urlParams.get('tab') === 'extremes') tab('extremes');
 }
 async function loadQueue(){
   const d = await api('/api/items'); S.items = d.items; renderQueue();
@@ -316,13 +378,13 @@ function renderQueue(){
   const done = S.items.filter(i=>i.done).length;
   $('#progbar').style.width = (S.items.length ? 100*done/S.items.length : 0) + '%';
   $('#progtxt').textContent = `${done} / ${S.items.length}`;
-  $('#queue').innerHTML = S.items.map((it,k)=>`<div class="it ${k===S.idx?'on':''}" onclick="open(${k})">
+  $('#queue').innerHTML = S.items.map((it,k)=>`<div class="it ${k===S.idx?'on':''}" onclick="selectTile(${k})">
      <i class="dot ${it.verdict||''}"></i><span>Tile ${it.order}</span><span class="grow"></span>${it.relabel?'<span class="tag tag-relabel" title="Queued for Roboflow">🏷️</span>':''}${it.shared?'<span class="tag" title="also reviewed by a colleague">×2</span>':''}</div>`).join('');
   renderRecent();
 }
-async function open(k){
+async function selectTile(k, force=false){
   if(k<0 || k>=S.items.length) return;
-  if(S.dirty && !confirm('Discard unsaved corrections on this tile?')) return false;
+  if(!force && S.dirty && !confirm('Discard unsaved corrections on this tile?')) return false;
   returnTo = null;
   S.idx = k; renderQueue(); hidePop();
   const d = await api('/api/item/' + S.items[k].id);
@@ -339,155 +401,31 @@ async function open(k){
     S.grains = d.grains.map(g => { const pts = g.poly && g.poly.length>2 ? g.poly.map(p=>[p[0]*W,p[1]*H])
           : [[g.box[0],g.box[1]],[g.box[2],g.box[1]],[g.box[2],g.box[3]],[g.box[0],g.box[3]]];
           return {...g, pts, area:(g.box[2]-g.box[0])*(g.box[3]-g.box[1])}; });
-    if (d.decision && d.decision.custom_grains) {
-      d.decision.custom_grains.forEach(cg => {
-        S.grains.push({ ...cg, i: cg.i || ('custom_' + Math.random().toString(36).slice(2)), conf: 1.0, isCustom: true });
-      });
-    }
-    selGrain = null; drawPts = []; mousePt = null; dragVertex = null; hoverVertex = null; hoverEdge = null;
     draw(); refresh();
   }; img.src = d.image_url;
   setVerdict(S.verdict, true);
   return true;
 }
-function go(dk){ open(S.idx + dk); }
+function go(dk){
+  const n = S.items.length;
+  if(!n) return;
+  const target = (S.idx + dk + n) % n;
+  selectTile(target, true);
+}
+function skipNext(){
+  const n = S.items.length;
+  if(!n) return;
+  let nxt = S.items.findIndex((it,k) => k > S.idx && !it.done);
+  if(nxt < 0) nxt = S.items.findIndex((it,k) => k !== S.idx && !it.done);
+  if(nxt < 0) nxt = (S.idx + 1) % n;
+  toast(`Skipped to Tile ${S.items[nxt].order}`);
+  selectTile(nxt, true);
+}
 
 function stateOf(g){ return S.marks[g.i] || 'ok'; }
-function clsOf(g){ const s = stateOf(g); return s.startsWith('to_') ? s.slice(3) : g.cls; }
-
-function setLabelTool(t) {
-  labelTool = t;
-  $('#btn-tool-edit').classList.toggle('active', t === 'edit');
-  $('#btn-tool-draw').classList.toggle('active', t === 'draw');
-  drawPts = [];
-  mousePt = null;
-  dragVertex = null;
-  const statusEl = $('#tool-status');
-  if (t === 'draw') {
-    $('#cv').style.cursor = 'crosshair';
-    if (statusEl) statusEl.textContent = '✏️ Click points to draw outline · click green start point or ⏎ to close · Esc cancels';
-    toast('Draw mode: click points around grain');
-  } else {
-    $('#cv').style.cursor = 'default';
-    if (statusEl) statusEl.textContent = '🖱️ Click outline to edit points · drag points · click edge (+) to insert';
-  }
-  draw();
-}
-
-function setDrawClass(cls) {
-  drawClass = cls;
-  $('#btn-cls-v').classList.toggle('active', cls === 'viable');
-  $('#btn-cls-nv').classList.toggle('active', cls === 'non-viable');
-  $('#btn-cls-im').classList.toggle('active', cls === 'intermediate');
-  if (selGrain !== null && S.grains[selGrain]) {
-    const g = S.grains[selGrain];
-    const key = 'to_' + cls.replace('-', '_');
-    S.marks[g.i] = key;
-    S.dirty = true;
-    draw();
-    refresh();
-    toast(`Changed to ${NAME[cls.replace('-', '_')] || cls}`);
-  }
-}
-
-function deleteSelectedGrain() {
-  if (selGrain !== null && S.grains[selGrain]) {
-    const g = S.grains[selGrain];
-    if (g.isCustom) {
-      S.grains.splice(selGrain, 1);
-      selGrain = null;
-      toast('Custom grain removed');
-    } else {
-      S.marks[g.i] = 'fp';
-      toast('Marked as not pollen');
-    }
-    S.dirty = true;
-    draw();
-    refresh();
-  } else {
-    toast('Click a grain outline first to select it');
-  }
-}
-
-function polygonArea(pts) {
-  let a = 0;
-  for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
-    a += (pts[j][0] + pts[i][0]) * (pts[j][1] - pts[i][1]);
-  }
-  return a / 2;
-}
-
-function distToSegmentSquared(p, v, w) {
-  const l2 = (v[0] - w[0]) ** 2 + (v[1] - w[1]) ** 2;
-  if (l2 === 0) return (p[0] - v[0]) ** 2 + (p[1] - v[1]) ** 2;
-  let t = ((p[0] - v[0]) * (w[0] - v[0]) + (p[1] - v[1]) * (w[1] - v[1])) / l2;
-  t = Math.max(0, Math.min(1, t));
-  return (p[0] - (v[0] + t * (w[0] - v[0]))) ** 2 + (p[1] - (v[1] + t * (w[1] - v[1]))) ** 2;
-}
-
-function closestPointOnSegment(p, v, w) {
-  const l2 = (v[0] - w[0]) ** 2 + (v[1] - w[1]) ** 2;
-  if (l2 === 0) return [v[0], v[1]];
-  let t = ((p[0] - v[0]) * (w[0] - v[0]) + (p[1] - v[1]) * (w[1] - v[1])) / l2;
-  t = Math.max(0, Math.min(1, t));
-  return [Math.round(v[0] + t * (w[0] - v[0])), Math.round(v[1] + t * (w[1] - v[1]))];
-}
-
-function findHoverVertex(gx, gy) {
-  if (selGrain === null || !S.grains[selGrain]) return null;
-  const poly = S.grains[selGrain].pts;
-  const threshold = 10 / S.zoom;
-  for (let j = 0; j < poly.length; j++) {
-    if (Math.hypot(poly[j][0] - gx, poly[j][1] - gy) < threshold) {
-      return { grainIdx: selGrain, vertexIdx: j };
-    }
-  }
-  return null;
-}
-
-function findHoverEdge(gx, gy) {
-  if (selGrain === null || !S.grains[selGrain]) return null;
-  const poly = S.grains[selGrain].pts;
-  const threshold = (10 / S.zoom) ** 2;
-  let best = null, minDist = threshold;
-  for (let j = 0; j < poly.length; j++) {
-    const k = (j + 1) % poly.length;
-    const d = distToSegmentSquared([gx, gy], poly[j], poly[k]);
-    if (d < minDist) {
-      minDist = d;
-      best = { grainIdx: selGrain, edgeIdx: j, pt: closestPointOnSegment([gx, gy], poly[j], poly[k]) };
-    }
-  }
-  return best;
-}
-
-function finishDraw() {
-  if (drawPts.length < 3) {
-    toast('⚠️ Need at least 3 points for a polygon');
-    return;
-  }
-  const xs = drawPts.map(p => p[0]), ys = drawPts.map(p => p[1]);
-  const box = [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)];
-  const newGrain = {
-    i: 'custom_' + Date.now(),
-    box: box,
-    pts: drawPts.slice(),
-    cls: drawClass.replace('-', '_'),
-    conf: 1.0,
-    area: Math.abs(polygonArea(drawPts)),
-    isCustom: true
-  };
-  S.grains.push(newGrain);
-  selGrain = S.grains.length - 1;
-  S.marks[newGrain.i] = 'to_' + drawClass.replace('-', '_');
-  drawPts = [];
-  mousePt = null;
-  setLabelTool('edit');
-  S.dirty = true;
-  draw();
-  refresh();
-  toast(`✓ Added new ${NAME[drawClass.replace('-', '_')] || drawClass} pollen polygon`);
-}
+function hasBadPoly(st){ return st === 'bad_poly' || st.endsWith('+bad_poly'); }
+function baseState(st){ return st.endsWith('+bad_poly') ? st.slice(0, -9) : (st === 'bad_poly' ? 'ok' : st); }
+function clsOf(g){ const bs = baseState(stateOf(g)); return bs.startsWith('to_') ? bs.slice(3) : g.cls; }
 
 function draw(){
   const c = $('#cv'), ctx = c.getContext('2d'), img = S.img; if(!img) return;
@@ -495,144 +433,51 @@ function draw(){
   c.width = Math.round(W*z); c.height = Math.round(H*z); ctx.imageSmoothingEnabled = z < 2;
   $('#zoom-val').textContent = z.toFixed(1) + '×';
   ctx.drawImage(img, 0, 0, c.width, c.height);
-  if(!S.showMasks || S.peek) return;
+  if(S.peek) return;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   S.grains.forEach((g, n) => {
-    const st = stateOf(g), col = st === 'fp' ? '#9aa3b2' : COL[clsOf(g)];
+    const st = stateOf(g), bs = baseState(st), bp = hasBadPoly(st);
+    const col = bs === 'fp' ? '#9aa3b2' : bs === 'blurred' ? '#94a3b8' : bs === 'uncertain' ? '#c084fc' : COL[clsOf(g)];
     ctx.beginPath(); g.pts.forEach(([x,y],j)=> j ? ctx.lineTo(x*z,y*z) : ctx.moveTo(x*z,y*z)); ctx.closePath();
-    if(st !== 'fp' && S.opacity > 0){ ctx.globalAlpha = S.opacity; ctx.fillStyle = col; ctx.fill(); ctx.globalAlpha = 1; }
-    ctx.setLineDash(st === 'ok' ? [] : [5,4]); ctx.lineWidth = n === S.hover ? 3.2 : 1.8; ctx.strokeStyle = n === S.hover ? '#fff' : col; ctx.stroke();
-    if(st === 'fp'){ const cx=(g.box[0]+g.box[2])/2*z, cy=(g.box[1]+g.box[3])/2*z, r=6*z/1.4;
-      ctx.setLineDash([]); ctx.lineWidth=2.5; ctx.strokeStyle='#ff5d6c'; ctx.beginPath(); ctx.moveTo(cx-r,cy-r); ctx.lineTo(cx+r,cy+r); ctx.moveTo(cx+r,cy-r); ctx.lineTo(cx-r,cy+r); ctx.stroke(); }
+    if(bs !== 'fp' && bs !== 'blurred' && S.opacity > 0){
+      ctx.globalAlpha = bs === 'uncertain' ? S.opacity * 0.55 : S.opacity;
+      ctx.fillStyle = col; ctx.fill(); ctx.globalAlpha = 1;
+    }
+    const baseLineA = S.showMasks ? S.lineOpacity : (st !== 'ok' ? 0.8 : 0);
+    const lineA = n === S.hover ? Math.max(baseLineA, 0.45) : baseLineA;
+    if(lineA > 0){
+      ctx.globalAlpha = lineA;
+      ctx.setLineDash(bp ? [2,3] : bs === 'ok' ? [] : [5,4]);
+      ctx.lineWidth = n === S.hover ? 3.2 : (bp ? 2.4 : 1.8);
+      ctx.strokeStyle = n === S.hover ? '#fff' : (bp ? '#38bdf8' : col);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+    const cx=(g.box[0]+g.box[2])/2*z, cy=(g.box[1]+g.box[3])/2*z, r=6*z/1.4;
+    if(bs === 'fp'){
+      ctx.globalAlpha = Math.max(S.lineOpacity, 0.4);
+      ctx.setLineDash([]); ctx.lineWidth=2.5; ctx.strokeStyle='#ff5d6c'; ctx.beginPath(); ctx.moveTo(cx-r,cy-r); ctx.lineTo(cx+r,cy+r); ctx.moveTo(cx+r,cy-r); ctx.lineTo(cx-r,cy+r); ctx.stroke();
+      ctx.globalAlpha = 1;
+    } else if(bs === 'uncertain' || bs === 'blurred' || bp){
+      const badge = bs === 'uncertain' ? '?' : bs === 'blurred' ? '◌' : '⬠';
+      const bcol = bs === 'uncertain' ? '#c084fc' : bs === 'blurred' ? '#94a3b8' : '#38bdf8';
+      ctx.globalAlpha = 0.92;
+      ctx.font = `700 ${Math.max(11, Math.round(11*z/1.4))}px Inter,sans-serif`;
+      ctx.fillStyle = 'rgba(13,16,22,0.82)';
+      ctx.beginPath(); ctx.arc(cx, cy, Math.max(7, 7.5*z/1.4), 0, 7); ctx.fill();
+      ctx.fillStyle = bcol; ctx.fillText(badge, cx, cy + 0.5);
+      ctx.globalAlpha = 1;
+    }
   });
+  ctx.globalAlpha = Math.max(S.lineOpacity, 0.35);
   ctx.setLineDash([4,3]);
   S.missed.forEach(m => { const x=m.x*z, y=m.y*z, r=12*z;
     ctx.lineWidth=2.2; ctx.strokeStyle=COL[m.cls]; ctx.beginPath(); ctx.arc(x,y,r,0,7); ctx.stroke();
     ctx.setLineDash([]); ctx.beginPath(); ctx.moveTo(x-5,y); ctx.lineTo(x+5,y); ctx.moveTo(x,y-5); ctx.lineTo(x,y+5); ctx.stroke(); ctx.setLineDash([4,3]); });
   ctx.setLineDash([]);
-
-  // Selected grain outline & vertex handles
-  if (selGrain !== null && S.grains[selGrain]) {
-    const g = S.grains[selGrain];
-    const poly = g.pts;
-    ctx.save();
-    ctx.beginPath();
-    poly.forEach(([x, y], j) => j ? ctx.lineTo(x * z, y * z) : ctx.moveTo(x * z, y * z));
-    ctx.closePath();
-    ctx.lineWidth = 3.2;
-    ctx.strokeStyle = '#38bdf8';
-    ctx.stroke();
-    ctx.fillStyle = 'rgba(56, 189, 248, 0.15)';
-    ctx.fill();
-
-    // Vertex points
-    poly.forEach(([x, y], j) => {
-      const isHov = hoverVertex && hoverVertex.grainIdx === selGrain && hoverVertex.vertexIdx === j;
-      ctx.beginPath();
-      ctx.arc(x * z, y * z, isHov ? 6.5 : 4, 0, Math.PI * 2);
-      ctx.fillStyle = isHov ? '#06b6d4' : '#ffffff';
-      ctx.fill();
-      ctx.strokeStyle = isHov ? '#ffffff' : '#0f172a';
-      ctx.lineWidth = isHov ? 2.2 : 1.4;
-      ctx.stroke();
-
-      if (isHov) {
-        ctx.beginPath();
-        ctx.arc(x * z, y * z, 10, 0, Math.PI * 2);
-        ctx.strokeStyle = '#06b6d4';
-        ctx.lineWidth = 1.5;
-        ctx.setLineDash([2, 2]);
-        ctx.stroke();
-        ctx.setLineDash([]);
-      }
-    });
-
-    // Insertion handle (+) on hovered edge
-    if (hoverEdge && hoverEdge.grainIdx === selGrain) {
-      const [qx, qy] = hoverEdge.pt;
-      ctx.beginPath();
-      ctx.arc(qx * z, qy * z, 5.5, 0, Math.PI * 2);
-      ctx.fillStyle = '#06b6d4';
-      ctx.fill();
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 1.8;
-      ctx.stroke();
-
-      ctx.beginPath();
-      ctx.moveTo(qx * z - 2.5, qy * z);
-      ctx.lineTo(qx * z + 2.5, qy * z);
-      ctx.moveTo(qx * z, qy * z - 2.5);
-      ctx.lineTo(qx * z, qy * z + 2.5);
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 1.4;
-      ctx.stroke();
-    }
-    ctx.restore();
-  }
-
-  // Draw Mode preview (click-click polygon)
-  if (labelTool === 'draw' && drawPts.length > 0) {
-    ctx.save();
-    const isSnapping = mousePt && drawPts.length >= 3 && Math.hypot(mousePt[0] - drawPts[0][0], mousePt[1] - drawPts[0][1]) < (12 / z);
-    ctx.beginPath();
-    drawPts.forEach(([x, y], j) => j ? ctx.lineTo(x * z, y * z) : ctx.moveTo(x * z, y * z));
-    if (mousePt) {
-      if (isSnapping) {
-        ctx.lineTo(drawPts[0][0] * z, drawPts[0][1] * z);
-      } else {
-        ctx.lineTo(mousePt[0] * z, mousePt[1] * z);
-      }
-    }
-    ctx.strokeStyle = '#06b6d4';
-    ctx.lineWidth = 2.2;
-    ctx.stroke();
-
-    if (isSnapping) {
-      ctx.fillStyle = 'rgba(6, 182, 212, 0.2)';
-      ctx.fill();
-    }
-
-    drawPts.forEach(([x, y], j) => {
-      ctx.beginPath();
-      if (j === 0) {
-        const r = isSnapping ? 8 : 5.5;
-        ctx.arc(x * z, y * z, r, 0, Math.PI * 2);
-        ctx.fillStyle = '#10b981';
-        ctx.fill();
-        ctx.strokeStyle = isSnapping ? '#ffffff' : '#047857';
-        ctx.lineWidth = isSnapping ? 2.5 : 1.5;
-        ctx.stroke();
-
-        if (isSnapping) {
-          ctx.beginPath();
-          ctx.arc(x * z, y * z, 13, 0, Math.PI * 2);
-          ctx.strokeStyle = '#10b981';
-          ctx.lineWidth = 2;
-          ctx.setLineDash([3, 3]);
-          ctx.stroke();
-          ctx.setLineDash([]);
-        }
-      } else {
-        ctx.arc(x * z, y * z, 3.8, 0, Math.PI * 2);
-        ctx.fillStyle = '#ffffff';
-        ctx.fill();
-        ctx.strokeStyle = '#06b6d4';
-        ctx.lineWidth = 1.5;
-        ctx.stroke();
-      }
-    });
-
-    if (mousePt && !isSnapping) {
-      ctx.beginPath();
-      ctx.arc(mousePt[0] * z, mousePt[1] * z, 3.5, 0, Math.PI * 2);
-      ctx.fillStyle = '#06b6d4';
-      ctx.fill();
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 1;
-      ctx.stroke();
-    }
-    ctx.restore();
-  }
+  ctx.globalAlpha = 1;
 }
+
 function inside(pt, poly){ let c=false; for(let i=0,j=poly.length-1;i<poly.length;j=i++){ const [xi,yi]=poly[i],[xj,yj]=poly[j];
   if(((yi>pt[1])!==(yj>pt[1])) && (pt[0] < (xj-xi)*(pt[1]-yi)/(yj-yi)+xi)) c=!c; } return c; }
 function hit(x, y){
@@ -642,176 +487,95 @@ function hit(x, y){
 }
 const cv = $('#cv');
 
-cv.addEventListener('contextmenu', e => {
-  if (labelTool === 'draw' || hoverVertex) e.preventDefault();
-});
-
-cv.addEventListener('mousedown', e => {
-  if (e.button === 1 || e.altKey) return; // panning
-  if (panDrag.down) return;
-  const gx = e.offsetX / S.zoom, gy = e.offsetY / S.zoom;
-
-  if (labelTool === 'draw') {
-    if (e.button === 2) {
-      if (drawPts.length) {
-        drawPts.pop();
-        draw();
-      }
-      e.preventDefault();
-      return;
-    }
-    if (e.button === 0) {
-      if (drawPts.length >= 3 && Math.hypot(gx - drawPts[0][0], gy - drawPts[0][1]) < (12 / S.zoom)) {
-        finishDraw();
-        return;
-      }
-      drawPts.push([Math.round(gx), Math.round(gy)]);
-      draw();
-    }
-    return;
-  }
-
-  // Edit mode:
-  if (hoverVertex) {
-    if (e.button === 2 || e.shiftKey) {
-      const poly = S.grains[hoverVertex.grainIdx].pts;
-      if (poly.length > 3) {
-        poly.splice(hoverVertex.vertexIdx, 1);
-        hoverVertex = null;
-        S.dirty = true;
-        draw();
-        toast('Vertex removed');
-      } else {
-        toast('Polygon must have at least 3 points');
-      }
-      e.preventDefault();
-      return;
-    }
-    dragVertex = { ...hoverVertex };
-    return;
-  }
-
-  if (hoverEdge) {
-    const poly = S.grains[hoverEdge.grainIdx].pts;
-    poly.splice(hoverEdge.edgeIdx + 1, 0, hoverEdge.pt);
-    hoverVertex = { grainIdx: hoverEdge.grainIdx, vertexIdx: hoverEdge.edgeIdx + 1 };
-    hoverEdge = null;
-    S.dirty = true;
-    draw();
-    toast('Vertex added on edge');
-    return;
-  }
-});
-
 cv.addEventListener('mousemove', e => {
   const gx = e.offsetX / S.zoom, gy = e.offsetY / S.zoom;
-
-  if (labelTool === 'draw') {
-    mousePt = [Math.round(gx), Math.round(gy)];
-    draw();
-    return;
-  }
-
-  if (dragVertex && S.grains[dragVertex.grainIdx]) {
-    S.grains[dragVertex.grainIdx].pts[dragVertex.vertexIdx] = [Math.round(gx), Math.round(gy)];
-    const poly = S.grains[dragVertex.grainIdx].pts;
-    const xs = poly.map(p => p[0]), ys = poly.map(p => p[1]);
-    S.grains[dragVertex.grainIdx].box = [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)];
-    S.grains[dragVertex.grainIdx].area = Math.abs(polygonArea(poly));
-    S.grains[dragVertex.grainIdx].edited = true;
-    S.dirty = true;
-    draw();
-    return;
-  }
-
-  const prevHv = hoverVertex, prevHe = hoverEdge;
-  hoverVertex = findHoverVertex(gx, gy);
-  hoverEdge = hoverVertex ? null : findHoverEdge(gx, gy);
-
   const h = hit(gx, gy);
   const n = h.type === 'grain' ? h.k : -1;
-  if (n !== S.hover && !hoverVertex && !hoverEdge) {
+  if (n !== S.hover) {
     S.hover = n;
-  }
-
-  if (hoverVertex) {
-    cv.style.cursor = 'grab';
-  } else if (hoverEdge) {
-    cv.style.cursor = 'copy';
-  } else if (labelTool === 'draw') {
-    cv.style.cursor = 'crosshair';
-  } else {
     cv.style.cursor = h.type === 'grain' ? 'pointer' : 'default';
-  }
-
-  if (prevHv !== hoverVertex || prevHe !== hoverEdge || n !== S.hover) {
     draw();
   }
 });
 
 cv.addEventListener('mouseleave', () => {
-  if (labelTool === 'draw' && mousePt) {
-    mousePt = null;
+  if (S.hover !== -1) {
+    S.hover = -1;
     draw();
   }
-  S.hover = -1;
-  hoverVertex = null;
-  hoverEdge = null;
-  draw();
-});
-
-window.addEventListener('mouseup', () => {
-  if (dragVertex) dragVertex = null;
 });
 
 cv.addEventListener('click', e => {
   if (panDrag.moved) { panDrag.moved = false; return; }
-  if (labelTool === 'draw') return;
-  if (hoverVertex || hoverEdge || dragVertex) return;
-
   const x = e.offsetX / S.zoom, y = e.offsetY / S.zoom, h = hit(x, y), pop = $('#pop');
   let html = '';
   if (h.type === 'grain') {
-    selGrain = h.k;
-    const g = S.grains[h.k], cur = clsOf(g), st = stateOf(g);
-    setDrawClass(cur);
+    const g = S.grains[h.k], st = stateOf(g), bs = baseState(st), bp = hasBadPoly(st);
     html = `<h4>Model: ${NAME[g.cls] || g.cls} · conf ${(g.conf||1.0).toFixed(2)}</h4>
       <button onclick="mark(${h.k},'ok')"><span>✓ Correct${st==='ok'?' (current)':''}</span><kbd>C</kbd></button>
       ${['viable','non_viable','intermediate'].map((c,j)=> c===g.cls ? '' :
-        `<button onclick="mark(${h.k},'to_${c}')"><span><i class="sw" style="background:${COL[c]}"></i>Actually ${NAME[c].toLowerCase()}</span><kbd>${j+1}</kbd></button>`).join('')}
-      <button onclick="mark(${h.k},'fp')"><span>✕ Not a pollen grain</span><kbd>X</kbd></button>`;
-    pop._keys = {c:()=>mark(h.k,'ok'), x:()=>mark(h.k,'fp'), 1:()=>g.cls!=='viable'&&mark(h.k,'to_viable'), 2:()=>g.cls!=='non_viable'&&mark(h.k,'to_non_viable'), 3:()=>g.cls!=='intermediate'&&mark(h.k,'to_intermediate')};
+        `<button onclick="mark(${h.k},'to_${c}')"><span><i class="sw" style="background:${COL[c]}"></i>Actually ${NAME[c].toLowerCase()}${bs==='to_'+c?' ✓':''}</span><kbd>${j+1}</kbd></button>`).join('')}
+      <button onclick="toggleBadPoly(${h.k})" title="Contains >1 grain, misses part of grain, or inaccurate contour (non-edge)"><span><i class="sw" style="background:#38bdf8"></i>⬠ Incorrect polygon${bp?' ✓':''}</span><kbd>P</kbd></button>
+      <button onclick="mark(${h.k},'uncertain')" title="Even human observer cannot tell viable vs non-viable"><span><i class="sw" style="background:#c084fc"></i>❓ Observer uncertain${bs==='uncertain'?' (current)':''}</span><kbd>U</kbd></button>
+      <button onclick="mark(${h.k},'blurred')" title="Grain is out of focus / blurred"><span><i class="sw" style="background:#64748b"></i>◌ Blurred grain${bs==='blurred'?' (current)':''}</span><kbd>B</kbd></button>
+      <button onclick="mark(${h.k},'fp')"><span>✕ Not a pollen grain${bs==='fp'?' (current)':''}</span><kbd>X</kbd></button>`;
+    pop._keys = {
+      c:()=>mark(h.k,'ok'), p:()=>toggleBadPoly(h.k), u:()=>mark(h.k,'uncertain'), b:()=>mark(h.k,'blurred'), x:()=>mark(h.k,'fp'),
+      1:()=>g.cls!=='viable'&&mark(h.k,'to_viable'), 2:()=>g.cls!=='non_viable'&&mark(h.k,'to_non_viable'), 3:()=>g.cls!=='intermediate'&&mark(h.k,'to_intermediate')
+    };
   } else if (h.type === 'missed') {
-    selGrain = null;
     html = `<h4>Missed ${NAME[S.missed[h.k].cls].toLowerCase()} grain</h4><button onclick="unmiss(${h.k})"><span>Remove marker</span><kbd>X</kbd></button>`;
     pop._keys = {x:()=>unmiss(h.k)};
   } else {
-    selGrain = null;
     html = `<h4>Missed grain here?</h4>` + ['viable','non_viable','intermediate'].map((c,j)=>
       `<button onclick="miss(${x.toFixed(1)},${y.toFixed(1)},'${c}')"><span><i class="sw" style="background:${COL[c]}"></i>${NAME[c]}</span><kbd>${j+1}</kbd></button>`).join('')
-      + `<button onclick="setLabelTool('draw');hidePop()"><span>✏️ Draw Polygon</span><kbd>P</kbd></button>`
       + `<button onclick="hidePop()"><span>Cancel</span><kbd>Esc</kbd></button>`;
-    pop._keys = {1:()=>miss(x,y,'viable'), 2:()=>miss(x,y,'non_viable'), 3:()=>miss(x,y,'intermediate'), p:()=>{setLabelTool('draw');hidePop();}};
+    pop._keys = {1:()=>miss(x,y,'viable'), 2:()=>miss(x,y,'non_viable'), 3:()=>miss(x,y,'intermediate')};
   }
   pop.innerHTML = html; pop.hidden = false;
-  const left = Math.min(e.offsetX + 14, cv.width - 215), top = Math.min(e.offsetY + 14, cv.height - pop.offsetHeight - 6);
+  const left = Math.min(e.offsetX + 14, cv.width - pop.offsetWidth - 6), top = Math.min(e.offsetY + 14, cv.height - pop.offsetHeight - 6);
   pop.style.left = Math.max(4,left) + 'px'; pop.style.top = Math.max(4,top) + 'px';
   draw();
 });
+
 function hidePop(){ const p=$('#pop'); p.hidden=true; p._keys=null; }
-function mark(n, st){ const g = S.grains[n]; if(st==='ok') delete S.marks[g.i]; else S.marks[g.i]=st; S.dirty=true; hidePop(); draw(); refresh(); }
+function mark(n, st){
+  const g = S.grains[n], prev = stateOf(g);
+  if(st === 'ok') delete S.marks[g.i];
+  else if(st.startsWith('to_') && hasBadPoly(prev)) S.marks[g.i] = st + '+bad_poly';
+  else S.marks[g.i] = st;
+  S.dirty=true; hidePop(); draw(); refresh();
+}
+function toggleBadPoly(n){
+  const g = S.grains[n], st = stateOf(g), bs = baseState(st);
+  if(hasBadPoly(st)){
+    if(bs === 'ok') delete S.marks[g.i]; else S.marks[g.i] = bs;
+  } else {
+    S.marks[g.i] = bs.startsWith('to_') ? bs + '+bad_poly' : 'bad_poly';
+  }
+  S.dirty=true; hidePop(); draw(); refresh();
+}
 function miss(x, y, cls){ S.missed.push({x:+x, y:+y, cls}); S.dirty=true; hidePop(); draw(); refresh(); }
 function unmiss(k){ S.missed.splice(k,1); S.dirty=true; hidePop(); draw(); refresh(); }
 function setVerdict(v, silent){ S.verdict=v; if(!silent) S.dirty=true;
   document.querySelectorAll('.verd button').forEach(b=>b.classList.toggle('on', !!v && b.classList.contains(v))); $('#btn-save').disabled = !v; }
 function refresh(){
-  const p={viable:0,non_viable:0,intermediate:0}, c={viable:0,non_viable:0,intermediate:0}; let fp=0, rc=0;
-  S.grains.forEach(g => { p[g.cls]++; const st=stateOf(g); if(st==='fp') fp++; else { if(st.startsWith('to_')) rc++; c[clsOf(g)]++; } });
+  const p={viable:0,non_viable:0,intermediate:0}, c={viable:0,non_viable:0,intermediate:0};
+  let fp=0, rc=0, bp=0, bl=0, un=0;
+  S.grains.forEach(g => {
+    p[g.cls]++;
+    const st = stateOf(g), bs = baseState(st);
+    if(hasBadPoly(st)) bp++;
+    if(bs === 'fp') fp++;
+    else if(bs === 'blurred') bl++;
+    else if(bs === 'uncertain') un++;
+    else { if(bs.startsWith('to_')) rc++; c[clsOf(g)]++; }
+  });
   S.missed.forEach(m => c[m.cls]++);
   const np = p.viable+p.non_viable+p.intermediate, nc = c.viable+c.non_viable+c.intermediate;
   $('#m-v').textContent=p.viable; $('#m-nv').textContent=p.non_viable; $('#m-i').textContent=p.intermediate;
   $('#m-pct').textContent = np ? (100*p.viable/np).toFixed(1)+' %' : '–';
-  $('#c-fp').textContent=fp; $('#c-rc').textContent=rc; $('#c-ms').textContent=S.missed.length;
+  $('#c-fp').textContent=fp; $('#c-rc').textContent=rc; $('#c-bp').textContent=bp; $('#c-bu').textContent=`${bl} / ${un}`; $('#c-ms').textContent=S.missed.length;
   $('#c-pct').textContent = nc ? (100*c.viable/nc).toFixed(1)+' %' : '–';
 }
 async function save(){
@@ -819,86 +583,94 @@ async function save(){
   const isRelabel = $('#chk-relabel').checked;
   const body = {verdict:S.verdict, image_issue:$('#chk-img').checked, relabel:isRelabel,
                 comment:$('#comment').value, grains:S.marks, missed:S.missed,
-                custom_grains: S.grains.filter(g => g.isCustom || g.edited).map(g => ({
-                  box: g.box, pts: g.pts, cls: clsOf(g), area: g.area, i: g.i
-                })),
                 elapsed_s:Math.round((Date.now()-S.t0)/1000)};
   await api(`/api/item/${S.items[S.idx].id}/decision`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
   S.items[S.idx].done = true; S.items[S.idx].verdict = S.verdict; S.items[S.idx].relabel = isRelabel;
   S.items[S.idx].saved = new Date().toISOString();
-  S.dirty = false; toast(isRelabel ? 'Saved (🏷️ Queued for Roboflow) ✓' : 'Saved ✓');
-  if(returnTo !== null && returnTo !== S.idx){ open(returnTo); return; }
+  S.dirty = false; toast(isRelabel ? 'Saved (🏷️ Queued for Relabel) ✓' : 'Saved ✓');
+  if(returnTo !== null && returnTo !== S.idx){ selectTile(returnTo, true); return; }
   const nxt = S.items.findIndex((it,k)=>k>S.idx && !it.done);
-  if(nxt >= 0) open(nxt); else { renderQueue(); toast('All your tiles are reviewed — thank you! 🎉'); }
+  if(nxt >= 0) selectTile(nxt, true); else { renderQueue(); toast('All your tiles are reviewed — thank you! 🎉'); }
 }
 function toggleRelabel(fromBox){
   const c = $('#chk-relabel');
   if(fromBox) c.checked = !c.checked;
   S.dirty = true;
   updateRelabelUI();
-  toast(c.checked ? '🏷️ Flagged for Roboflow' : 'Unflagged from Roboflow');
+  toast(c.checked ? '🏷️ Flagged for Relabel' : 'Unflagged from Relabel');
 }
 function updateRelabelUI(){
   const c = $('#chk-relabel');
   $('#box-relabel').classList.toggle('checked', c.checked);
+  const link = $('#link-relabel-open');
+  if (link) link.style.display = c.checked ? 'inline-block' : 'none';
+}
+
+function openInLabeler(){
+  if(!S.cur) return;
+  const isLocal = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+  const base = isLocal ? 'http://127.0.0.1:8050' : 'https://viability-label-stenc.dyn.cloud.e-infra.cz';
+  const tileParam = S.cur.stem || S.cur.id;
+  window.open(`${base}/?tile=${encodeURIComponent(tileParam)}`, '_blank');
 }
 
 document.addEventListener('keydown', e => {
   if(e.target.tagName === 'TEXTAREA') return;
   if(e.key === '?'){ e.preventDefault(); tab($('#view-help').hidden ? 'help' : 'review'); return; }
   if(e.key === 'Escape' && !$('#view-help').hidden){ tab('review'); return; }
+  if(!$('#view-extremes').hidden){
+    if(!$('#ext-summary-page').hidden){ if(e.key === 'Escape') toggleExtSummary(false); return; }
+    const k = e.key.toLowerCase();
+    if(e.key === '+' || e.key === '='){ e.preventDefault(); return extSetZoom(E.zoom*1.25); }
+    if(e.key === '-' || e.key === '_'){ e.preventDefault(); return extSetZoom(E.zoom/1.25); }
+    if(e.key === '0'){ e.preventDefault(); return extSetZoom(2.4); }
+    if(k === ' '){ e.preventDefault(); if(!E.peek){ E.peek=true; extDraw(); } return; }
+    if(k === 'm'){ const c=$('#ext-chk-masks'); c.checked=!c.checked; E.showMasks=c.checked; extDraw(); return; }
+    if(k === 'k'){ e.preventDefault(); return extSkip(); }
+    if(k === 'arrowright'){ e.preventDefault(); return extGo(1); }
+    if(k === 'arrowleft'){ e.preventDefault(); return extGo(-1); }
+    if(k === 'enter'){ e.preventDefault(); return extSave(true); }
+    const catMap = {'1':'true_single','2':'swollen_single','3':'blurred_halo','4':'clump_or_bad_poly','5':'debris_fp','6':'wrong_class'};
+    if(catMap[k]){ e.preventDefault(); return extChoose(catMap[k]); }
+    return;
+  }
   if($('#view-review').hidden) return;
   if(e.key === '+' || e.key === '='){ e.preventDefault(); return setZoom(S.zoom*1.25); }
   if(e.key === '-' || e.key === '_'){ e.preventDefault(); return setZoom(S.zoom/1.25); }
   if(e.key === '0'){ e.preventDefault(); return setZoom(1.4); }
   const pop = $('#pop'), k = e.key.toLowerCase();
-  if (labelTool === 'draw') {
-    if (k === 'enter') { finishDraw(); return; }
-    if (k === 'backspace' || k === 'delete') {
-      if (drawPts.length) { drawPts.pop(); draw(); }
-      return;
-    }
-    if (k === 'escape') { setLabelTool('edit'); return; }
-  }
-
-  if (k === 'p') { setLabelTool(labelTool === 'draw' ? 'edit' : 'draw'); return; }
-  if (k === 'e') { setLabelTool('edit'); return; }
-  if (k === '1') { setDrawClass('viable'); return; }
-  if (k === '2') { setDrawClass('non-viable'); return; }
-  if (k === '3') { setDrawClass('intermediate'); return; }
-  if (k === 'delete' || k === 'x') {
-    if (hoverVertex) {
-      const poly = S.grains[hoverVertex.grainIdx].pts;
-      if (poly.length > 3) {
-        poly.splice(hoverVertex.vertexIdx, 1);
-        hoverVertex = null;
-        S.dirty = true;
-        draw();
-        toast('Vertex removed');
-      }
-      return;
-    }
-    if (selGrain !== null) { deleteSelectedGrain(); return; }
-  }
-
   if(!pop.hidden && pop._keys){ if(k==='escape') return hidePop(); if(pop._keys[k]){ e.preventDefault(); return pop._keys[k](); } }
   if(k===' '){ e.preventDefault(); if(!S.peek){ S.peek=true; draw(); } return; }
-  if(k==='m'){ const c=$('#chk-masks'); c.checked=!c.checked; S.showMasks=c.checked; draw(); }
+  if(k==='m'){ const c=$('#chk-masks'); c.checked=!c.checked; S.showMasks=c.checked; saveViewPrefs(); draw(); }
   else if(k==='r') toggleRelabel(true);
+  else if(k==='k') skipNext();
   else if(k==='a') setVerdict('good'); else if(k==='s') setVerdict('minor'); else if(k==='d') setVerdict('poor');
   else if(k==='enter') save(); else if(k==='arrowright') go(1); else if(k==='arrowleft') go(-1);
 });
-document.addEventListener('keyup', e => { if(e.key===' '){ S.peek=false; draw(); } });
+document.addEventListener('keyup', e => {
+  if(e.key===' '){
+    if(S.peek){ S.peek=false; draw(); }
+    if(E.peek){ E.peek=false; extDraw(); }
+  }
+});
 window.addEventListener('beforeunload', e => { if(S.dirty){ e.preventDefault(); e.returnValue=''; } });
 
-function tab(t){ ['review','results','help'].forEach(x=>{ $('#view-'+x).hidden = x!==t; $('#tab-'+x).classList.toggle('on', x===t); }); if(t==='results') results(); }
+function tab(t){
+  ['review','results','extremes','help'].forEach(x=>{
+    $('#view-'+x).hidden = x!==t;
+    const btn = $('#tab-'+x); if(btn) btn.classList.toggle('on', x===t);
+  });
+  if(t==='results') results();
+  else if(t==='extremes') initExtremes();
+  else if(t==='review') renderQueue();
+}
 const f = (v, d=1, s='') => v===null||v===undefined ? '–' : (+v).toFixed(d)+s;
 const pct = v => v===null||v===undefined ? '–' : (100*v).toFixed(1)+' %';
 function biasPill(b){ if(b===null||b===undefined) return '–'; const a=Math.abs(b); return `<span class="pill ${a<2?'g':a<5?'a':'r'}">${b>0?'+':''}${b.toFixed(1)} pp</span>`; }
 async function results(){
   const d = await api('/api/summary'), L = {nat_2x:'Natural 2x', ory_2x:'Synthetic 2x (oryzalin)', neo_4x:'Neo-4x', nat_4x:'Natural 4x', ALL:'All cytotypes'};
   const rows = Object.entries(d.by_cytotype).map(([k,r]) => `<tr ${k==='ALL'?'style="font-weight:700"':''}><td>${L[k]||k}</td><td>${r.tiles}</td><td>${r.n_pred}</td>
-     <td>${pct(r.precision)}</td><td>${pct(r.recall)}</td><td>${pct(r.class_accuracy)}</td>
+     <td>${pct(r.precision)}</td><td>${pct(r.recall)}</td><td>${pct(r.class_accuracy)}</td><td>${pct(r.poly_accuracy)}</td><td>${r.blurred||0} / ${r.uncertain||0}</td>
      <td>${f(r.model_viability_pct,1,' %')}</td><td>${f(r.true_viability_pct,1,' %')}</td><td>${biasPill(r.viability_bias_pp)}</td></tr>`).join('');
   const prog = Object.entries(d.progress).map(([r,p])=>`<div class="kv"><span>${r}</span><span>${p.done} / ${p.assigned}</span></div>`).join('');
   const ag = d.agreement;
@@ -917,7 +689,7 @@ async function results(){
   $('#results').innerHTML = `<h2>Detection quality by cytotype</h2>
     <p class="muted">Computed from reviewers' corrections on blinded tiles (set <code>${d.set_id||'–'}</code>). The key number for the study is the
     <b>viability bias</b> = model viability % − human-corrected viability %. If it is small and similar across cytotypes, ploidy comparisons are not distorted by the detector.</p>
-    <table><thead><tr><th>Cytotype</th><th>Tiles</th><th>Grains (model)</th><th>Precision</th><th>Recall</th><th>Class accuracy</th><th>Model viability</th><th>Human viability</th><th>Bias</th></tr></thead><tbody>${rows || '<tr><td colspan=9 class="muted">No reviews yet.</td></tr>'}</tbody></table>
+    <table><thead><tr><th>Cytotype</th><th>Tiles</th><th>Grains (eval)</th><th>Precision</th><th>Recall</th><th>Class acc.</th><th>Polygon acc.</th><th>Blur / Uncert.</th><th>Model viability</th><th>Human viability</th><th>Bias</th></tr></thead><tbody>${rows || '<tr><td colspan=11 class="muted">No reviews yet.</td></tr>'}</tbody></table>
     ${relabelBox}
     <div class="grid2">
       <div class="card"><h3>Progress</h3>${prog || '<span class="muted">–</span>'}</div>
@@ -994,11 +766,11 @@ async function openRecent(k){
   if(k === S.idx) return;
   const cur = S.items[S.idx];
   const back = returnTo !== null ? returnTo : (cur && !cur.done ? S.idx : null);   // remember the tile being worked on
-  if((await open(k)) === false) return;
+  if((await selectTile(k)) === false) return;
   returnTo = back; renderRecent();
   if(back !== null) toast('Enter saves and returns to your tile');
 }
-function goBack(){ if(returnTo !== null) open(returnTo); }
+function goBack(){ if(returnTo !== null) selectTile(returnTo); }
 
 /* ---------- Help language (cs / en), remembered in this browser ---------- */
 function setHelpLang(l){
@@ -1009,6 +781,260 @@ function setHelpLang(l){
 }
 setHelpLang((() => { try{ const v = localStorage.getItem('helpLang'); if(v) return v; }catch(e){}
   return (navigator.language || '').toLowerCase().startsWith('cs') ? 'cs' : 'en'; })());
+
+/* ---------- Size Extremes single-grain blinded audit ---------- */
+const E = {loaded:false, set_id:null, items:[], idx:-1, cur:null, img:null, grains:[], targetIdx:-1,
+           cat:null, zoom:2.4, showMasks:true, peek:false, t0:0};
+function extDotClass(c){
+  if(c==='true_single'||c==='swollen_single') return 'bio';
+  if(c==='blurred_halo'||c==='wrong_class') return 'amb';
+  if(c==='clump_or_bad_poly'||c==='debris_fp') return 'art';
+  return '';
+}
+async function initExtremes(){
+  if(!E.loaded){
+    const d = await api('/api/extremes/items');
+    E.items = d.items || []; E.set_id = d.set_id; E.loaded = true;
+    if(!E.items.length){
+      $('#ext-stagewrap').innerHTML = `<div class="empty">No size-extremes audit set found on S3 yet.</div>`;
+      return;
+    }
+    const nxt = E.items.findIndex(i => !i.done);
+    await extSelect(nxt >= 0 ? nxt : 0);
+  } else {
+    extRenderQueue();
+  }
+}
+function extRenderQueue(){
+  const done = E.items.filter(i => i.done).length;
+  let bio = 0, art = 0;
+  E.items.forEach(i => {
+    if(!i.done) return;
+    if(i.category === 'true_single' || i.category === 'swollen_single') bio++;
+    else art++;
+  });
+  if(!$('#view-extremes').hidden){
+    $('#progbar').style.width = (E.items.length ? 100*done/E.items.length : 0) + '%';
+    $('#progtxt').textContent = `${done} / ${E.items.length} extremes`;
+  }
+  $('#ext-p-done').textContent = `${done} / ${E.items.length}`;
+  $('#ext-p-bio').textContent = done ? `${bio} (${(100*bio/done).toFixed(1)}%)` : '–';
+  $('#ext-p-art').textContent = done ? `${art} (${(100*art/done).toFixed(1)}%)` : '–';
+  $('#ext-queue').innerHTML = E.items.map((it, k) => {
+    const a = it.target?.area_um2 != null ? `${Math.round(it.target.area_um2)} µm²` : '';
+    return `<div class="it ${k===E.idx?'on':''}" onclick="extSelect(${k})">
+      <i class="dot ${extDotClass(it.category)}"></i><span>Grain ${it.order}</span><span class="grow"></span><span class="tag">${a}</span></div>`;
+  }).join('');
+}
+async function extSelect(k){
+  if(k < 0 || k >= E.items.length) return;
+  toggleExtSummary(false, true);
+  E.idx = k; extRenderQueue();
+  const d = await api('/api/extremes/item/' + E.items[k].id);
+  E.cur = d.item; E.targetIdx = d.target_index; E.t0 = Date.now();
+  E.cat = d.decision?.category || null;
+  $('#ext-comment').value = d.decision?.comment || '';
+  const tgt = d.item.target || {};
+  $('#ext-title').textContent = `Grain ${d.item.order} · ${d.item.slide_code}`;
+  $('#ext-cls-tag').textContent = NAME[tgt.cls] || tgt.cls || '';
+  $('#ext-cls-tag').style.color = COL[tgt.cls] || 'var(--txt)';
+  $('#ext-m-cls').textContent = NAME[tgt.cls] || tgt.cls || '–';
+  $('#ext-m-cls').style.color = COL[tgt.cls] || 'var(--txt)';
+  $('#ext-m-conf').textContent = tgt.conf != null ? (+tgt.conf).toFixed(2) : '–';
+  $('#ext-m-area').textContent = tgt.area_um2 != null ? `${(+tgt.area_um2).toFixed(1)} µm²` : '–';
+  $('#ext-m-diam').textContent = tgt.diameter_um != null ? `${(+tgt.diameter_um).toFixed(2)} µm` : '–';
+  $('#ext-m-shape').textContent = tgt.solidity != null ? `${(+tgt.solidity).toFixed(3)} · ${(+tgt.aspect_ratio).toFixed(2)}` : '–';
+  extHighlightCat(E.cat);
+  const img = new Image();
+  img.onload = () => {
+    E.img = img;
+    const W = img.naturalWidth, H = img.naturalHeight;
+    E.grains = (d.grains || []).map(g => {
+      const pts = g.poly && g.poly.length > 2 ? g.poly.map(p => [p[0]*W, p[1]*H])
+        : [[g.box[0],g.box[1]],[g.box[2],g.box[1]],[g.box[2],g.box[3]],[g.box[0],g.box[3]]];
+      return {...g, pts};
+    });
+    extDraw();
+    extCenterTarget();
+  };
+  img.src = d.image_url;
+}
+function extHighlightCat(c){
+  E.cat = c;
+  document.querySelectorAll('#ext-cats .ext-btn').forEach(b => b.classList.toggle('on', b.dataset.cat === c));
+  $('#ext-btn-save').disabled = !c;
+}
+async function extChoose(cat){
+  extHighlightCat(cat);
+  if($('#ext-auto-next').checked){
+    await extSave(true);
+  }
+}
+async function extSave(advance){
+  if(!E.cat || E.idx < 0) return;
+  const it = E.items[E.idx];
+  const body = {category: E.cat, comment: $('#ext-comment').value, elapsed_s: Math.round((Date.now()-E.t0)/1000)};
+  await api(`/api/extremes/item/${it.id}/decision`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
+  it.done = true; it.category = E.cat; it.comment = body.comment; it.saved = new Date().toISOString();
+  extRenderQueue();
+  toast('Saved extreme audit ✓');
+  if(advance){
+    let nxt = E.items.findIndex((x, k) => k > E.idx && !x.done);
+    if(nxt < 0) nxt = E.items.findIndex((x, k) => k !== E.idx && !x.done);
+    if(nxt >= 0) extSelect(nxt);
+    else toast('All 96 extreme grains audited! Opening summary… 🎉');
+  }
+}
+function extGo(dk){
+  if(!E.items.length) return;
+  extSelect((E.idx + dk + E.items.length) % E.items.length);
+}
+function extSkip(){
+  if(!E.items.length) return;
+  let nxt = E.items.findIndex((x, k) => k > E.idx && !x.done);
+  if(nxt < 0) nxt = E.items.findIndex((x, k) => k !== E.idx && !x.done);
+  if(nxt < 0) nxt = (E.idx + 1) % E.items.length;
+  extSelect(nxt);
+}
+function extOpenLabeler(){
+  if(!E.cur) return;
+  const isLocal = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+  const base = isLocal ? 'http://127.0.0.1:8050' : 'https://viability-label-stenc.dyn.cloud.e-infra.cz';
+  window.open(`${base}/?tile=${encodeURIComponent(E.cur.stem || E.cur.id)}`, '_blank');
+}
+function extCenterTarget(){
+  if(!E.cur || !E.img) return;
+  requestAnimationFrame(() => {
+    const ew = $('#ext-stagewrap'), tgt = E.cur.target || {};
+    const tx = (tgt.lx ?? 320) * E.zoom, ty = (tgt.ly ?? 320) * E.zoom;
+    const cvEl = $('#ext-cv');
+    const wr = ew.getBoundingClientRect(), cr = cvEl.getBoundingClientRect();
+    ew.scrollLeft += (cr.left + tx) - (wr.left + wr.width / 2);
+    ew.scrollTop += (cr.top + ty) - (wr.top + wr.height / 2);
+  });
+}
+function extDraw(){
+  const c = $('#ext-cv'), ctx = c.getContext('2d'), img = E.img; if(!img) return;
+  const W = img.naturalWidth, H = img.naturalHeight, z = E.zoom;
+  c.width = Math.round(W*z); c.height = Math.round(H*z); ctx.imageSmoothingEnabled = z < 2;
+  $('#ext-zoom-val').textContent = z.toFixed(1) + '×';
+  ctx.drawImage(img, 0, 0, c.width, c.height);
+  if(E.peek) return;
+  E.grains.forEach((g, n) => {
+    const isTgt = n === E.targetIdx;
+    const col = COL[g.cls] || '#ffb547';
+    ctx.beginPath(); g.pts.forEach(([x,y],j)=> j ? ctx.lineTo(x*z,y*z) : ctx.moveTo(x*z,y*z)); ctx.closePath();
+    if(isTgt && E.showMasks){
+      ctx.globalAlpha = 0.14; ctx.fillStyle = col; ctx.fill();
+      ctx.globalAlpha = 0.95; ctx.setLineDash([]); ctx.lineWidth = 2.3; ctx.strokeStyle = col; ctx.stroke();
+      ctx.globalAlpha = 1;
+    } else if(!isTgt && E.showMasks){
+      ctx.globalAlpha = 0.26; ctx.setLineDash([4,4]); ctx.lineWidth = 1.3; ctx.strokeStyle = col; ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+  });
+  // Draw unmistakable outer cyan reticle around target grain without covering its edge
+  const tgt = E.cur?.target;
+  if(tgt && tgt.box){
+    const cx = (tgt.box[0] + tgt.box[2]) / 2 * z, cy = (tgt.box[1] + tgt.box[3]) / 2 * z;
+    const bw = (tgt.box[2] - tgt.box[0]) * z, bh = (tgt.box[3] - tgt.box[1]) * z;
+    const r = Math.max(bw, bh) * 0.65 + 14;
+    ctx.save();
+    ctx.strokeStyle = '#38bdf8'; ctx.lineWidth = 2.0; ctx.setLineDash([6, 4]);
+    ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.stroke();
+    ctx.setLineDash([]);
+    [[1,0],[-1,0],[0,1],[0,-1]].forEach(([dx,dy]) => {
+      ctx.beginPath(); ctx.moveTo(cx + dx*(r+2), cy + dy*(r+2)); ctx.lineTo(cx + dx*(r+9), cy + dy*(r+9)); ctx.stroke();
+    });
+    const lbl = `⌖ ${Math.round(tgt.area_um2)} µm² (${(+tgt.diameter_um).toFixed(1)} µm)`;
+    ctx.font = '600 11.5px Inter,sans-serif';
+    const tw = ctx.measureText(lbl).width + 12;
+    const ly = cy - r - 18 > 14 ? cy - r - 16 : cy + r + 16;
+    ctx.fillStyle = 'rgba(13,16,22,0.88)';
+    ctx.fillRect(cx - tw/2, ly - 10, tw, 20);
+    ctx.strokeStyle = 'rgba(56,189,248,0.6)'; ctx.lineWidth = 1;
+    ctx.strokeRect(cx - tw/2, ly - 10, tw, 20);
+    ctx.fillStyle = '#38bdf8'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(lbl, cx, ly);
+    ctx.restore();
+  }
+}
+const extWrap = $('#ext-stagewrap'), extCv = $('#ext-cv');
+const extPan = {down:false, x:0, y:0, l:0, t:0};
+function extSetZoom(z, cx, cy){
+  if(!E.img) return;
+  z = Math.min(6, Math.max(0.8, z));
+  const wr = extWrap.getBoundingClientRect();
+  if(cx == null){ cx = wr.left + wr.width/2; cy = wr.top + wr.height/2; }
+  const r = extCv.getBoundingClientRect(), ix = (cx - r.left)/E.zoom, iy = (cy - r.top)/E.zoom;
+  E.zoom = z; $('#ext-rng-zoom').value = z; extDraw();
+  const r2 = extCv.getBoundingClientRect();
+  extWrap.scrollLeft += r2.left + ix*z - cx; extWrap.scrollTop += r2.top + iy*z - cy;
+}
+extWrap.addEventListener('wheel', e => {
+  if(!E.img || e.shiftKey) return;
+  e.preventDefault();
+  extSetZoom(E.zoom * (e.deltaY < 0 ? 1.15 : 1/1.15), e.clientX, e.clientY);
+}, {passive:false});
+extWrap.addEventListener('mousedown', e => {
+  if(e.button !== 0 && e.button !== 1) return;
+  if(e.button === 1) e.preventDefault();
+  Object.assign(extPan, {down:true, x:e.clientX, y:e.clientY, l:extWrap.scrollLeft, t:extWrap.scrollTop});
+  extWrap.classList.add('panning');
+});
+window.addEventListener('mousemove', e => {
+  if(!extPan.down) return;
+  extWrap.scrollLeft = extPan.l - (e.clientX - extPan.x);
+  extWrap.scrollTop = extPan.t - (e.clientY - extPan.y);
+});
+window.addEventListener('mouseup', () => {
+  if(!extPan.down) return;
+  extPan.down = false; extWrap.classList.remove('panning');
+});
+
+async function toggleExtSummary(show, silent=false){
+  $('#ext-queue').hidden = show;
+  $('#ext-audit-centre').hidden = show;
+  $('#ext-audit-side').hidden = show;
+  $('#ext-summary-page').hidden = !show;
+  if(!show) return;
+  const d = await api('/api/extremes/summary');
+  const TL = {
+    'high_p99|viable': 'Extreme Upper (≥ P99) · Viable',
+    'high_p99|non_viable': 'Extreme Upper (≥ P99) · Non-viable',
+    'high_p95_99|viable': 'Upper Whisker (P95–P99) · Viable',
+    'high_p95_99|non_viable': 'Upper Whisker (P95–P99) · Non-viable',
+    'low_p0_2|viable': 'Lower Extreme (≤ P2) · Viable',
+    'low_p0_2|non_viable': 'Lower Extreme (≤ P2) · Non-viable',
+    'ALL|ALL': 'All Audited Extremes',
+  };
+  const CL = {nat_2x:'Natural 2x', ory_2x:'Synthetic 2x (oryzalin)', neo_4x:'Neo-4x', nat_4x:'Natural 4x', ALL:'All cytotypes'};
+  const bioPill = p => p == null ? '–' : `<span class="pill ${p>=0.8?'g':p>=0.5?'a':'r'}">${(100*p).toFixed(1)} %</span>`;
+  const mkRows = (obj, labels) => Object.entries(obj || {}).map(([k, r]) =>
+    `<tr ${k.startsWith('ALL')?'style="font-weight:700"':''}><td>${labels[k]||k}</td><td>${r.n_eval}</td>
+     <td>${r.true_single}</td><td>${r.swollen_single}</td><td>${r.blurred_halo}</td><td>${r.clump_or_bad_poly}</td><td>${r.debris_fp}</td><td>${r.wrong_class}</td>
+     <td>${bioPill(r.pct_bio_single)}</td></tr>`
+  ).join('');
+  const focusInfo = Object.entries(d.mean_focus_by_category || {}).map(([k,v]) => `<code>${k}: lap=${v}</code>`).join(' · ');
+  $('#ext-summary-page').innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
+      <div>
+        <h2>📏 Size Extremes Audit — Unblinded Breakdown</h2>
+        <p class="muted" style="margin:4px 0 0">Separates genuine biological size variation (<b>#1 Sharp single</b> + <b>#2 Swollen single</b>) from optical Z-plane blur, merged clumps, and non-pollen debris across tails (<code>${d.set_id||'–'}</code>).</p>
+      </div>
+      <div style="display:flex;gap:8px;">
+        <a href="/api/extremes/export.csv${q()}"><button>⬇ Download Extremes CSV</button></a>
+        <button onclick="toggleExtSummary(false)" style="background:var(--acc);color:#0b0e14;border-color:var(--acc);font-weight:600;">← Back to Audit Queue</button>
+      </div>
+    </div>
+    <h3 style="margin:20px 0 6px">1 · By Size Tail Tier &amp; Predicted Viability Class</h3>
+    <table><thead><tr><th>Tail Tier · Class</th><th>Evaluated</th><th>✓ Sharp Single</th><th>🫧 Swollen Single</th><th>◌ Blur Halo</th><th>⬠ Clump / Poly</th><th>✕ Debris (FP)</th><th>🔄 Wrong Cls</th><th>% Biologically Real (#1+#2)</th></tr></thead>
+      <tbody>${mkRows(d.by_tail_class, TL) || '<tr><td colspan="9" class="muted">No extreme grains scored yet.</td></tr>'}</tbody></table>
+    <h3 style="margin:22px 0 6px">2 · By Ploidy Cytotype</h3>
+    <table><thead><tr><th>Cytotype</th><th>Evaluated</th><th>✓ Sharp Single</th><th>🫧 Swollen Single</th><th>◌ Blur Halo</th><th>⬠ Clump / Poly</th><th>✕ Debris (FP)</th><th>🔄 Wrong Cls</th><th>% Biologically Real (#1+#2)</th></tr></thead>
+      <tbody>${mkRows(d.by_cytotype, CL) || '<tr><td colspan="9" class="muted">No extreme grains scored yet.</td></tr>'}</tbody></table>
+    ${focusInfo ? `<p class="muted" style="margin-top:12px">Mean grain-local Laplacian sharpness by human category: ${focusInfo}</p>` : ''}`;
+}
 
 init().catch(err => { $('#stagewrap').innerHTML = `<div class="empty">Could not load: ${err.message}</div>`; });
 </script>

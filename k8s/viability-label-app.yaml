@@ -1,0 +1,144 @@
+# Pollen Viability Dedicated Labeling App (SAM magic wand, polygon contour editing & YOLO export)
+# Deployed to CESNET Kubernetes in namespace: stenc-ns
+# Live URL: https://viability-label-stenc.dyn.cloud.e-infra.cz
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: viability-label
+  namespace: stenc-ns
+  labels:
+    app: viability-label
+    project: pollen-viability
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: viability-label
+  template:
+    metadata:
+      labels:
+        app: viability-label
+        project: pollen-viability
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: app
+          image: ultralytics/ultralytics:latest
+          imagePullPolicy: IfNotPresent
+          workingDir: /tmp
+          command:
+            - sh
+            - -c
+            - |
+              pip install --user --quiet --no-warn-script-location flask boto3 pyyaml waitress || exit 1
+              if [ ! -f /tmp/sam_b.pt ]; then
+                python -c "import os, boto3; boto3.client('s3', endpoint_url=os.environ['S3_ENDPOINT'], aws_access_key_id=os.environ['AWS_ACCESS_KEY_ID'], aws_secret_access_key=os.environ['AWS_SECRET_ACCESS_KEY']).download_file(os.environ['S3_BUCKET'], 'Ostatni/Pollen_viability/trained_models/sam_b.pt', '/tmp/sam_b.pt')" || (python -c "from ultralytics import SAM; SAM('sam_b.pt')" && mv sam_b.pt /tmp/sam_b.pt) || true
+              fi
+              cd /app && exec python -m waitress --port=8080 --threads=8 app:app
+          ports:
+            - containerPort: 8080
+          env:
+            - {name: HOME, value: /tmp}
+            - {name: YOLO_CONFIG_DIR, value: /tmp/yolo}
+            - {name: APP_CACHE, value: /tmp/cache}
+            - {name: SAM_WEIGHTS, value: /tmp/sam_b.pt}
+            - {name: LABELER, value: jakub}
+            - {name: S3_ENDPOINT, value: "https://s3.cl4.du.cesnet.cz"}
+            - {name: S3_BUCKET, value: "peg-bucket"}
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: s3-credentials
+                  key: access-key
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: s3-credentials
+                  key: secret-key
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            failureThreshold: 30
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: "4000m"
+              memory: "4096Mi"
+            limits:
+              cpu: "10000m"
+              memory: "12288Mi"
+          volumeMounts:
+            - name: app-code
+              mountPath: /app
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: app-code
+          configMap:
+            name: viability-label-src
+        - name: tmp
+          emptyDir:
+            sizeLimit: "10Gi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: viability-label
+  namespace: stenc-ns
+spec:
+  selector:
+    app: viability-label
+  ports:
+    - port: 80
+      targetPort: 8080
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: viability-label
+  namespace: stenc-ns
+  annotations:
+    kubernetes.io/tls-acme: "true"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "180"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - viability-label-stenc.dyn.cloud.e-infra.cz
+        - pollen-viability-label-stenc.dyn.cloud.e-infra.cz
+      secretName: viability-label-stenc-dyn-cloud-e-infra-cz-tls
+  rules:
+    - host: viability-label-stenc.dyn.cloud.e-infra.cz
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: viability-label
+                port:
+                  number: 80
+    - host: pollen-viability-label-stenc.dyn.cloud.e-infra.cz
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: viability-label
+                port:
+                  number: 80

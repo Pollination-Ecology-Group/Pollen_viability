@@ -1,81 +1,104 @@
-# Detection Quality Control (blinded human review)
+# Detection Quality Control & Ground-Truth Labeling
 
-Checking all ~265,000 tiles by hand is impossible. Instead, a **small, stratified, blinded sample**
-is checked by two people, and the corrections are turned into error rates per cytotype.
-What we need to show is that **errors are small and similar across ploidies**. If they are,
-detection errors cannot cause the ploidy differences we report.
+Checking all ~265,000 tiles by hand is impossible. Instead, our verification and active learning strategy is divided into two distinct, specialized workflows:
+1. **Blinded Quality Control Review (`review_app`)**: A small, stratified, blinded sample is checked by two independent reviewers to quantify error rates and confirm that **detection bias is negligible across ploidies**.
+2. **Ground-Truth Labeling & SAM Segmentation (`label_app`)**: Pixel-accurate polygon annotation powered by the Segment Anything Model (SAM), contour vertex editing, and active learning queues to **retrain and improve the YOLO instance segmentation model**.
 
-## Web Apps on CESNET Kubernetes
+---
 
-Both review applications are hosted live on the university CERIT-SC Kubernetes cluster so that collaborators (Eliška and Jakub) can access and evaluate reproductive and vegetative traits side-by-side without installing any local dependencies:
+## Web Applications on CESNET Kubernetes
 
-| Portal | Live Cluster URL | Scope & Phenotype | Reviewers |
+All review and labeling portals are hosted live on the university CERIT-SC Kubernetes cluster (`stenc-ns`), equipped with HTTPS certificates and cross-portal header links:
+
+| Portal | Live Cluster URL | Primary Objective & Phenotype | Interaction Style |
 |:---|:---|:---|:---:|
-| 🌸 **Pollen Viability QC** | <https://viability-review-stenc.dyn.cloud.e-infra.cz> | **Reproductive:** Blinded whole-slide tile validation across ploidy cytotypes. Human correction of viability %, false positive filtering, missed grain recovery, and systematic model bias quantification. | `jakub`, `eliska` |
-| 🌿 **Stomata Precision Review** | <https://stomata-review-stenc.dyn.cloud.e-infra.cz> | **Vegetative:** Stomatal complex precision audits. Interactive calipers for guard cell length/width, pore dimensions, and verification of epidermal cell gigas scaling. | Open / Lab access |
+| 🌸 **Pollen Viability QC** | <https://viability-review-stenc.dyn.cloud.e-infra.cz> | **Statistical Validation:** Blinded tile validation across cytotypes. Class correction (<kbd>V</kbd>/<kbd>N</kbd>/<kbd>I</kbd>), false positive filtering (<kbd>X</kbd>), missed grain recovery, relabel flag (<kbd>R</kbd>), and viability bias quantification. | Rapid click-to-correct (no polygon drag) |
+| 🏷️ **Pollen Viability Labeler** | <https://viability-label-stenc.dyn.cloud.e-infra.cz> | **Ground-Truth Retraining:** SAM magic wand (positive/negative clicks), full polygon contour vertex editing, active learning queue (QC-flagged tiles prioritized), pre-loaded model predictions for quick confirmation/editing, and one-click YOLO segmentation export. | Deep segmentation & contour editing |
+| 🌿 **Stomata Precision Review** | <https://stomata-review-stenc.dyn.cloud.e-infra.cz> | **Vegetative Phenotyping:** Guard cell and pore caliper audits, companion stomata verification, and gigas epidermal scaling checks. | Caliper inspection & measurement |
 
-> 💡 **Quick Navigation:** Both web applications feature cross-navigation badges in their headers, allowing seamless switching between Pollen and Stomata validation sessions in the browser.
+> 💡 **Cross-Navigation:** All applications include persistent header buttons allowing one-click switching between QC Review, SAM Labeling, and Stomata Audit sessions.
 
-### Pollen QC App Details
-- **URL:** <https://viability-review-stenc.dyn.cloud.e-infra.cz>
-- **Login:** Personal username + password (HTTP basic auth, assigned accounts for `jakub` and `eliska`).
-- **Code:** [`review_app/app.py`](../review_app/app.py), [`review_app/index.html`](../review_app/index.html)
-- **Deploy / Password updates:** `bash deploy_viability_review.sh` (`--reset-passwords jakub eliska` to regenerate credentials).
-- **Cloud Storage:** `s3://peg-bucket/Ostatni/Pollen_viability/Review/` (manifest + one JSON decision record per reviewer and tile).
+---
 
-## How the sample is built — [`src/build_viability_review_set.py`](../src/build_viability_review_set.py)
+## 1. Detection Quality Control Workflow (`review_app`)
 
-1. **Stratified random slides**: 6 per cytotype (`nat_2x`, `ory_2x`, `neo_4x`, `nat_4x`). Picks
-   rotate across population × cultivation run, and primary slides come before `rep` slides.
-2. **Tiles chosen by density**: from each slide, one dense tile (90th percentile of grains per tile),
-   one medium (50th) and one sparse but not empty (15th). Errors in crowded and in empty areas
-   are different, so we sample both.
-3. **Flagged outliers** (up to 12 slides, 2 tiles each), taken from `pollen_slide_summaries.csv`.
-   A slide is flagged if:
-   - its viability or viable-grain size is atypical *within its cytotype* (robust z > 3), or
-   - viability is below 10 % or above 99 %, or
-   - fewer than 50 % of grains can be measured (clumps or edges).
-4. **Blinding**: the order is shuffled and reviewers see only `Tile N · S1A2B3`. Cytotype, plant
-   and slide name are hidden, so what a reviewer expects to see cannot influence the check.
-5. **Overlap**: 30 % of tiles go to both reviewers, so inter-rater agreement can be measured. The
-   remaining tiles are split between them.
+### Purpose
+To prove for publication that model detection errors are minimal, balanced across cytotypes, and do not introduce systematic viability bias between diploids (`nat_2x`, `ory_2x`) and tetraploids (`neo_4x`, `nat_4x`).
 
-### Production Validation Set (`final_20261026_1614`)
-* **Total Sample Size:** **191 tiles** sampled from **72 unique slides** spanning all four cytotypes (`ory_2x`: 52, `nat_2x`: 51, `nat_4x`: 44, `neo_4x`: 44).
-* **Composition:** 144 stratified random tiles (unbiased density baseline) + 47 flagged/outlier tiles (stress-testing difficult boundaries and staining extremes).
-* **Inter-Rater Reliability:** **57 overlapping tiles (30%)** are assigned blindly to both reviewers (`jakub` and `eliska`), yielding 124 assigned tiles per reviewer.
-* **Automatic Label Deduplication:** Model predictions undergo class-agnostic Non-Maximum Suppression ($\text{IoU} = 0.40$) and containment filtering ($\text{IoS} > 0.75$) to automatically suppress duplicate anchor proposals on clumped grains.
+### How the Sample is Built — [`src/build_viability_review_set.py`](../src/build_viability_review_set.py)
+1. **Stratified Random Slides**: 6 per cytotype (`nat_2x`, `ory_2x`, `neo_4x`, `nat_4x`). Picks rotate across population × cultivation run.
+2. **Density Sampling**: From each slide: one dense tile (90th percentile), one medium (50th), and one sparse (15th).
+3. **Flagged Outliers**: Up to 12 outlier slides (2 tiles each) exhibiting atypical viability, extreme staining, or high clump density.
+4. **Blinding**: Tiles are randomly shuffled and presented as `Tile N · S1A2B3`. Cytotype, plant ID, and slide names are hidden to eliminate observer bias.
+5. **Inter-Rater Overlap**: 30% of tiles (57 tiles) are reviewed in duplicate by both reviewers (`jakub` and `eliska`) to measure inter-rater agreement.
 
-## What reviewers do
+### Reviewer Actions in QC
+- **Click an existing outline**: Correct its class (<kbd>V</kbd>: Viable, <kbd>N</kbd>: Non-viable, <kbd>I</kbd>: Intermediate) or mark as false positive (<kbd>X</kbd>: *Not a grain*).
+- **Click empty space**: Add a missed pollen grain marker.
+- **Flag for Relabeling**: Press <kbd>R</kbd> if the tile contains clumping, ambiguous staining, or novel debris that the model struggled with.
+- **Verdict**: <kbd>A</kbd> = Good, <kbd>S</kbd> = Minor issues, <kbd>D</kbd> = Poor / relabel candidate. Press <kbd>Enter</kbd> to save.
 
-- **Click a wrong outline** and pick the correct class (<kbd>V</kbd>: Viable, <kbd>N</kbd>: Non-viable, <kbd>I</kbd>: Intermediate), or mark as false positive (<kbd>X</kbd>: *Not a pollen grain*).
-- **Click a missed grain** in empty space to add its marker and select its class.
-- **Flag for Roboflow Relabeling:** Press <kbd>R</kbd> or toggle *„🏷️ Flag for Relabel“* if a tile exhibits novel debris, ambiguous staining, or dense clumps requiring retraining.
-- **Give an overall verdict:** <kbd>A</kbd> = Good, <kbd>S</kbd> = Minor, <kbd>D</kbd> = Poor, optionally tick *image problem*, then save with <kbd>Enter</kbd>.
+---
 
-## Metrics (Results tab, `/api/export.csv`)
+## 2. Ground-Truth Polygon Labeling Workflow (`src/label_app`)
 
-| Metric | Definition |
-|---|---|
-| Precision | (detections − false detections) / detections |
-| Recall | true detections / (true detections + missed grains) |
-| Class accuracy | correctly classed / true detections |
-| **Viability bias** | model viability % − human-corrected viability % (percentage points) |
-| Agreement | mean \|Δ corrected viability\| and relative Δ grain count on tiles reviewed by both |
+### Purpose
+To create pixel-perfect ground-truth training masks for YOLOv8/YOLO11 instance segmentation retraining, with zero friction and maximum throughput.
 
-**Acceptance rule (proposed):** |viability bias| < 2–3 pp in every cytotype. The bias must also
-not differ systematically between cytotypes, i.e. it should be within the inter-rater difference.
-If one cytotype fails this:
-1. look at its flagged tiles;
-2. add those tiles to training (active learning);
-3. retrain and re-run inference.
+### Interactive Features (Mirrored from Pollen Latitude)
+- **SAM Magic Wand**: Left-click inside a pollen grain to segment instantly using the Segment Anything Model. Right-click outside to add negative prompt points to steer SAM away from debris or touching grains.
+- **Polygon Vertex Editing**:
+  - Click and drag any vertex to reshape the contour.
+  - Hover over an edge to reveal the green `+` insertion handle and click to split the edge.
+  - Press <kbd>Del</kbd> or <kbd>X</kbd> while hovering over a vertex to remove it.
+- **Manual Polygon Drawing**: Press <kbd>P</kbd> to enter manual drawing mode, click successive points around the boundary, and press <kbd>Enter</kbd> to close the polygon.
+- **Undo History**: Press <kbd>Z</kbd> or <kbd>Ctrl+Z</kbd> to revert any polygon modification or deletion.
+- **Class Hotkeys**: <kbd>1</kbd> Viable (green), <kbd>2</kbd> Non-viable (red), <kbd>3</kbd> Intermediate (amber), <kbd>4</kbd> Debris (slate).
+- **Active Learning Queue**:
+  - Tiles flagged in the QC review (<kbd>R</kbd> or `poor` verdict) appear **first** in the queue with a pink `🏷️` badge.
+  - Remaining tiles are prioritized by cytotype deficit balancing and slide diversity.
+- **Slide Overview & Zoom**:
+  - Mini slide map at the bottom left displays current tile location on the CZI slide.
+  - Mouse wheel zooms at cursor point; <kbd>Space</kbd>+drag pans smoothly across 640×640 tiles.
 
-## Workflow after inference finishes
+---
+
+## 3. End-to-End Retraining Cycle
+
+When a batch of tiles has been flagged during QC or when new slide batches are introduced:
 
 ```bash
-python src/pollen_size_analyzer.py --all            # slide summaries (enables outlier flags)
-python src/build_viability_review_set.py            # publishes the final set (new set_id)
-# send Eliška the URL + her password; follow progress in the Results tab
+# 1. Pull QC-flagged tiles into the relabel queue
+python src/prepare_relabel_tiles.py --max-tiles 100
+
+# 2. Open the labeling app locally or on Kubernetes
+bash start_label_app.sh
+# -> Open http://127.0.0.1:8050 or https://viability-label-stenc.dyn.cloud.e-infra.cz
+
+# 3. Label / refine polygons using SAM and save with Enter (⏎)
+
+# 4. Export ground-truth polygon labels to YOLO segmentation format
+python src/export_relabel_dataset.py --output-dir datasets/yolo_retrain --val-split 0.20
+
+# 5. Launch model retraining on CESNET GPU cluster
+bash deploy_training.sh
 ```
 
-A new `set_id` keeps decisions from earlier or preview sets separate.
+---
+
+## Metrics & Statistical Acceptance Criteria (Results Tab)
+
+| Metric | Definition | Scientific Threshold |
+|:---|:---|:---:|
+| **Precision** | $\frac{\text{detections} - \text{false positives}}{\text{detections}}$ | > 95% |
+| **Recall** | $\frac{\text{true detections}}{\text{true detections} + \text{missed grains}}$ | > 92% |
+| **Class Accuracy** | $\frac{\text{correctly classed}}{\text{true detections}}$ | > 95% |
+| **Viability Bias** | $\text{model viability \%} - \text{human corrected viability \%}$ | **\|Bias\| < 2.5 pp across all cytotypes** |
+| **Inter-Rater Agreement** | Mean $|\Delta\text{corrected viability}|$ on overlapping 57 tiles | Within random sampling variance (< 2.0 pp) |
+
+If any cytotype exceeds the 2.5 percentage point bias threshold:
+1. Filter QC review for that cytotype's poor tiles.
+2. Flag them for relabeling (<kbd>R</kbd>).
+3. Annotate using SAM in the Labeling App.
+4. Retrain YOLO11m-seg and update `best.pt`.
+

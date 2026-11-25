@@ -1,0 +1,6 @@
+run,cytotype,clean_tiles,blurred_filtered,raw_viable_prec_pct,cal_viable_prec_pct,cal_viable_rec_pct,cal_viable_tp_fp,raw_non_viable_prec_pct,cal_non_viable_prec_pct,cal_non_viable_rec_pct,cal_non_viable_tp_fp
+baseline_oct23_ep22,nat_2x,35,3,99.41,99.64,95.49,275/276 (FP=1),97.73,97.3,81.82,36/37 (FP=1)
+baseline_oct23_ep22,ory_2x,29,6,99.38,100.0,98.88,266/266 (FP=0),68.75,100.0,66.67,8/8 (FP=0)
+baseline_oct23_ep22,nat_4x,22,3,96.69,99.26,98.54,135/136 (FP=1),91.67,100.0,77.27,17/17 (FP=0)
+baseline_oct23_ep22,neo_4x,24,2,98.21,99.64,99.29,278/279 (FP=1),100.0,100.0,50.0,2/2 (FP=0)
+baseline_oct23_ep22,ALL,110,14,98.64,99.69,97.95,954/957 (FP=3),90.8,98.44,76.83,63/64 (FP=1)

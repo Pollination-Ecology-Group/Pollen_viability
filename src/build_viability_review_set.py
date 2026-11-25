@@ -44,9 +44,62 @@ from pollen_size_analyzer import (  # noqa: E402
     make_s3, parse_slide_metadata, S3_BUCKET, TILE_PREFIX, DET_CACHE_DIR, DET_CACHE_TAG,
 )
 
+import cv2
+import numpy as np
+
 REVIEW_PREFIX = os.environ.get("REVIEW_PREFIX", "Ostatni/Pollen_viability/Review")
 CYTOTYPES = ["nat_2x", "ory_2x", "neo_4x", "nat_4x"]
-CONF = 0.55
+CONF = 0.50
+MIN_GRAIN_FOCUS_LAP = 35.0
+
+
+def load_training_excluded_bases(s3) -> set:
+    """Collect normalized tile basenames used anywhere in training so the QC set stays 100% blind."""
+    from train_model import strip_tile_base
+    excl = set()
+    for pfx in (
+        "Ostatni/Pollen_viability/Relabel/Labels/",
+        "Ostatni/Pollen_viability/active_learning/hard_positives/",
+        "Ostatni/Pollen_viability/active_learning/hard_negatives/",
+    ):
+        for page in s3.get_paginator("list_objects_v2").paginate(Bucket=S3_BUCKET, Prefix=pfx):
+            for o in page.get("Contents", []):
+                if not o["Key"].endswith("/"):
+                    excl.add(strip_tile_base(o["Key"]))
+    for root, _, files in os.walk("Pollen_viability"):
+        if "datasets" in root:
+            continue
+        for f in files:
+            if f.lower().endswith((".jpg", ".png", ".txt")):
+                excl.add(strip_tile_base(f))
+    return excl
+
+
+def is_tile_sharp_and_interior(s3, img_key: str, det_key: str) -> bool:
+    """Verify interior coverslip coordinates and grain-local Laplacian sharpness >= 35.0."""
+    base = os.path.basename(img_key)
+    if "_tile_0_" in base or base.endswith("_tile_0.jpg"):
+        return False
+    try:
+        img_bytes = s3.get_object(Bucket=S3_BUCKET, Key=img_key)["Body"].read()
+        img = cv2.imdecode(np.frombuffer(img_bytes, np.uint8), cv2.IMREAD_COLOR)
+        if img is None:
+            return False
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        bg_med = float(np.median(gray))
+        if not (175.0 <= bg_med <= 246.0):
+            return False
+        boxes = json.loads(s3.get_object(Bucket=S3_BUCKET, Key=det_key)["Body"].read()).get("boxes", [])
+        boxes = [b for b in boxes if float(b[4]) >= CONF]
+        lap = np.abs(cv2.Laplacian(gray, cv2.CV_64F))
+        bvars = [
+            float(np.var(lap[max(0, int(b[1]) - 4):min(640, int(b[3]) + 4), max(0, int(b[0]) - 4):min(640, int(b[2]) + 4)]))
+            for b in boxes if int(b[2]) - int(b[0]) >= 8 and int(b[3]) - int(b[1]) >= 8
+        ]
+        focus = float(np.median(bvars)) if bvars else float(np.var(lap))
+        return focus >= MIN_GRAIN_FOCUS_LAP
+    except Exception:
+        return False
 
 
 def list_slides(s3):
@@ -81,9 +134,14 @@ def grain_count(s3, slide_name, det_key):
         return None
 
 
-def pick_tiles(s3, slide_name, tiles, k, rng, sample_n=160):
-    """Pick k tiles spanning density: dense (p90), medium (p50), sparse non-empty (p15)."""
-    stems = list(tiles)
+def pick_tiles(s3, slide_name, tiles, k, rng, excluded_bases=None, sample_n=180):
+    """Pick k sharp, leak-free interior tiles spanning density: dense (p90), medium (p50), sparse non-empty (p15)."""
+    from train_model import strip_tile_base
+    excluded_bases = excluded_bases or set()
+    stems = [
+        s for s in tiles
+        if "_tile_0_" not in s and strip_tile_base(s) not in excluded_bases
+    ]
     rng.shuffle(stems)
     stems = stems[:sample_n]
     with concurrent.futures.ThreadPoolExecutor(max_workers=24) as ex:
@@ -95,17 +153,19 @@ def pick_tiles(s3, slide_name, tiles, k, rng, sample_n=160):
     chosen, used = [], set()
     for label, q in targets:
         idx = min(len(nonempty) - 1, int(round(q * (len(nonempty) - 1))))
-        # walk outwards to an unused tile
+        # walk outwards to an unused sharp interior tile
         for off in range(len(nonempty)):
+            found = False
             for j in (idx - off, idx + off):
                 if 0 <= j < len(nonempty) and nonempty[j][1] not in used:
                     c, s = nonempty[j]
-                    used.add(s)
-                    chosen.append({"stem": s, "density": label, "n_pred": c})
-                    break
-            else:
-                continue
-            break
+                    if is_tile_sharp_and_interior(s3, tiles[s]["img"], tiles[s]["det"]):
+                        used.add(s)
+                        chosen.append({"stem": s, "density": label, "n_pred": c})
+                        found = True
+                        break
+            if found:
+                break
     return chosen
 
 
@@ -155,6 +215,8 @@ def main():
     ap.add_argument("--flagged-tiles", type=int, default=2)
     ap.add_argument("--reviewers", default="jakub,eliska")
     ap.add_argument("--overlap", type=float, default=0.3, help="fraction reviewed by everyone")
+    ap.add_argument("--target-per-reviewer", type=int, default=0,
+                    help="if >0, top up / trim so every reviewer gets exactly this many tiles")
     ap.add_argument("--min-det-date", default="2026-10-24T05:29:00+00:00",
                     help="only use slides whose detections were all written after this (new model)")
     ap.add_argument("--summary-csv", default="output/size_analysis/pollen_slide_summaries.csv")
@@ -167,6 +229,8 @@ def main():
     reviewers = [r.strip() for r in args.reviewers.split(",") if r.strip()]
     min_date = datetime.fromisoformat(args.min_det_date)
     s3 = make_s3()
+    excluded_bases = load_training_excluded_bases(s3)
+    print(f"🔒 Excluding {len(excluded_bases)} training/relabel tiles from blind QC selection.")
 
     # ── 1. inventory: slides with complete, up-to-date detections ──────────────────────
     print("📋 Listing slides…")
@@ -189,6 +253,7 @@ def main():
 
     # ── 2. stratified random slides ────────────────────────────────────────────────────
     selected = []  # (slide_name, selection, reason, n_tiles)
+    unused_by_cyt = defaultdict(list)
     for cyt in CYTOTYPES:
         strata = defaultdict(list)
         for name in by_cyt[cyt]:
@@ -199,11 +264,13 @@ def main():
             lst.sort(key=lambda n: slides[n]["meta"]["replicate"] != "primary")  # primaries first
         keys = list(strata)
         rng.shuffle(keys)
-        picked = []
-        while len(picked) < args.per_cytotype and any(strata[k] for k in keys):
+        ordered_cyt = []
+        while any(strata[k] for k in keys):
             for k in keys:
-                if strata[k] and len(picked) < args.per_cytotype:
-                    picked.append(strata[k].pop(0))
+                if strata[k]:
+                    ordered_cyt.append(strata[k].pop(0))
+        picked = ordered_cyt[:args.per_cytotype]
+        unused_by_cyt[cyt] = ordered_cyt[args.per_cytotype:]
         if len(picked) < args.per_cytotype:
             print(f"   ⚠️  only {len(picked)} eligible slides for {cyt}")
         selected += [(n, "random", "", args.tiles_per_slide) for n in picked]
@@ -217,15 +284,30 @@ def main():
             selected.append((name, "flagged", reason, args.flagged_tiles))
             taken.add(name)
 
-    # ── 4. tiles per slide ─────────────────────────────────────────────────────────────
-    items = []
-    for i, (name, selection, reason, k) in enumerate(selected, 1):
+    # Compute exact total unique items needed if --target-per-reviewer is set
+    n_rev = max(1, len(reviewers))
+    exact_overlap = None
+    exact_total = None
+    if args.target_per_reviewer > 0:
+        # Solve: n_ov + n_single = T, total = n_ov + K * n_single, n_ov / total ≈ overlap
+        best_pair = None
+        for n_single in range(args.target_per_reviewer + 1):
+            n_ov = args.target_per_reviewer - n_single
+            tot = n_ov + n_rev * n_single
+            diff = abs((n_ov / max(1, tot)) - args.overlap)
+            if best_pair is None or diff < best_pair[0]:
+                best_pair = (diff, n_ov, tot)
+        _, exact_overlap, exact_total = best_pair
+        print(f"🎯 Target {args.target_per_reviewer} tiles/reviewer ({n_rev} reviewers): "
+              f"{exact_total} unique sharp tiles ({exact_overlap} shared overlap + "
+              f"{args.target_per_reviewer - exact_overlap} unique each).")
+
+    def append_slide_tiles(items_out, name, selection, reason, k):
         s = slides[name]
-        print(f"   [{i}/{len(selected)}] {selection:7s} {s['meta']['cytotype']:7s} {name}")
-        for t in pick_tiles(s3, name, s["tiles"], k, rng):
+        for t in pick_tiles(s3, name, s["tiles"], k, rng, excluded_bases=excluded_bases):
             tile = s["tiles"][t["stem"]]
             m = s["meta"]
-            items.append({
+            items_out.append({
                 "id": hashlib.sha1(tile["img"].encode()).hexdigest()[:10],
                 "tile_key": tile["img"], "det_key": tile["det"],
                 "slide_name": name,
@@ -237,13 +319,48 @@ def main():
                 "density": t["density"], "n_pred": t["n_pred"],
             })
 
+    # ── 4. tiles per slide ─────────────────────────────────────────────────────────────
+    items = []
+    for i, (name, selection, reason, k) in enumerate(selected, 1):
+        s = slides[name]
+        print(f"   [{i}/{len(selected)}] {selection:7s} {s['meta']['cytotype']:7s} {name}")
+        append_slide_tiles(items, name, selection, reason, k)
+
+    if exact_total is not None:
+        # Top up from remaining stratified slides (always filling the least-represented cytotype first)
+        while len(items) < exact_total:
+            cyt_counts = {c: sum(1 for it in items if it["cytotype"] == c) for c in CYTOTYPES}
+            avail_cyts = [c for c in CYTOTYPES if any(n not in taken for n in unused_by_cyt[c])]
+            if not avail_cyts:
+                break
+            cyt = min(avail_cyts, key=lambda c: cyt_counts[c])
+            next_name = next(n for n in unused_by_cyt[cyt] if n not in taken)
+            taken.add(next_name)
+            need_k = min(args.tiles_per_slide, exact_total - len(items))
+            print(f"   [+topup] random  {cyt:7s} {next_name}")
+            append_slide_tiles(items, next_name, "random", "", need_k)
+
+        # Trim excess random items from the most-represented cytotype if over exact_total
+        while len(items) > exact_total:
+            cyt_counts = {c: sum(1 for it in items if it["cytotype"] == c) for c in CYTOTYPES}
+            top_cyt = max(CYTOTYPES, key=lambda c: cyt_counts[c])
+            drop_idx = next(
+                (i for i in range(len(items) - 1, -1, -1)
+                 if items[i]["cytotype"] == top_cyt and items[i]["selection"] == "random"),
+                len(items) - 1,
+            )
+            items.pop(drop_idx)
+
     # ── 5. blind shuffle + assignment ──────────────────────────────────────────────────
     rng.shuffle(items)
-    n_overlap = int(round(args.overlap * len(items)))
+    n_overlap = exact_overlap if exact_overlap is not None else int(round(args.overlap * len(items)))
     for j, it in enumerate(items):
         it["order"] = j + 1
         it["assigned"] = reviewers if j < n_overlap else [reviewers[(j - n_overlap) % len(reviewers)]]
-    items.sort(key=lambda it: it["order"])
+    # Shuffle presentation order again so overlap items aren't clustered at 1..n_overlap
+    rng.shuffle(items)
+    for j, it in enumerate(items):
+        it["order"] = j + 1
 
     set_id = f"{args.set_prefix}_{datetime.now().strftime('%Y%m%d_%H%M')}"
     manifest = {

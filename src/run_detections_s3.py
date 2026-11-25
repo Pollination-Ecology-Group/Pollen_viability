@@ -59,6 +59,11 @@ try:
 except ImportError:
     pass
 
+# Configure writable Ultralytics & Matplotlib dirs in non-root K8s containers
+if os.environ.get("KUBERNETES_SERVICE_HOST") or not os.access(os.path.expanduser("~"), os.W_OK):
+    os.environ.setdefault("YOLO_CONFIG_DIR", "/tmp/yolo_config")
+    os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
+
 # ── config ────────────────────────────────────────────────────────────────────
 S3_ENDPOINT    = os.environ.get("S3_ENDPOINT",   "https://s3.cl4.du.cesnet.cz")
 AWS_ACCESS_KEY = os.environ.get("AWS_ACCESS_KEY_ID")
@@ -66,13 +71,15 @@ AWS_SECRET_KEY = os.environ.get("AWS_SECRET_ACCESS_KEY")
 S3_BUCKET      = os.environ.get("S3_BUCKET",     "peg-bucket")
 TILE_PREFIX    = os.environ.get("TILE_PREFIX",   "Ostatni/Pollen_viability/tiles_640/")
 MODEL_PATH     = os.environ.get("MODEL_PATH",    "best.pt")
-S3_MODEL_KEY   = os.environ.get("S3_MODEL_KEY",  "Ostatni/Pollen_viability/trained_models/pollen_train_20261023_0756/weights/best.pt")
-CONF           = float(os.environ.get("CONF",    "0.55"))
+S3_MODEL_KEY   = os.environ.get("S3_MODEL_KEY",  "Ostatni/Pollen_viability/trained_models/pollen_train_20261122_1041/weights/last.pt")
+CONF           = float(os.environ.get("CONF",    "0.50"))
 IOU            = float(os.environ.get("IOU",     "0.45"))
 MAX_DIM        = int(os.environ.get("MAX_DIM",   "130"))
 BATCH_SIZE     = int(os.environ.get("BATCH_SIZE","32"))
 FETCH_WORKERS  = int(os.environ.get("FETCH_WORKERS", "16"))
 FORCE          = os.environ.get("FORCE_REDETECT", "0") == "1"
+SHARD_INDEX    = int(os.environ.get("JOB_COMPLETION_INDEX", os.environ.get("SHARD_INDEX", "0")))
+NUM_SHARDS     = int(os.environ.get("NUM_SHARDS", "1"))
 
 VALID_EXT = ('.jpg', '.jpeg', '.png', '.tif', '.tiff', '.bmp', '.webp')
 
@@ -93,21 +100,47 @@ def make_s3():
 
 
 def list_tile_keys(s3):
-    """Return (tile_keys, existing_det_keys) from the tiles_640 prefix."""
+    """Return (tile_keys, existing_det_keys) from the tiles_640 prefix (sharded by slide prefix when NUM_SHARDS > 1)."""
     tile_keys = []
     det_keys  = set()
     paginator = s3.get_paginator('list_objects_v2')
-    print("📋 Listing S3 objects (this may take a moment for 200k files)…")
     t0 = time.time()
-    for page in paginator.paginate(Bucket=S3_BUCKET, Prefix=TILE_PREFIX):
-        for obj in page.get('Contents', []):
-            k = obj['Key']
-            if k.endswith('_det.json'):
-                det_keys.add(k)
-            elif k.lower().endswith(VALID_EXT):
-                tile_keys.append(k)
+
+    if NUM_SHARDS > 1:
+        slide_prefixes = []
+        for page in paginator.paginate(Bucket=S3_BUCKET, Prefix=TILE_PREFIX, Delimiter='/'):
+            for cp in page.get('CommonPrefixes', []):
+                slide_prefixes.append(cp['Prefix'])
+            if SHARD_INDEX == 0:
+                for obj in page.get('Contents', []):
+                    k = obj['Key']
+                    if k.endswith('_det.json'):
+                        det_keys.add(k)
+                    elif k.lower().endswith(VALID_EXT):
+                        tile_keys.append(k)
+        slide_prefixes.sort()
+        my_prefixes = slide_prefixes[SHARD_INDEX::NUM_SHARDS]
+        print(f"📋 Shard {SHARD_INDEX}/{NUM_SHARDS}: listing {len(my_prefixes)}/{len(slide_prefixes)} slides…", flush=True)
+        for pfx in my_prefixes:
+            for page in paginator.paginate(Bucket=S3_BUCKET, Prefix=pfx):
+                for obj in page.get('Contents', []):
+                    k = obj['Key']
+                    if k.endswith('_det.json'):
+                        det_keys.add(k)
+                    elif k.lower().endswith(VALID_EXT):
+                        tile_keys.append(k)
+    else:
+        print("📋 Listing S3 objects (this may take a moment for 200k files)…", flush=True)
+        for page in paginator.paginate(Bucket=S3_BUCKET, Prefix=TILE_PREFIX):
+            for obj in page.get('Contents', []):
+                k = obj['Key']
+                if k.endswith('_det.json'):
+                    det_keys.add(k)
+                elif k.lower().endswith(VALID_EXT):
+                    tile_keys.append(k)
+
     elapsed = time.time() - t0
-    print(f"   Found {len(tile_keys):,} tiles, {len(det_keys):,} existing _det.json  ({elapsed:.1f}s)")
+    print(f"   Found {len(tile_keys):,} tiles, {len(det_keys):,} existing _det.json  ({elapsed:.1f}s)", flush=True)
     return tile_keys, det_keys
 
 
@@ -129,31 +162,96 @@ def download_tile(args):
         return key, None
 
 
+def clean_and_smooth_norm_poly(pts_norm, img_w: int = 640, img_h: int = 640, iters: int = 2) -> list:
+    """Subpixel morphological opening + area-preserving Chaikin smoothing for YOLO polygon masks."""
+    arr = np.asarray(pts_norm, dtype=np.float64).reshape(-1, 2)
+    if len(arr) < 3:
+        return [[round(float(x), 5), round(float(y), 5)] for x, y in arr]
+    px = np.column_stack([arr[:, 0] * img_w, arr[:, 1] * img_h])
+    ss = 2
+    pts_ss = np.round(px * ss).astype(np.int32)
+    x0, y0 = pts_ss.min(axis=0) - 6
+    w, h = pts_ss.max(axis=0) - np.array([x0, y0]) + 12
+    if 4 < w <= 1600 and 4 < h <= 1600:
+        m = np.zeros((int(h), int(w)), np.uint8)
+        cv2.fillPoly(m, [pts_ss - np.array([x0, y0])], 1)
+        m = cv2.morphologyEx(m, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5)))
+        cnts, _ = cv2.findContours(m, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+        if cnts:
+            c = max(cnts, key=cv2.contourArea)
+            if cv2.contourArea(c) >= 16:
+                px = (cv2.approxPolyDP(c, 1.0, True)[:, 0, :].astype(np.float64) + np.array([x0, y0])) / float(ss)
+
+    def p_area(p):
+        return 0.5 * float(abs(np.dot(p[:, 0], np.roll(p[:, 1], -1)) - np.dot(p[:, 1], np.roll(p[:, 0], -1))))
+
+    def on_border(pt):
+        return pt[0] <= 1.5 or pt[1] <= 1.5 or pt[0] >= img_w - 1.5 or pt[1] >= img_h - 1.5
+
+    a0 = p_area(px)
+    p = px
+    if a0 >= 4.0 and len(p) >= 3:
+        for _ in range(iters):
+            q = []
+            for idx_p in range(len(p)):
+                a, b = p[idx_p], p[(idx_p + 1) % len(p)]
+                if on_border(a) and on_border(b):
+                    q.extend([a.copy(), b.copy()])
+                else:
+                    q.extend([0.75 * a + 0.25 * b, 0.25 * a + 0.75 * b])
+            p = np.asarray(q, dtype=np.float64)
+        a1 = p_area(p)
+        if a1 > 1e-6:
+            cx, cy = p[:, 0].mean(), p[:, 1].mean()
+            sc = np.sqrt(a0 / a1)
+            for idx_p in range(len(p)):
+                if not on_border(p[idx_p]):
+                    p[idx_p, 0] = np.clip(cx + (p[idx_p, 0] - cx) * sc, 0.0, float(img_w))
+                    p[idx_p, 1] = np.clip(cy + (p[idx_p, 1] - cy) * sc, 0.0, float(img_h))
+
+    thinned = []
+    for pt in p:
+        if not thinned or np.hypot(pt[0] - thinned[-1][0], pt[1] - thinned[-1][1]) >= 1.6:
+            thinned.append([round(float(pt[0]) / max(1, img_w), 5), round(float(pt[1]) / max(1, img_h), 5)])
+    return thinned if len(thinned) >= 3 else [[round(float(pt[0]) / max(1, img_w), 5), round(float(pt[1]) / max(1, img_h), 5)] for pt in px]
+
+
 def build_det_json(result, cv_img: np.ndarray) -> dict:
     """Convert one YOLO result → compact dict suitable for JSON serialisation."""
     if result.boxes is None or len(result.boxes) == 0:
         return {"boxes": [], "masks_xyn": []}
 
     img_h, img_w = cv_img.shape[:2]
-    boxes_out = []
-    masks_out = []
-
+    cands = []
     for i in range(len(result.boxes)):
         x1, y1, x2, y2 = [float(v) for v in result.boxes.xyxy[i].tolist()]
         conf   = float(result.boxes.conf[i])
         cls_id = int(result.boxes.cls[i])
-
-        # Skip oversized detections (multi-grain false positives)
         if (x2 - x1) > MAX_DIM or (y2 - y1) > MAX_DIM:
             continue
+        cands.append((conf, i, x1, y1, x2, y2, cls_id))
+    cands.sort(key=lambda t: -t[0])
+
+    kept = []
+    boxes_out = []
+    masks_out = []
+
+    for conf, i, x1, y1, x2, y2, cls_id in cands:
+        area_b = max(1.0, (x2 - x1) * (y2 - y1))
+        if any(
+            max(0.0, min(x2, kx2) - max(x1, kx1)) * max(0.0, min(y2, ky2) - max(y1, ky1))
+            / min(area_b, max(1.0, (kx2 - kx1) * (ky2 - ky1))) > 0.65
+            for kx1, ky1, kx2, ky2 in kept
+        ):
+            continue
+        kept.append((x1, y1, x2, y2))
 
         boxes_out.append([round(x1), round(y1), round(x2), round(y2),
                           round(conf, 4), cls_id])
 
-        # Normalised polygon mask (segmentation model) or rectangle fallback
-        if result.masks is not None and i < len(result.masks.xyn):
-            poly = [[round(float(pt[0]), 5), round(float(pt[1]), 5)]
-                    for pt in result.masks.xyn[i]]
+        # Normalised smoothed polygon mask (segmentation model) or rectangle fallback
+        if result.masks is not None and i < len(result.masks.xyn) and len(result.masks.xyn[i]) >= 3:
+            poly = clean_and_smooth_norm_poly(result.masks.xyn[i], img_w=img_w, img_h=img_h, iters=2)
         else:
             nw, nh = img_w or 1, img_h or 1
             poly = [
@@ -249,7 +347,7 @@ def main():
             with torch.no_grad():
                 batch_results = model(
                     valid_imgs, conf=CONF, iou=IOU,
-                    agnostic_nms=True, verbose=False, device=device
+                    agnostic_nms=True, retina_masks=True, verbose=False, device=device
                 )
         except Exception as e:
             print(f"  ⚠️  Inference failed on chunk [{chunk_start}]: {e}", flush=True)

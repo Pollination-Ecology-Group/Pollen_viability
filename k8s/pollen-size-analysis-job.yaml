@@ -27,6 +27,8 @@ spec:
             - -c
             - |
               set -e
+              export HOME=/tmp
+              export PATH=$PATH:$HOME/.local/bin
               echo "📦 Installing boto3 & Pillow..."
               pip install --user boto3 Pillow --quiet
               mkdir -p /tmp/work/output/size_analysis /tmp/work/metadata
@@ -34,7 +36,7 @@ spec:
               cp /meta/plant_metadata_540.csv /tmp/work/metadata/plant_metadata_540.csv
               cd /tmp/work
               echo "🚀 Running pollen_size_analyzer on all slides..."
-              python pollen_size_analyzer.py --all --workers 16 --upload-s3 --out-dir output/size_analysis
+              DET_CACHE_TAG=model_20261122_r3 python3 pollen_size_analyzer.py --all --conf 0.50 --workers 16 --upload-s3 --out-dir output/size_analysis
               echo "✅ Size analysis job finished!"
           env:
             - name: S3_ENDPOINT

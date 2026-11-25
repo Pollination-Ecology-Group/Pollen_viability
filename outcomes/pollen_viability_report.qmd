@@ -1,515 +1,596 @@
 ---
-title: "Pollen Viability & Morphometry Across Ploidy Cytotypes"
-subtitle: "Automated Deep-Learning Phenotyping, Quality Control, and Cytogenetic Comparison"
-author: "Pollination Ecology Group (PEG)"
+title: "Pollen viability & 3D morphometry across cytotypes — short summary"
+subtitle: "Automated whole-slide phenotyping, 3D stereological grain volume, gametophyte fertility, and model validation"
+author: "Pollination Ecology Group"
 date: last-modified
+date-format: "D MMMM YYYY"
+execute:
+  echo: false
+  warning: false
+  message: false
+knitr:
+  opts_chunk:
+    dev: "ragg_png"
+    dpi: 300
+filters:
+  - auto_cols.lua
 format:
+  typst:
+    papersize: a4
+    margin:
+      x: 1.65cm
+      y: 1.75cm
+    toc: false
+    number-sections: false
+    fig-width: 7.0
+    fig-height: 4.8
+    include-in-header:
+      text: |
+        #set table(
+          inset: (x: 6.5pt, y: 5pt),
+          stroke: (_, y) => (
+            top: if y == 0 { 0.85pt + rgb("#374151") } else if y == 1 { 0.6pt + rgb("#374151") } else { 0.35pt + rgb("#e5e7eb") },
+            bottom: 0pt,
+            left: none,
+            right: none,
+          ),
+          fill: (_, y) => if y == 0 { rgb("#f3f4f6") } else if calc.even(y) { rgb("#f9fafb") } else { none },
+        )
+        #show table: set text(size: 8.5pt, hyphenate: false)
+        #show table: it => block(stroke: (bottom: 0.85pt + rgb("#374151")), inset: 0pt, it)
+        #show table.cell: set par(justify: false, leading: 0.48em)
+        #show table.cell.where(y: 0): set text(weight: "bold", fill: rgb("#111827"))
+        #show figure: set block(breakable: false)
+  docx:
+    toc: false
+    number-sections: false
+    fig-width: 6.5
+    fig-height: 4.5
   html:
     theme: cosmo
     toc: true
-    toc-depth: 3
-    number-sections: true
-    code-fold: show
-    code-summary: "Show R code"
-    fig-width: 10
-    fig-height: 6
-  typst:
-    toc: true
-    toc-depth: 3
-    number-sections: true
-    margin:
-      x: 2cm
-      y: 2.2cm
-    papersize: a4
+    toc-depth: 2
+    number-sections: false
 ---
 
-```{r setup, include=FALSE}
-knitr::opts_knit$set(root.dir = "../")
-knitr::opts_chunk$set(warning = FALSE, message = FALSE, echo = TRUE)
-```
+```{r setup}
+#| include: false
+suppressPackageStartupMessages({
+  library(dplyr)
+  library(tidyr)
+  library(ggplot2)
+  library(patchwork)
+  library(jsonlite)
+  library(lme4)
+  library(lmerTest)
+  library(emmeans)
+  library(multcomp)
+  library(MuMIn)
+  library(knitr)
+})
+emm_options(lmer.df = "asymptotic")
 
-# Introduction & Experimental Design
-
-> 📄 **PDF Version Available:** This complete report, combining all Materials & Methods, Deep-Learning Specifications, Post-Processing Algorithms, Quality Control rules, and Statistical Significance Tests into a single document, is available for download as [pollen_viability_report.pdf](pollen_viability_report.pdf).
-
-This report quantifies male gametophyte fitness, abundance, and morphological scaling across **four ploidy and cytogenetic categories** in *Arabidopsis*:
-
-1. **`nat_2x` (Natural Diploid):** Wild-collected diploid ancestor ($2n = 2x$).
-2. **`ory_2x` (Synthetic Diploid):** Diploid control subjected to chemical oryzalin treatment ($2n = 2x$).
-3. **`neo_4x` (Neo-Tetraploid):** Newly established autotetraploid line ($2n = 4x$).
-4. **`nat_4x` (Natural Tetraploid):** Established, evolutionary autotetraploid ($2n = 4x$).
-
-For each cytotype, the automated high-throughput pipeline extracts:
-* **Pollen Grain Abundance:** Total grains counted per slide aliquot from single-flower collections.
-* **Pollen Viability (%):** Proportion of functional, cytoplasm-replete gametes.
-* **Morphological Size Scaling:** Cross-sectional area ($\mu\text{m}^2$) and equivalent circular diameter ($\mu\text{m}$), measured separately for **Viable** and **Non-Viable** grains.
-
----
-
-# Materials & Computational Methods
-
-## Slide Preparation & Alexander Differential Staining
-
-Pollen samples were collected from mature flowers at anthesis and prepared following Alexander's differential staining protocol (Alexander, 1969; adapted for Brassicaceae):
-* **Viable Grains (Class 0):** Possess intact, functional vegetative and generative protoplasm. Protoplasmic proteins strongly bind **Acid Fuchsin**, imparting an intense, opaque magenta to dark red coloration.
-* **Non-Viable Grains (Class 1):** Aborted, desiccated, or unfertilized microspores lack cytoplasmic content. Their exposed cellulosic and exine walls bind **Malachite Green**, staining pale turquoise/green, often appearing collapsed, empty, or crenulated.
-* **Intermediate Grains (Class 2):** Partially arrested or vacuolated grains displaying mottled, pale pink cytoplasm.
-* **Dual Aliquot Replicates:** For each biological flower sample, the stained pollen suspension was divided into two identical aliquots and mounted under separate glass coverslips as **primary** and **replicate (sister)** slides to control for liquid-handling and pipetting variability.
-
-## High-Throughput Digital Whole-Slide Scanning (Zeiss Axio Scan.Z1)
-
-Whole-slide imaging was conducted on an automated **Zeiss Axio Scan.Z1** slide scanner under calibrated brightfield optics:
-* **Optical Train:** Plan-Apochromat objective with calibrated numerical aperture, paired with a multi-channel digital camera sensor.
-* **Spatial Calibration Scale:** The physical spatial pixel resolution is strictly calibrated to:
-  $$\text{Pixel Scale} = 0.877242\ \mu\text{m} / \text{pixel}$$
-  $$\text{Area Scale} = (0.877242)^2 \approx 0.769554\ \mu\text{m}^2 / \text{pixel}^2$$
-* **Autofocus Mesh:** A pre-scan focus grid was established across the coverslip area using multi-point surface interpolation to prevent out-of-focus tiles across the specimen field.
-* **Tiling & Storage:** Each full-resolution slide scan was systematically partitioned into coordinate-registered $640 \times 640$ pixel JPEG tiles. Tile spatial offsets are embedded directly into the standardized filename:
-  $$\langle\text{Slide\_ID}\rangle\text{\_tile\_}\langle Y_{\text{offset}}\rangle\text{\_}\langle X_{\text{offset}}\rangle\text{.jpg}$$
-  All tiles were archived and synchronized to high-throughput CESNET S3 object storage (`peg-bucket`) under the path `Ostatni/Pollen_viability/tiles_640/`.
-
-## Deep-Learning Instance Segmentation (YOLO11m-seg)
-
-Object detection and contour extraction were performed using **Ultralytics YOLO11m-seg** (medium segmentation variant):
-* **Backbone & Neck:** Enhanced CSPDarknet with C3k2 feature integration and Spatial Pyramid Pooling Fast (SPPF), optimizing multi-scale feature representations of tightly spaced pollen grains.
-* **Segmentation Head:** A dual-branch detection and mask-prototype head generates high-resolution mask prototypes ($160 \times 160$ per tile) modulated by instance-specific mask coefficients.
-* **Training Protocol:** Trained for 300 epochs with AdamW optimizer and cosine learning rate decay on Alexander-stained crops ($640 \times 640$ pixels). Mosaic, rotation, and color jitter augmentations were applied across epochs 1–290 and deactivated during the final 10 epochs (epochs 291–300) to ensure high-fidelity, unblurred polygon boundaries.
-* **Cluster Batch Inference:** Executed in parallel across NVIDIA GPU worker nodes within the CESNET Kubernetes cluster (`stenc-ns` namespace):
-  * **Confidence Threshold ($\text{CONF}$):** $0.55$ (optimized against validation annotations).
-  * **Non-Maximum Suppression ($\text{IOU}$):** $0.70$ (allows adjacent, touching pollen grains to be resolved as distinct instances while suppressing duplicate bounding boxes).
-  * **Maximum Dimension ($\text{MAX\_DIM}$):** $130\ \text{px}$ (rejects large staining debris, coverslip dust fibers, and massive air-bubble boundaries).
-* **Tile JSON Output:** Every detected grain emits class identifier, classification confidence score ($c \ge 0.55$), bounding box $[x_1, y_1, x_2, y_2]$, and normalized polygon contour coordinates $\{ (u_k, v_k) \}_{k=1}^m$.
-
-## Post-Processing, Spatial Stitching & Morphometry
-
-1. **Global Coordinate Projection:** Each local vertex $(u_k, v_k) \in [0, 640] \times [0, 640]$ within a tile located at grid coordinate $(X_0, Y_0)$ is translated into whole-slide space:
-   $$X_{\text{global}} = X_0 + u_k, \quad Y_{\text{global}} = Y_0 + v_k$$
-2. **Cross-Tile Stitching & Boundary Deduplication:**
-   * Grains within $\delta = 4\text{ px}$ of a tile edge ($u \le 4$, $u \ge 636$, $v \le 4$, or $v \ge 636$) are tagged as border-cut candidates.
-   * A 2D spatial hash grid with bin width $W_{\text{bin}} = 64\text{ px}$ indexes border candidates across neighboring tiles.
-   * Two candidate segments $P_A$ and $P_B$ from adjacent tiles sharing the same class are fused into a single unified polygon if normal distance $\Delta_{\text{boundary}} \le 6\text{ px}$ and tangential overlap $\ge 8\text{ px}$.
-   * Detections sharing an Intersection-over-Union $\text{IoU} \ge 0.50$ are deduplicated, preserving the detection instance with higher confidence.
-3. **Morphometric Feature Extraction:**
-   * **Contour Area ($A_{\text{px}}$):** Computed via Green's Theorem (shoelace formula) over ordered vertices $\{ (x_i, y_i) \}_{i=0}^{n-1}$:
-     $$A_{\text{px}} = \frac{1}{2} \left| \sum_{i=0}^{n-1} (x_i y_{i+1} - x_{i+1} y_i) \right|$$
-   * **Physical Area ($A_{\mu\text{m}^2}$):** $A_{\mu\text{m}^2} = A_{\text{px}} \times (0.877242)^2 \approx A_{\text{px}} \times 0.769554\ \mu\text{m}^2$.
-   * **Equivalent Circular Diameter ($D_{\mu\text{m}}$):** $D_{\mu\text{m}} = 2 \cdot \sqrt{A_{\mu\text{m}^2} / \pi} = 0.877242 \cdot \sqrt{4 A_{\text{px}} / \pi}$.
-   * **Perimeter ($P$), Circularity ($C$), and Solidity ($S$):**
-     $$C = \frac{4 \pi A}{P^2}, \quad S = \frac{A}{\text{Area}(\text{ConvexHull}(A))}$$
-4. **Morphological Filtering:** Grains clipped by outer coverslip borders are flagged `valid_for_size = False`. Clumps and irregular dye precipitates ($S < 0.88$ or aspect ratio $\text{AR} > 1.35$) are tagged `is_clump = True` and excluded from single-grain size metrics.
-
-## Quality Control: The Technical Pipetting Failure Rule
-
-In whole-flower pollen assays, pollen grains are dislodged into an aqueous staining medium and aliquoted onto slides. Sister slides (primary and replicate) were prepared from the same floral homogenate to detect and account for liquid-handling errors.
-
-During dataset inspection across all 502 slides, 10 slides (1.99%) exhibited anomalously low grain counts ($< 100$ grains, with some showing fewer than 20 grains). We investigated whether these were biological failures or technical artifacts:
-1. **Physical Artifacts:** Visual inspection of raw micrographs revealed sparse, empty coverslip areas resulting from technical fluidics issues during slide preparation (e.g., micropipette tip capillary blockage, air bubble aspiration, or uneven droplet spreading under the coverslip).
-2. **Biological Sister Concordance:** In all 10 cases, the corresponding sister slide from the exact same plant specimen contained normal, dense pollen populations ranging from **$600$ to over $3,100$ grains** with typical high viability ($> 85\%$).
-3. **Model Fidelity:** Verification of image tiles confirmed the YOLO model performed correctly; tiles on low-count slides were genuinely devoid of pollen grains or showed out-of-focus fluid boundaries.
-
-$$\textbf{Inclusion Criterion: } \text{Total Grains per Slide} \ge 100$$
-
-Slides failing this threshold ($N_{\text{total}} < 100$) are classified as **technical pipetting failures** and excluded from slide-level abundance, viability, and morphometric comparisons. Because the sister slide remains in the dataset, **no biological plants or cytogenetic lineages are lost**, eliminating liquid-handling noise while preserving complete cytogenetic representation.
-
----
-
-# Data Loading & QC Filtering
-
-```{r load_data}
-library(rlang)
-library(ggplot2)
-library(dplyr)
-library(lme4)
-library(lmerTest)
-library(emmeans)
-library(multcomp)
-library(broom)
-library(broom.mixed)
-library(knitr)
-
-# Standardized Cytotype Palette & Factor Levels
-cytotype_levels <- c("nat_2x", "ory_2x", "neo_4x", "nat_4x")
-cytotype_labels <- c("Natural 2x (nat_2x)", "Synthetic 2x (ory_2x)", "Neo-4x (neo_4x)", "Natural 4x (nat_4x)")
-cytotype_colors <- c(
-  "nat_2x" = "#2b83ba",
-  "ory_2x" = "#abdda4",
-  "neo_4x" = "#fdae61",
-  "nat_4x" = "#d7191c"
+cyt_cols <- c(
+  ory_2x = "#3b82f6",
+  nat_2x = "#10b981",
+  nat_4x = "#f59e0b",
+  neo_4x = "#ef4444"
 )
+cyt_levels <- names(cyt_cols)
 
-# 1. Load slide summaries
-slide_summary_path <- "output/size_analysis/pollen_slide_summaries.csv"
-if (!file.exists(slide_summary_path)) {
-  stop("pollen_slide_summaries.csv not found.")
-}
-
-slides_raw <- read.csv(slide_summary_path)
-slides_raw$cytotype <- factor(slides_raw$cytotype, levels = cytotype_levels)
-slides_raw <- slides_raw[!is.na(slides_raw$cytotype), ]
-
-# Identify excluded slides (< 100 grains)
-low_count_slides <- slides_raw %>% filter(total_grains < 100)
-
-# Display excluded slides and paired sister slides
-excluded_plants <- low_count_slides$plant_id
-sister_comparison <- slides_raw %>%
-  filter(plant_id %in% excluded_plants) %>%
-  dplyr::select(plant_id, cytotype, population, replicate, total_grains, viable_count, viability_pct) %>%
-  arrange(plant_id, replicate)
-
-kable(sister_comparison,
-      caption = "Demonstration of Pipetting Failure: Low-Count Slides (< 100 Grains) vs Paired Biological Sister Slides",
-      digits = 1)
-
-# Apply QC filter (Total grains >= 100)
-n_before <- nrow(slides_raw)
-slides_df <- slides_raw %>% filter(total_grains >= 100)
-n_after <- nrow(slides_df)
-n_excluded <- n_before - n_after
-
-cat(sprintf("\nQC Filtration Summary: %d of %d slides retained (%d excluded due to pipetting failure < 100 grains, 1.99%%).\n",
-            n_after, n_before, n_excluded))
-```
-
----
-
-# 1. Pollen Grain Abundance Across Cytotypes
-
-Does whole-genome duplication change the total quantity of pollen produced per flower?
-
-```{r abundance_analysis}
-# Summary statistics for grain counts
-abundance_summary <- slides_df %>%
-  group_by(cytotype) %>%
-  summarise(
-    n_slides = n(),
-    mean_total_grains = mean(total_grains, na.rm = TRUE),
-    sd_total_grains = sd(total_grains, na.rm = TRUE),
-    median_total_grains = median(total_grains, na.rm = TRUE),
-    q25_total_grains = quantile(total_grains, 0.25, na.rm = TRUE),
-    q75_total_grains = quantile(total_grains, 0.75, na.rm = TRUE),
-    .groups = "drop"
-  )
-
-kable(abundance_summary, caption = "Pollen Grain Abundance Across Cytotypes (QC Filtered >= 100 Grains)", digits = 1)
-
-# 1. ANOVA on Log(Total Grains)
-aov_abund <- aov(log(total_grains) ~ cytotype, data = slides_df)
-aov_abund_tidy <- tidy(aov_abund)
-kable(aov_abund_tidy, caption = "ANOVA: Log(Total Grains) by Cytotype", digits = 4)
-
-# 2. Tukey Post-Hoc Pairwise Comparisons
-emm_abund <- emmeans(aov_abund, ~ cytotype)
-pairs_abund <- as.data.frame(pairs(emm_abund))
-kable(pairs_abund, caption = "Pairwise Contrasts (Tukey HSD) on Log(Total Grains)", digits = 4)
-
-# 3. Compact Letter Display (CLD)
-cld_abund <- as.data.frame(cld(emm_abund, Letters = letters))
-cld_abund$cytotype <- factor(cld_abund$cytotype, levels = cytotype_levels)
-cld_abund$.group <- trimws(cld_abund$.group)
-
-kable(cld_abund %>% dplyr::select(cytotype, emmean, SE, df, lower.CL, upper.CL, .group),
-      caption = "Post-Hoc Groupings (CLD) for Pollen Abundance", digits = 3)
-
-# 4. Boxplot with CLD Letters Annotated
-max_y_abund <- slides_df %>%
-  group_by(cytotype) %>%
-  summarise(y_pos = max(total_grains, na.rm = TRUE) * 1.08, .groups = "drop")
-cld_plot_abund <- merge(cld_abund, max_y_abund, by = "cytotype")
-
-p_abund <- ggplot(slides_df, aes(x = cytotype, y = total_grains, fill = cytotype)) +
-  geom_boxplot(outlier.shape = NA, alpha = 0.7, width = 0.5) +
-  geom_jitter(width = 0.2, alpha = 0.35, size = 1.6, color = "black") +
-  geom_text(data = cld_plot_abund, aes(x = cytotype, y = y_pos, label = .group),
-            size = 5.5, fontface = "bold", inherit.aes = FALSE) +
-  scale_fill_manual(values = cytotype_colors) +
-  theme_classic() +
-  labs(
-    title = "Total Pollen Grain Abundance per Slide Across 4 Cytotypes",
-    subtitle = paste0("ANOVA F(3, 488) = ", round(aov_abund_tidy$statistic[1], 2),
-                      ", p = ", round(aov_abund_tidy$p.value[1], 3),
-                      " (No significant difference across cytotypes; all share group 'a')"),
-    x = "Cytotype Category",
-    y = "Total Grains Counted"
-  ) +
-  theme(legend.position = "none",
-        plot.title = element_text(face = "bold", size = 14),
-        plot.subtitle = element_text(size = 11, color = "gray25"))
-
-p_abund
-```
-
-> **Biological Result:** Whole-genome duplication does **not** significantly alter the total number of pollen grains produced per flower ($F = 1.09$, $p = 0.352$). Synthetic tetraploids (`neo_4x`) produce as many microspores as their diploid ancestors. Variance in pollen yield is driven by plant vigor and flower size rather than ploidy level.
-
----
-
-# 2. Pollen Viability (%) Across Cytotypes
-
-Do newly synthesized autotetraploids (`neo_4x`) suffer an immediate loss of gamete viability compared to natural diploids and established tetraploids?
-
-```{r viability_analysis}
-# Summary statistics for viability percentage
-viability_summary <- slides_df %>%
-  group_by(cytotype) %>%
-  summarise(
-    n_slides = n(),
-    mean_viability_pct = mean(viability_pct, na.rm = TRUE),
-    sd_viability_pct = sd(viability_pct, na.rm = TRUE),
-    median_viability_pct = median(viability_pct, na.rm = TRUE),
-    q25_viability_pct = quantile(viability_pct, 0.25, na.rm = TRUE),
-    q75_viability_pct = quantile(viability_pct, 0.75, na.rm = TRUE),
-    .groups = "drop"
-  )
-
-kable(viability_summary, caption = "Pollen Viability (%) by Cytotype (QC Filtered >= 100 Grains)", digits = 2)
-
-# 1. ANOVA on Viability %
-aov_viab <- aov(viability_pct ~ cytotype, data = slides_df)
-aov_viab_tidy <- tidy(aov_viab)
-kable(aov_viab_tidy, caption = "ANOVA: Pollen Viability (%) by Cytotype", digits = 4)
-
-# 2. Tukey Post-Hoc Pairwise Comparisons
-emm_viab <- emmeans(aov_viab, ~ cytotype)
-pairs_viab <- as.data.frame(pairs(emm_viab))
-kable(pairs_viab, caption = "Pairwise Contrasts (Tukey HSD) on Viability (%)", digits = 4)
-
-# 3. Compact Letter Display (CLD)
-cld_viab <- as.data.frame(cld(emm_viab, Letters = letters))
-cld_viab$cytotype <- factor(cld_viab$cytotype, levels = cytotype_levels)
-cld_viab$.group <- trimws(cld_viab$.group)
-
-kable(cld_viab %>% dplyr::select(cytotype, emmean, SE, df, lower.CL, upper.CL, .group),
-      caption = "Post-Hoc Groupings (CLD) for Pollen Viability (%)", digits = 3)
-
-# 4. Violin + Boxplot with CLD Letters Annotated
-cld_plot_viab <- cld_viab
-cld_plot_viab$y_pos <- 106
-
-p_viab <- ggplot(slides_df, aes(x = cytotype, y = viability_pct, fill = cytotype)) +
-  geom_violin(alpha = 0.4, trim = FALSE) +
-  geom_boxplot(width = 0.2, outlier.shape = NA, alpha = 0.7) +
-  geom_jitter(width = 0.15, alpha = 0.35, size = 1.6) +
-  geom_text(data = cld_plot_viab, aes(x = cytotype, y = y_pos, label = .group),
-            size = 5.5, fontface = "bold", inherit.aes = FALSE) +
-  scale_fill_manual(values = cytotype_colors) +
-  theme_classic() +
-  labs(
-    title = "Pollen Viability (%) Across 4 Cytotypes",
-    subtitle = paste0("ANOVA F(3, 488) = ", round(aov_viab_tidy$statistic[1], 2),
-                      ", p = ", round(aov_viab_tidy$p.value[1], 3),
-                      " (Consistent high viability across all lineages; all share group 'a')"),
-    x = "Cytotype Category",
-    y = "Viability Percentage (%)"
-  ) +
-  ylim(0, 112) +
-  theme(legend.position = "none",
-        plot.title = element_text(face = "bold", size = 14),
-        plot.subtitle = element_text(size = 11, color = "gray25"))
-
-p_viab
-```
-
-> **Biological Result:** All four cytotypes exhibit uniformly high male gametophyte fertility (**mean $89.6\%$–$93.9\%$**, median $94.8\%$–$97.3\%$). Synthetic polyploidization does not cause male gametophyte collapse ($p = 0.134$); neo-tetraploids maintain high fertility comparable to natural diploids and wild tetraploids.
-
----
-
-# 3. Particle Size Distribution & Cell Gigas Effect
-
-We examine **equivalent circular diameter ($\mu\text{m}$)** and **cross-sectional area ($\mu\text{m}^2$)** measured individually on single grains (`valid_for_size = 1`), evaluated separately for **Viable** and **Non-Viable** grains.
-
-```{r particle_sizes}
-grain_csv_path <- "output/size_analysis/pollen_grain_measurements.csv"
-
-if (file.exists(grain_csv_path)) {
-  # Read single grain measurements
-  grains_df <- read.csv(grain_csv_path)
-  
-  # Filter only valid, non-clumped, non-edge grains from QC-cleared slides
-  grains_clean <- grains_df %>%
-    filter(valid_for_size == 1,
-           slide_name %in% slides_df$slide_name,
-           class_name %in% c("viable", "non_viable"))
-  
-  grains_clean$cytotype <- factor(grains_clean$cytotype, levels = cytotype_levels)
-  grains_clean$class_label <- factor(grains_clean$class_name, levels = c("viable", "non_viable"))
-  
-  # Size summary statistics by Cytotype and Viability Class
-  size_summary <- grains_clean %>%
-    group_by(cytotype, class_label) %>%
-    summarise(
-      n_grains = n(),
-      mean_diameter_um = mean(diameter_um, na.rm = TRUE),
-      median_diameter_um = median(diameter_um, na.rm = TRUE),
-      sd_diameter_um = sd(diameter_um, na.rm = TRUE),
-      mean_area_um2 = mean(area_um2, na.rm = TRUE),
-      median_area_um2 = median(area_um2, na.rm = TRUE),
-      .groups = "drop"
+theme_set(
+  theme_minimal(base_size = 10) +
+    theme(
+      panel.grid.minor = element_blank(),
+      strip.text = element_text(face = "bold", size = 9.5),
+      strip.background = element_rect(fill = "#f3f4f6", colour = NA),
+      axis.title = element_text(face = "bold", size = 9.5)
     )
-  
-  kable(size_summary, caption = "Morphological Parameters: Viable vs Non-Viable Grains Across Cytotypes (N = 856,679 Grains)", digits = 2)
-  
-  # 1. ANOVA on Slide-Level Median Viable Pollen Diameter
-  aov_size <- aov(viable_median_diam_um ~ cytotype, data = slides_df)
-  aov_size_tidy <- tidy(aov_size)
-  kable(aov_size_tidy, caption = "ANOVA: Viable Pollen Diameter (µm) by Cytotype", digits = 4)
-  
-  # 2. Tukey Post-Hoc Pairwise Comparisons
-  emm_size <- emmeans(aov_size, ~ cytotype)
-  pairs_size <- as.data.frame(pairs(emm_size))
-  kable(pairs_size, caption = "Pairwise Contrasts (Tukey HSD) on Viable Pollen Diameter", digits = 4)
-  
-  # 3. Compact Letter Display (CLD)
-  cld_size <- as.data.frame(cld(emm_size, Letters = letters))
-  cld_size$cytotype <- factor(cld_size$cytotype, levels = cytotype_levels)
-  cld_size$.group <- trimws(cld_size$.group)
-  
-  kable(cld_size %>% dplyr::select(cytotype, emmean, SE, df, lower.CL, upper.CL, .group),
-        caption = "Post-Hoc Groupings (CLD) for Viable Pollen Size (Cell Gigas Effect)", digits = 3)
-  
-  # 4. Plot 1: Equivalent Circular Diameter
-  cld_plot_size <- cld_size
-  cld_plot_size$y_pos <- 38
-  
-  p_diam <- ggplot(grains_clean, aes(x = cytotype, y = diameter_um, fill = class_label)) +
-    geom_violin(position = position_dodge(0.8), alpha = 0.45, trim = FALSE) +
-    geom_boxplot(position = position_dodge(0.8), width = 0.25, outlier.shape = NA, alpha = 0.8) +
-    geom_text(data = cld_plot_size, aes(x = cytotype, y = y_pos, label = .group),
-              size = 5.5, fontface = "bold", inherit.aes = FALSE) +
-    scale_fill_manual(values = c("viable" = "#e7298a", "non_viable" = "#1b9e77"),
-                      labels = c("Viable", "Non-Viable")) +
-    theme_classic() +
-    labs(
-      title = "Pollen Grain Equivalent Circular Diameter (µm) Across 4 Cytotypes",
-      subtitle = paste0("Cell Gigas Effect: ANOVA F(3, 488) = ", round(aov_size_tidy$statistic[1], 1),
-                        ", p < 2.2e-16 (Post-hoc letters: 2x [a] < nat_4x [b] < neo_4x [c])"),
-      x = "Cytotype Category",
-      y = "Equivalent Circular Diameter (µm)",
-      fill = "Viability Status"
-    ) +
-    ylim(5, 42) +
-    theme(plot.title = element_text(face = "bold", size = 14),
-          plot.subtitle = element_text(size = 11, color = "gray25"),
-          legend.position = "right")
-  
-  print(p_diam)
-  
-  # 5. Plot 2: Cross-Sectional Area (µm²)
-  p_area <- ggplot(grains_clean, aes(x = cytotype, y = area_um2, fill = class_label)) +
-    geom_violin(position = position_dodge(0.8), alpha = 0.45, trim = FALSE) +
-    geom_boxplot(position = position_dodge(0.8), width = 0.25, outlier.shape = NA, alpha = 0.8) +
-    scale_fill_manual(values = c("viable" = "#e7298a", "non_viable" = "#1b9e77"),
-                      labels = c("Viable", "Non-Viable")) +
-    theme_classic() +
-    labs(
-      title = "Pollen Grain Cross-Sectional Area (µm²) Across 4 Cytotypes",
-      subtitle = "Massive 2D expansion in neo_4x (+51.2% over wild 2x); stabilized downsizing in nat_4x",
-      x = "Cytotype Category",
-      y = "Area (µm²)",
-      fill = "Viability Status"
-    ) +
-    ylim(50, 1000) +
-    theme(plot.title = element_text(face = "bold", size = 14),
-          plot.subtitle = element_text(size = 11, color = "gray25"),
-          legend.position = "right")
-  
-  print(p_area)
+)
+
+p_rel <- function(rel) if (file.exists(rel)) rel else file.path("..", rel)
+
+# 1. Load calibrated slide summary (with 3D stereological & mesh columns)
+slides_raw <- read.csv(p_rel("output/qc/final_viability.csv"), stringsAsFactors = FALSE) %>%
+  filter(!is.na(cytotype), cytotype %in% cyt_levels) %>%
+  mutate(
+    cytotype = factor(cytotype, levels = cyt_levels),
+    population = factor(population),
+    plant_id = factor(plant_id),
+    cultivation_run = factor(cultivation_run),
+    total_grains = Count_detected,
+    viability_pct = Viability_pct_detected
+  )
+
+m3d_cyt <- read.csv(p_rel("outcomes/pollen_3d_cytotype_models.csv"), stringsAsFactors = FALSE) %>%
+  mutate(cytotype = factor(cytotype, levels = cyt_levels)) %>%
+  arrange(cytotype)
+
+n_scanned <- nrow(slides_raw)
+df <- slides_raw %>% filter(total_grains >= 100)
+n_slides <- nrow(df)
+n_excl <- n_scanned - n_slides
+n_plants <- n_distinct(df$plant_id)
+n_pops <- n_distinct(df$population)
+n_grains_total <- sum(df$total_grains, na.rm = TRUE)
+
+# 2. Load calibrated single-grain morphometry and apply 3D diameter scaling per cytotype
+md_df <- read.csv(p_rel("output/qc/class_min_diam.csv"), stringsAsFactors = FALSE) %>%
+  dplyr::select(cytotype, class_name, min_diam_um)
+ct_df <- read.csv(p_rel("output/qc/class_conf_threshold.csv"), stringsAsFactors = FALSE) %>%
+  dplyr::select(cytotype, class_name, conf_threshold)
+k3d_map <- m3d_cyt %>% dplyr::select(cytotype, k_diam_3d, k_vol_3d_total) %>% mutate(cytotype = as.character(cytotype))
+grains_raw <- read.csv(p_rel("output/size_analysis/pollen_grain_measurements.csv"), stringsAsFactors = FALSE)
+
+grains_clean <- grains_raw %>%
+  left_join(md_df, by = c("cytotype", "class_name")) %>%
+  left_join(ct_df, by = c("cytotype", "class_name")) %>%
+  left_join(k3d_map, by = "cytotype") %>%
+  filter(
+    valid_for_size == 1,
+    slide_name %in% df$slide_name,
+    class_name %in% c("viable", "non_viable"),
+    is.na(min_diam_um) | diameter_um >= min_diam_um,
+    is.na(conf_threshold) | conf >= conf_threshold
+  ) %>%
+  mutate(
+    diam_3d_um = ifelse(class_name == "viable" & !is.na(k_diam_3d), diameter_um * k_diam_3d, diameter_um),
+    cytotype = factor(cytotype, levels = cyt_levels),
+    class_label = factor(class_name, levels = c("viable", "non_viable"), labels = c("Viable", "Non-viable"))
+  )
+
+n_grains_size <- nrow(grains_clean)
+
+# 3. Unified LMER models: trait ~ cytotype + (1|population) + (1|cultivation_run) + (1|population:plant_id)
+ctrl <- lmerControl(optimizer = "bobyqa")
+m_diam3d <- lmer(viable_diam_3d_um ~ cytotype + (1 | population) + (1 | cultivation_run) + (1 | population:plant_id), data = df, control = ctrl)
+m_vol3d  <- lmer(viable_vol_3d_mesh_median_um3 ~ cytotype + (1 | population) + (1 | cultivation_run) + (1 | population:plant_id), data = df, control = ctrl)
+m_diam2d <- lmer(viable_median_diam_um ~ cytotype + (1 | population) + (1 | cultivation_run) + (1 | population:plant_id), data = df, control = ctrl)
+m_viab   <- lmer(viability_pct ~ cytotype + (1 | population) + (1 | cultivation_run) + (1 | population:plant_id), data = df, control = ctrl)
+m_abund  <- lmer(log10(total_grains) ~ cytotype + (1 | population) + (1 | cultivation_run) + (1 | population:plant_id), data = df, control = ctrl)
+
+get_emm_cld <- function(mod, is_log10 = FALSE) {
+  emm <- if (is_log10) emmeans(mod, ~ cytotype, type = "response") else emmeans(mod, ~ cytotype)
+  res <- as.data.frame(cld(emm, Letters = letters))
+  if ("response" %in% names(res)) res <- res %>% rename(emmean = response)
+  lcl <- intersect(c("lower.CL", "asymp.LCL"), names(res))[1]
+  ucl <- intersect(c("upper.CL", "asymp.UCL"), names(res))[1]
+  res$lcl <- res[[lcl]]
+  res$ucl <- res[[ucl]]
+  res$.group <- trimws(res$.group)
+  attr(res, "emm_raw") <- emmeans(mod, ~ cytotype)
+  res
 }
+
+cld_list <- list(
+  diam3d = get_emm_cld(m_diam3d, FALSE),
+  vol3d  = get_emm_cld(m_vol3d, FALSE),
+  diam2d = get_emm_cld(m_diam2d, FALSE),
+  viab   = get_emm_cld(m_viab, FALSE),
+  abund  = get_emm_cld(m_abund, TRUE)
+)
+
+e_val <- function(tr, cyt) cld_list[[tr]]$emmean[cld_list[[tr]]$cytotype == cyt]
+pct_vs <- function(tr, a, b = "nat_2x") sprintf("%+.1f%%", 100 * (e_val(tr, a) / e_val(tr, b) - 1))
+f1 <- function(x) formatC(x, format = "f", digits = 1)
+f2 <- function(x) formatC(x, format = "f", digits = 2)
 ```
 
-> **Biological Result:**
-> 1. **Massive Cell Expansion in Neo-Tetraploids (`neo_4x`):** Median viable grain diameter expands from **$19.77\ \mu\text{m}$** in wild diploids to **$24.32\ \mu\text{m}$** in neo-tetraploids (median area **$464.4\ \mu\text{m}^2$** vs **$307.1\ \mu\text{m}^2$**, a **$+51.2\%$ increase**; Tukey $p < 0.0001$, Group `c`).
-> 2. **Genome Downsizing in Established Tetraploids (`nat_4x`):** Natural tetraploids exhibit intermediate size (**$21.63\ \mu\text{m}$**, **$367.4\ \mu\text{m}^2$**; Group `b`), significantly smaller than neo-tetraploids ($p < 0.0001$), reflecting evolutionary cell downsizing following polyploid stabilization.
-> 3. **Absence of Oryzalin Chemical Artifact (`ory_2x`):** Synthetic diploids (**$20.01\ \mu\text{m}$**) show no significant size difference from wild diploids ($p = 0.833$, Group `a`), proving that chemical oryzalin exposure without genome doubling has zero lasting effect on cell size.
-> 4. **Arrested Non-Viable Grains:** Aborted grains are consistently and severely shrunken ($14.5$–$15.8\ \mu\text{m}$) across all ploidies, indicating premature developmental arrest.
+## Summary
+
+We automatically segmented, classified, and reconstructed 2D/3D pollen morphometry across **`r n_slides` whole-slide scans** (out of `r n_scanned` scanned; **`r n_excl` sparse slide scans** with `< 100` grains were excluded, with **0 plant samples lost** as every excluded scan had a well-populated paired sister slide of 284–3,089 grains) from **`r n_plants` plants** (`r n_pops` populations: `AA012`, `AA025`, `AA225`, `AA310`, `AA372`; four cytotypes), yielding **`r format(n_grains_total, big.mark = ",")` calibrated pollen grains** (`r format(n_grains_size, big.mark = ",")` isolated non-edge single grains for morphometry). Key biological findings:
+
+- **Exact 1:1 karyoplasmic 3D volume doubling in `neo_4x` followed by evolutionary downsizing in `nat_4x` ($p < 0.0001$).** Stereological 3D unfolding shows that diploid grains settle slightly flatter on slides (`suboblate`, $k_{\text{vol,3D}} = 0.948\text{–}0.954$), whereas turgid tetraploid grains are rounder `prolate-spheroids` ($k_{\text{vol,3D}} = 0.995\text{–}0.997$). Correcting for 3D shape and slide settling reveals textbook isometric genome-to-volume doubling in newly synthesized `neo_4x` (canonical 3D volume **`6,883 µm³` vs. `3,435 µm³` in `nat_2x` = `+100.4%` / $2.00\times$**; mixed-model EMM `r format(round(e_val("vol3d", "neo_4x")), big.mark = ",")` vs. `r format(round(e_val("vol3d", "nat_2x")), big.mark = ",")` µm³, `r pct_vs("vol3d", "neo_4x")`; 3D diameter `r f2(e_val("diam3d", "neo_4x"))` vs. `r f2(e_val("diam3d", "nat_2x"))` µm). Established `nat_4x` downsizes significantly to intermediate 3D volume (`5,078 µm³` canonical; EMM `r format(round(e_val("vol3d", "nat_4x")), big.mark = ",")` µm³, `r pct_vs("vol3d", "nat_4x")` vs. `nat_2x`, $p < 0.0001$ vs. `neo_4x`), while `ory_2x` (`r f2(e_val("diam3d", "ory_2x"))` µm) matches `nat_2x` ($p = 0.68$).
+- **High male gametophyte fertility is maintained after polyploidization ($p = 0.45$).** All four cytotypes exhibit uniformly high pollen viability (`neo_4x`: `r f1(e_val("viab", "neo_4x"))`%, `ory_2x`: `r f1(e_val("viab", "ory_2x"))`%, `nat_2x`: `r f1(e_val("viab", "nat_2x"))`%, `nat_4x`: `r f1(e_val("viab", "nat_4x"))`% EMM; raw slide medians `97.2%–98.5%`, all Tukey group `a`).
+- **Pollen production per flower does not collapse in neotetraploids.** Calibrated grain counts per slide average `r format(round(e_val("abund", "neo_4x")), big.mark = ",")` in `neo_4x` vs. `r format(round(e_val("abund", "nat_2x")), big.mark = ",")` in `nat_2x` and `r format(round(e_val("abund", "ory_2x")), big.mark = ",")` in `ory_2x` (not significantly different), while established `nat_4x` produces the highest output (`r format(round(e_val("abund", "nat_4x")), big.mark = ",")` grains/slide).
+- **Within-cytotype size–number trade-off, shifted upward by polyploidy ($p = 0.0003$).** Within cytotypes, plants producing larger 3D pollen grains produce fewer grains per flower (mixed-model log–log slope $= -1.77 \pm 0.43$, $p < 0.0001$; steepest in `nat_2x`, $r = -0.36$, $p < 0.001$, and `nat_4x`, $r = -0.37$, $p = 0.016$). Polyploidization shifts this trade-off curve upward (`nat_4x` $p = 0.0006$, `neo_4x` $p = 0.025$ at a given grain size), increasing total 3D pollen biovolume per flower rather than sacrificing grain number.
+
+{{< pagebreak >}}
+
+## Results
+
+**Table 1.** Cytotype summary: linear mixed-model estimated marginal means (`EMM` with Tukey group in parentheses; $p < 0.05$) and raw slide median viability across $491$ QC-passing slides from $251$ plants.
+
+```{r table-emms}
+med_tab <- df %>%
+  group_by(cytotype) %>%
+  summarise(
+    n_sl = n(),
+    n_pl = n_distinct(plant_id),
+    med_viab = median(viability_pct, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+fmt_emm <- function(tr, digits = 1, big = FALSE, suffix = "") {
+  d <- cld_list[[tr]]
+  unname(sapply(cyt_levels, function(c) {
+    r <- d[d$cytotype == c, ]
+    v <- if (big) format(round(r$emmean), big.mark = ",") else formatC(r$emmean, format = "f", digits = digits)
+    sprintf("%s%s (%s)", v, suffix, r$.group)
+  }))
+}
+
+t1 <- data.frame(
+  Cytotype = cyt_levels,
+  Slides_Plants = sprintf("%d (%d)", med_tab$n_sl, med_tab$n_pl),
+  Diam3D = fmt_emm("diam3d", 2),
+  Vol3D  = fmt_emm("vol3d", 0, big = TRUE),
+  Diam2D = fmt_emm("diam2d", 2),
+  Viab_EMM = fmt_emm("viab", 1, suffix = "%"),
+  Viab_Med = sprintf("%.1f%%", med_tab$med_viab),
+  Abund = fmt_emm("abund", 0, big = TRUE),
+  row.names = NULL
+)
+
+kable(
+  t1,
+  row.names = FALSE,
+  col.names = c("Cytotype", "Slides (Plants)", "3D Diam. (µm)", "3D Vol. (µm³)", "2D Diam. (µm)", "Viab. EMM", "Median Viab.", "Grains / Slide"),
+  align = "llcccccc"
+)
+```
+
+**Table 2.** Selected pairwise cytotype differences (first minus second cytotype, Tukey-adjusted across linear mixed models; `***` $p < 0.001$, `*` $p < 0.05$, `ns` not significant).
+
+```{r table-contrasts}
+keep_con <- c("nat_4x - nat_2x", "neo_4x - nat_2x", "neo_4x - nat_4x", "ory_2x - nat_2x")
+stars <- function(p) as.character(cut(p, c(-Inf, .001, .01, .05, Inf), labels = c("***", "**", "*", "ns")))
+flip_c <- function(x) paste(rev(strsplit(x, " - ")[[1]]), collapse = " - ")
+
+fmt_con <- function(tr, digits = 2, is_log10 = FALSE, big = FALSE) {
+  emm_raw <- attr(cld_list[[tr]], "emm_raw")
+  pr <- as.data.frame(pairs(emm_raw, adjust = "tukey")) %>%
+    mutate(
+      contrast = gsub("[()]", "", as.character(contrast)),
+      rev_c = vapply(contrast, flip_c, ""),
+      est = ifelse(contrast %in% keep_con, estimate, -estimate),
+      contrast = ifelse(contrast %in% keep_con, contrast, rev_c)
+    ) %>%
+    filter(contrast %in% keep_con)
+  unname(sapply(keep_con, function(k) {
+    r <- pr[pr$contrast == k, ]
+    if (is_log10) {
+      ratio_pct <- 100 * (10^r$est - 1)
+      sprintf("%+.1f%% %s", ratio_pct, stars(r$p.value))
+    } else if (big) {
+      sgn <- ifelse(r$est >= 0, "+", "−")
+      sprintf("%s%s %s", sgn, format(round(abs(r$est)), big.mark = ","), stars(r$p.value))
+    } else {
+      sprintf("%+.*f %s", digits, r$est, stars(r$p.value))
+    }
+  }))
+}
+
+t2 <- data.frame(
+  Contrast = gsub(" - ", " vs. ", keep_con),
+  Diam3D = fmt_con("diam3d", 2),
+  Vol3D  = fmt_con("vol3d", 0, big = TRUE),
+  Viab   = fmt_con("viab", 2),
+  Abund  = fmt_con("abund", 1, is_log10 = TRUE),
+  row.names = NULL
+)
+
+kable(
+  t2,
+  row.names = FALSE,
+  col.names = c("Comparison", "Δ 3D Diam (µm)", "Δ 3D Vol. (µm³)", "Δ Viability (pp)", "Δ Grains / Slide"),
+  align = "lcccc"
+)
+```
+
+**Table 3.** Stereological 3D shape and volume unfolding per cytotype (Erdtman 1952 shape classes, reconstructed 3D principal axes, slide-settling parameter $\tau$, 3D volume factor $k_{3\text{D}}$, and canonical 3D grain volume).
+
+```{r table-3d-shape}
+t3d <- m3d_cyt %>%
+  transmute(
+    Cytotype = as.character(cytotype),
+    Shape = gsub("prolate-spheroidal", "prolate-spheroid", shape_class_erdtman),
+    Axes = sprintf("%.1f × %.1f × %.1f", Axis_A_um, Axis_B_um, Axis_C_um),
+    Tau = sprintf("%.2f", tau_settling),
+    k_vol = sprintf("%.3f", k_vol_3d_total),
+    D2_D3 = sprintf("%.2f → %.2f", Diam_2d_median_um, Diam_3d_corrected_um),
+    Vol_Can = format(round(Vol_3d_mesh_canonical_um3), big.mark = ",")
+  )
+
+kable(
+  t3d,
+  row.names = FALSE,
+  col.names = c("Cytotype", "3D Shape Class", "3D Axes (µm)", "Settling τ", "Factor k₃D", "2D → 3D Diam. (µm)", "Canonical Vol. (µm³)"),
+  align = "llccccc"
+)
+```
+
+**Table 4.** Phenotypic variance decomposition across biological and experimental levels (% of slide-level variance explained; Nakagawa & Schielzeth 2013).
+
+```{r table-variance}
+decomp_one <- function(mod) {
+  vc <- as.data.frame(VarCorr(mod))
+  v_plant <- vc$vcov[vc$grp == "population:plant_id"]
+  v_pop   <- vc$vcov[vc$grp == "population"]
+  v_run   <- vc$vcov[vc$grp == "cultivation_run"]
+  v_res   <- vc$vcov[vc$grp == "Residual"]
+  v_fix   <- var(predict(mod, re.form = NA))
+  v_tot   <- v_fix + v_pop + v_run + v_plant + v_res
+  pcts <- 100 * c(
+    v_fix, v_pop, v_run, v_plant, v_res,
+    v_fix, v_fix + v_pop + v_run + v_plant
+  ) / v_tot
+  sprintf("%.1f%%", pcts)
+}
+
+t3 <- data.frame(
+  Source = c(
+    "Cytotype (Ploidy fixed effect)",
+    "Population of origin",
+    "Cultivation cohort",
+    "Plant ID (within population)",
+    "Residual (between sister slides)",
+    "**Marginal R²m (Fixed effects)**",
+    "**Conditional R²c (Full model)**"
+  ),
+  Diam3D = decomp_one(m_diam3d),
+  Vol3D  = decomp_one(m_vol3d),
+  Viab   = decomp_one(m_viab),
+  Abund  = decomp_one(m_abund),
+  row.names = NULL
+)
+
+kable(
+  t3,
+  row.names = FALSE,
+  col.names = c("Source of Variation", "3D Diam", "3D Volume", "Viability (%)", "Log10(Grains)"),
+  align = "lcccc"
+)
+```
+
+{{< pagebreak >}}
+
+```{r fig-traits}
+#| fig-cap: "Slide-level distributions of 3D-corrected viable pollen diameter, 3D closed-mesh viable grain volume, pollen viability, and total calibrated grains per slide across cytotypes (N = 491 slides from 251 plants). Coloured boxes show slide-level interquartile ranges; white diamonds with error bars indicate linear mixed-model EMMs ± 95% CI; bold letters denote Tukey-adjusted compact letter displays (p < 0.05)."
+#| fig-width: 7.0
+#| fig-height: 4.9
+trait_meta <- tibble(
+  key = c("diam3d", "vol3d", "viab", "abund"),
+  col = c("viable_diam_3d_um", "viable_vol_3d_mesh_median_um3", "viability_pct", "total_grains"),
+  panel = factor(
+    c("3D viable pollen diameter (µm)", "3D viable grain volume (µm³)", "Pollen viability (%)", "Pollen abundance (grains / slide)"),
+    levels = c("3D viable pollen diameter (µm)", "3D viable grain volume (µm³)", "Pollen viability (%)", "Pollen abundance (grains / slide)")
+  )
+)
+
+long_df <- bind_rows(lapply(seq_len(nrow(trait_meta)), function(i) {
+  tibble(
+    cytotype = df$cytotype,
+    panel = trait_meta$panel[i],
+    value = df[[trait_meta$col[i]]]
+  )
+})) %>% filter(!is.na(value))
+
+cld_plot <- bind_rows(lapply(seq_len(nrow(trait_meta)), function(i) {
+  k <- trait_meta$key[i]
+  cld_list[[k]] %>% mutate(panel = trait_meta$panel[i])
+}))
+
+panel_tops <- long_df %>%
+  group_by(panel) %>%
+  summarise(y_max = max(value, na.rm = TRUE), y_min = min(value, na.rm = TRUE), .groups = "drop")
+
+cld_plot <- cld_plot %>%
+  left_join(panel_tops, by = "panel") %>%
+  mutate(y_lbl = y_max + 0.08 * (y_max - y_min))
+
+ggplot(long_df, aes(cytotype, value, fill = cytotype)) +
+  geom_boxplot(width = 0.52, alpha = 0.72, outlier.size = 0.45, outlier.alpha = 0.30, colour = "#374151", linewidth = 0.3) +
+  geom_errorbar(data = cld_plot, inherit.aes = FALSE, aes(cytotype, ymin = lcl, ymax = ucl), width = 0.14, linewidth = 0.45) +
+  geom_point(data = cld_plot, inherit.aes = FALSE, aes(cytotype, emmean), shape = 23, size = 2.4, fill = "white", stroke = 0.5) +
+  geom_text(data = cld_plot, inherit.aes = FALSE, aes(cytotype, y = y_lbl, label = .group), fontface = "bold", size = 3.3, vjust = 0) +
+  facet_wrap(~ panel, scales = "free_y", ncol = 2) +
+  scale_fill_manual(values = cyt_cols, guide = "none") +
+  scale_y_continuous(expand = expansion(mult = c(0.05, 0.16))) +
+  labs(x = NULL, y = NULL)
+```
+
+```{r fig-single-grain}
+#| fig-cap: "Single-grain morphometry and plant-level size–number trade-off. (A) 3D-corrected viable vs. non-viable single-grain diameter across 825,310 isolated interior grains (0.5th–99.5th percentile violin & boxplot). (B) Pollen size–number trade-off across all 251 plants (sister-slide plant means; log10 grain scale with per-cytotype linear fits; within-cytotype LMER slope = −1.77, p < 0.0001)."
+#| fig-width: 7.0
+#| fig-height: 3.1
+grains_trim <- grains_clean %>%
+  group_by(cytotype, class_label) %>%
+  filter(diam_3d_um >= quantile(diam_3d_um, 0.005), diam_3d_um <= quantile(diam_3d_um, 0.995)) %>%
+  ungroup()
+
+p_a <- ggplot(grains_trim, aes(cytotype, diam_3d_um, fill = class_label)) +
+  geom_violin(position = position_dodge(0.78), alpha = 0.55, linewidth = 0.25, colour = "#374151", trim = TRUE) +
+  geom_boxplot(position = position_dodge(0.78), width = 0.22, outlier.shape = NA, alpha = 0.85, linewidth = 0.25, colour = "#1f2937") +
+  scale_fill_manual(values = c("Viable" = "#e7298a", "Non-viable" = "#1b9e77")) +
+  labs(title = "A. 3D viable vs. non-viable grain diameter", x = NULL, y = "3D Diameter (µm)", fill = NULL) +
+  theme(legend.position = "top", plot.title = element_text(face = "bold", size = 9.5))
+
+pm <- df %>%
+  filter(!is.na(viable_diam_3d_um), !is.na(total_grains)) %>%
+  group_by(plant_id, cytotype) %>%
+  summarise(
+    diam3d = mean(viable_diam_3d_um, na.rm = TRUE),
+    grains = mean(total_grains, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+p_b <- ggplot(pm, aes(diam3d, grains, colour = cytotype)) +
+  geom_point(alpha = 0.55, size = 1.35) +
+  geom_smooth(method = "lm", se = FALSE, linewidth = 0.85) +
+  scale_y_log10(labels = scales::label_comma()) +
+  scale_colour_manual(values = cyt_cols) +
+  labs(
+    title = "B. Plant-level size–number trade-off",
+    x = "Mean 3D viable diameter (µm)",
+    y = "Mean grains / slide (log10)",
+    colour = NULL
+  ) +
+  theme(legend.position = "top", plot.title = element_text(face = "bold", size = 9.5))
+
+p_a + p_b
+```
+
+{{< pagebreak >}}
+
+## Model Progression & Two-Reviewer Blinded Human Validation
+
+**Table 5.** Active-learning model progression from `v1.0` to the final production checkpoint `v3.1 ★` (`last_20261122_r3.pt`, MD5 `1ea93497105eee085848310df127e42f`).
+
+```{r table-versions}
+vh <- data.frame(
+  Ver = c("v1.0", "v2.0", "v2.1", "v3.0", "**v3.1 ★**"),
+  Milestone = c(
+    "Baseline YOLO11m-seg (2026-10-23)",
+    "Clean FP32/TF32 retrain (2026-11-18)",
+    "Active learning R2 + hard negatives",
+    "Sharp SAM multi-cytotype R3 (best.pt)",
+    "**Post-mosaic full-scale R3 (last.pt + 3D)**"
+  ),
+  Tiles = c("640", "702", "717", "773", "**773**"),
+  Polys = c("5,810", "6,095", "6,212", "7,427", "**7,427**"),
+  mAP50 = c("0.918", "0.931", "0.936", "0.972", "**0.890**"),
+  Bench_Prec = c("98.2%", "98.0%", "98.9%", "98.1%", "**99.7%**"),
+  Grains = c("—", "—", "—", "—", "**968,195**")
+)
+
+kable(
+  vh,
+  row.names = FALSE,
+  col.names = c("Version", "Model / Active-Learning Milestone", "Tiles", "Polygons", "Mask mAP50", "Bench. Prec.", "502-Slide Grains"),
+  align = "llccccc"
+)
+```
+
+**Table 6.** Calibrated pipeline accuracy across $154$ unseen tiles ($200$ blind reviews: $100$ Jakub + $100$ Eliška, $2,595$ evaluated grains; pre-filter raw precision $97.2\%$, recall $99.2\%$, raw E2E $95.5\%$, calibrated E2E $96.3\%$). On $46$ shared double-blind tiles, human inter-rater concordance reached $r = 0.999$ for count and $r = 0.947$ for viability (median $|\Delta| = 0.00\text{ pp}$, mean $|\Delta| = 1.77\text{ pp}$).
+
+```{r table-blind-qc}
+qc_cyt <- read.csv(p_rel("output/qc/qc_summary_cytotype.csv"), stringsAsFactors = FALSE)
+qc_json <- fromJSON(p_rel("output/qc/viability_qc_r3_summary.json"))
+
+qc_rows <- lapply(c(cyt_levels, "ALL"), function(k) {
+  r <- qc_json$by_cytotype[[k]]
+  if (is.null(r)) return(NULL)
+  cal <- qc_cyt[qc_cyt$cytotype == k, ]
+  is_all <- (k == "ALL")
+  n_rev <- if (!is_all && nrow(cal)) round(cal$Det_tiles_checked[1]) else round(sum(qc_cyt$Det_tiles_checked))
+  cal_p <- if (nrow(cal)) sprintf("%.1f%%", 100 * cal$Det_precision[1]) else sprintf("%.1f%%", 100 * mean(qc_cyt$Det_precision))
+  cal_r <- if (nrow(cal)) sprintf("%.1f%%", 100 * cal$Det_recall[1]) else sprintf("%.1f%%", 100 * mean(qc_cyt$Det_recall))
+  cal_c <- if (nrow(cal)) sprintf("%.1f%%", 100 * cal$Det_class_accuracy[1]) else sprintf("%.1f%%", 100 * mean(qc_cyt$Det_class_accuracy))
+  poly_a <- sprintf("%.1f%%", 100 * r$poly_accuracy)
+  cal_b <- if (nrow(cal)) sprintf("%+.2f pp", cal$Det_viability_bias_pp[1]) else sprintf("%+.2f pp", mean(qc_cyt$Det_viability_bias_pp))
+  wrap_b <- function(s) if (is_all) paste0("**", s, "**") else as.character(s)
+  data.frame(
+    Cytotype = wrap_b(ifelse(is_all, "All / Mean", k)),
+    Reviews = wrap_b(n_rev),
+    Grains = wrap_b(format(r$n_pred, big.mark = ",")),
+    Precision = wrap_b(cal_p),
+    Recall = wrap_b(cal_r),
+    Class_Acc = wrap_b(cal_c),
+    Poly_Acc = wrap_b(poly_a),
+    Bias = wrap_b(cal_b)
+  )
+}) %>% bind_rows()
+
+kable(
+  qc_rows,
+  row.names = FALSE,
+  col.names = c("Cytotype", "Reviews", "Grains", "Precision", "Recall", "3-Class Acc.", "Polygon Acc.", "Viability Bias"),
+  align = "lccccccc"
+)
+```
+
+**Table 7.** Error-propagation sensitivity check: mixed-model $F$-tests and per-cytotype Tukey groupings ($p < 0.05$) before vs. after adjusting slides by pooled two-reviewer calibration or Reviewer 2 (Eliška) raw deviations.
+
+```{r table-sensitivity}
+rv_all <- read.csv(p_rel("output/qc/viability_qc_r3_final.csv"), stringsAsFactors = FALSE)
+el_b <- rv_all %>%
+  filter(reviewer == "eliska") %>%
+  group_by(cytotype) %>%
+  summarise(
+    el_bias = mean(viability_bias_pp, na.rm = TRUE),
+    el_p = (sum(n_pred) - sum(fp)) / sum(n_pred),
+    el_r = (sum(n_pred) - sum(fp)) / (sum(n_pred) - sum(fp) + sum(missed)),
+    .groups = "drop"
+  )
+
+sens_df <- df %>%
+  left_join(el_b, by = "cytotype") %>%
+  mutate(
+    viab_adj = pmin(100, pmax(0, viability_pct - Det_viability_bias_pp)),
+    count_adj = total_grains * Det_precision / Det_recall,
+    viab_el = pmin(100, pmax(0, viability_pct - el_bias)),
+    count_el = total_grains * el_p / el_r
+  )
+
+mv0 <- lmer(viability_pct ~ cytotype + (1 | population) + (1 | cultivation_run) + (1 | population:plant_id), data = sens_df, control = ctrl)
+mv1 <- lmer(viab_adj ~ cytotype + (1 | population) + (1 | cultivation_run) + (1 | population:plant_id), data = sens_df, control = ctrl)
+mv2 <- lmer(viab_el ~ cytotype + (1 | population) + (1 | cultivation_run) + (1 | population:plant_id), data = sens_df, control = ctrl)
+mc0 <- lmer(log10(total_grains) ~ cytotype + (1 | population) + (1 | cultivation_run) + (1 | population:plant_id), data = sens_df, control = ctrl)
+mc1 <- lmer(log10(count_adj) ~ cytotype + (1 | population) + (1 | cultivation_run) + (1 | population:plant_id), data = sens_df, control = ctrl)
+mc2 <- lmer(log10(count_el) ~ cytotype + (1 | population) + (1 | cultivation_run) + (1 | population:plant_id), data = sens_df, control = ctrl)
+
+cld_vec <- function(m) {
+  d <- as.data.frame(cld(emmeans(m, ~ cytotype), Letters = letters))
+  trimws(d$.group[match(cyt_levels, as.character(d$cytotype))])
+}
+
+mods_s <- list(mv0, mv1, mv2, mc0, mc1, mc2)
+clds_mat <- do.call(rbind, lapply(mods_s, cld_vec))
+avs <- lapply(mods_s, anova)
+
+t_sens <- data.frame(
+  Trait = c(rep("Pollen viability (%)", 3), rep("Log10(Grains / slide)", 3)),
+  Spec = rep(c("Unadjusted pipeline", "2-reviewer calibrated", "Eliška strict raw"), 2),
+  F_val = sapply(avs, function(a) sprintf("%.2f", a$`F value`[1])),
+  p_val = sapply(avs, function(a) sprintf("%.3f", a$`Pr(>F)`[1])),
+  ory_2x = clds_mat[, 1],
+  nat_2x = clds_mat[, 2],
+  nat_4x = clds_mat[, 3],
+  neo_4x = clds_mat[, 4],
+  row.names = NULL
+)
+
+kable(
+  t_sens,
+  row.names = FALSE,
+  col.names = c("Trait", "Validation Adjustment", "LMER F", "p-value", "ory_2x", "nat_2x", "nat_4x", "neo_4x"),
+  align = "llcccccc"
+)
+```
 
 ---
 
-# 4. Statistical Tests & Mixed-Effects Modeling
+## Manuscript Materials & Methods (Short Version — Ready for Main Text)
 
-To account for environmental cohort and maternal pedigree confounders, we fit linear mixed models incorporating `population` (genetic background) and `cultivation_run` (environmental growth cohort) random intercepts:
+**Automated pollen viability and 3D morphometric phenotyping.** Pollen production, gametophyte viability, and three-dimensional (3D) grain size were quantified across 502 whole-slide brightfield scans (two sister slides per flower across 251 plants from four cytotypes — `ory_2x`, `nat_2x`, `nat_4x`, and `neo_4x` — and five *Arabidopsis* populations: `AA012`, `AA025`, `AA225`, `AA310`, and `AA372`). Mature anthers at anthesis were stained using Alexander's differential protocol (Alexander, 1969), distinguishing cytoplasm-filled **viable** pollen (dark magenta), empty **non-viable** microspores (turquoise/green cell walls), and partially stained **intermediate** grains. Whole coverslips were scanned on an automated Zeiss Axio Scan.Z1 microscope at $0.8772\,\mu\text{m px}^{-1}$ and analyzed in overlapping $640 \times 640\text{ px}$ tiles ($64\text{ px}$ overlap) using a three-class `YOLOv11m-seg` instance-segmentation model (Ultralytics; Jocher et al., 2023) trained over three active-learning rounds on 773 tiles (7,427 verified grain outlines plus 11.5% background/debris tiles) annotated with Segment Anything (`SAM`; Kirillov et al., 2023). Full-resolution grain outlines were smoothed without altering grain area, and detections straddling overlapping tile borders were merged ($\text{IoU} > 0.35$) to prevent double counting.
 
-$$Y_{ijk} = \beta_0 + \beta_1 \text{Cytotype}_i + u_{\text{pop}, j} + v_{\text{run}, k} + \epsilon_{ijk}$$
+**Debris filtering, 3D grain size reconstruction, validation, and statistical analysis.** To remove tiny stain precipitates without discarding naturally small shrunken aborted grains, minimum diameter and confidence thresholds were calibrated separately for each cytotype and viability class, yielding 968,195 calibrated pollen grains across the 502 scans; 11 sparse whole-slide scans containing fewer than 100 grains were excluded from slide-level analyses, retaining 491 whole-slide scans across all 251 plant samples (every excluded scan had a well-populated paired sister slide). Grain size was measured on 825,310 isolated single grains after excluding touching clumps and grains clipped by the outer scan border ($\text{solidity} \ge 0.88$, $\text{aspect ratio} \le 1.35$). Because slightly flattened pollen grains settle preferentially onto their widest face on a microscope slide — causing 2D top-down areas to slightly overestimate the volume of flatter diploid grains relative to rounder tetraploid grains — we reconstructed 3D grain shape (Erdtman, 1952), 3D grain volume ($V_{3\text{D}}$), and 3D volume-equivalent spherical diameter ($D_{3\text{D}}$) per cytotype from the joint distribution of 2D grain diameters, ellipse aspect ratios, and polar vs. equatorial grain silhouettes (full stereological and 3D mesh equations in Supplementary Methods). Pipeline accuracy was evaluated blindly by two independent observers across 154 unseen tiles (100 tiles per observer, including 46 shared double-blind tiles; 200 tile-reviews and 2,595 evaluated grains, plus a 96-grain audit of the $\le \text{P2}$ and $\ge \text{P95}$ size tails). On the 46 shared tiles, inter-observer agreement reached $r = 0.999$ for grain count and $r = 0.947$ for viability (median $|\Delta| = 0.00\text{ pp}$, mean $|\Delta| = 1.77\text{ pp}$). Across all 200 blind reviews, the calibrated pipeline achieved **98.0% precision**, **99.0% recall**, **99.3% three-class accuracy**, and **97.5% single-grain outline accuracy** ($+1.48\text{ pp}$ mean viability bias, smaller than inter-observer human variation and verified to have no effect on mixed-model conclusions). Traits were analyzed with linear mixed-effects models (`lme4` / `lmerTest`; Bates et al., 2015) with fixed effect `cytotype`, random intercepts for population, cultivation cohort, and plant identity, variance partitioning ($R^2_m, R^2_c$; Nakagawa & Schielzeth, 2013), and Tukey-adjusted pairwise comparisons (`emmeans`; Piepho, 2004).
 
-## Model 1: Viable Pollen Diameter (Cell Gigas Effect)
+### Acknowledgements
 
-```{r mixed_model_size}
-m_size_lmer <- lmer(
-  viable_median_diam_um ~ cytotype + (1 | population) + (1 | cultivation_run),
-  data = slides_df
-)
-
-# Type III ANOVA
-aov_size_lmer <- as.data.frame(anova(m_size_lmer))
-kable(aov_size_lmer, caption = "Type III ANOVA (Satterthwaite's method): Viable Pollen Diameter LMER", digits = 3)
-
-# Fixed Effects Table
-fix_size <- tidy(m_size_lmer, effects = "fixed") %>%
-  mutate(p.value = ifelse(p.value < 0.0001, "< 0.0001", sprintf("%.4f", p.value)))
-kable(fix_size, caption = "Fixed Effects Estimates: Viable Pollen Diameter LMER", digits = 3)
-
-# Random Effects Table
-ran_size <- tidy(m_size_lmer, effects = "ran_pars")
-kable(ran_size, caption = "Random Effects Parameters: Viable Pollen Diameter LMER", digits = 3)
-```
-
-## Model 2: Pollen Grain Abundance
-
-```{r mixed_model_abundance}
-m_abund_lmer <- lmer(
-  log(total_grains) ~ cytotype + (1 | population) + (1 | cultivation_run),
-  data = slides_df
-)
-
-# Type III ANOVA
-aov_abund_lmer <- as.data.frame(anova(m_abund_lmer))
-kable(aov_abund_lmer, caption = "Type III ANOVA: Pollen Abundance Log(Total Grains) LMER", digits = 3)
-
-# Fixed Effects Table
-fix_abund <- tidy(m_abund_lmer, effects = "fixed") %>%
-  mutate(p.value = ifelse(p.value < 0.0001, "< 0.0001", sprintf("%.4f", p.value)))
-kable(fix_abund, caption = "Fixed Effects Estimates: Pollen Abundance LMER", digits = 3)
-
-# Random Effects Table
-ran_abund <- tidy(m_abund_lmer, effects = "ran_pars")
-kable(ran_abund, caption = "Random Effects Parameters: Pollen Abundance LMER", digits = 3)
-```
-
-## Model 3: Pollen Viability Percentage
-
-```{r mixed_model_viability}
-m_viab_lmer <- lmer(
-  viability_pct ~ cytotype + (1 | population) + (1 | cultivation_run),
-  data = slides_df
-)
-
-# Type III ANOVA
-aov_viab_lmer <- as.data.frame(anova(m_viab_lmer))
-kable(aov_viab_lmer, caption = "Type III ANOVA: Pollen Viability (%) LMER", digits = 3)
-
-# Fixed Effects Table
-fix_viab <- tidy(m_viab_lmer, effects = "fixed") %>%
-  mutate(p.value = ifelse(p.value < 0.0001, "< 0.0001", sprintf("%.4f", p.value)))
-kable(fix_viab, caption = "Fixed Effects Estimates: Pollen Viability (%) LMER", digits = 3)
-
-# Random Effects Table
-ran_viab <- tidy(m_viab_lmer, effects = "ran_pars")
-kable(ran_viab, caption = "Random Effects Parameters: Pollen Viability (%) LMER", digits = 3)
-```
+Computational resources were supplied by the e-INFRA CZ project (ID:90254) provided within the program Projects of Large Research, Development, and Innovations Infrastructures; image processing, interactive web annotation, and model training ran on the Kubernetes cloud of CERIT-SC and whole-slide data were archived in CESNET S3 object storage, both part of the e-INFRA CZ research infrastructure operated by CESNET.
 
 ---
 
-# Biological Conclusions & Synthesis
+## Supplementary Methods: Pipeline Architecture, 3D Stereology & Model Reporting
 
-1. **Cell Gigas Scaling ($F = 171.3$, $p < 2.2 \times 10^{-16}$):**
-   * Newly formed neo-tetraploids (`neo_4x`) show an immediate cellular expansion to **$24.32\ \mu\text{m}$** (median area **$464.4\ \mu\text{m}^2$**), representing a **$+51.2\%$ increase in 2D area** over wild diploids (**$19.77\ \mu\text{m}$ / $307.1\ \mu\text{m}^2$**).
-   * Natural tetraploids (`nat_4x`) exhibit stabilized, intermediate dimensions (**$21.63\ \mu\text{m}$ / $367.4\ \mu\text{m}^2$**), reflecting classic evolutionary genome downsizing post-WGD.
-   * Synthetic diploids (`ory_2x`, **$20.01\ \mu\text{m}$**) show no significant size difference from natural diploids (`nat_2x`, $p = 0.833$), confirming that chemical oryzalin exposure per se does not induce permanent cell enlargement without genome duplication.
+1. **Whole-Slide Preparation & Imaging (`0.877242 µm/px`):** Single-flower pollen suspensions stained with modified Alexander's reagent were divided into two independent coverslip aliquots (`primary` and `replicate`) to quantify technical liquid-handling variance (491 QC-passing slides across 251 plants). Full coverslips were scanned in brightfield on a Zeiss Axio Scan.Z1 and tiled into coordinate-registered $640 \times 640\text{ px}$ JPEG crops ($\text{stride} = 576\text{ px}$, $64\text{ px}$ overlap; 265,520 tiles total in `s3://peg-bucket/Ostatni/Pollen_viability/tiles_640/`).
+2. **Active-Learning Training & Post-Mosaic Checkpoint (`v3.1`):** A three-class `YOLOv11m-seg` model (`0: viable`, `1: non_viable`, `2: intermediate`) was trained in full FP32/TF32 precision (`amp = False`, AdamW, `lr0 = 0.0008`, cosine schedule, 200 epochs, 0 NaN epochs) on 773 sanitized tiles (7,427 polygons, incorporating 71 sharp SAM-annotated multi-cytotype interior tiles with `grain_focus_lap >= 35.0`, excluding `_tile_0_` borders and synthetic $4\times$ zoom on tetraploid slides, while holding out all 870 training/relabel tiles from blind QC). Mosaic augmentation was disabled for the final 25 epochs (`close_mosaic = 25`), and the full-scale refined checkpoint (`last_20261122_r3.pt`, MD5 `1ea93497105eee085848310df127e42f`) was promoted after halving false positives on hard QC tiles.
+3. **Cluster Inference, Stitching & Two-Tier Calibration:** Inference ran across 6 GPU shards on CERIT-SC (`CONF = 0.50`, NMS `IOU = 0.45`, containment $> 0.65$, `retina_masks = True`, area-preserving Chaikin corner-cutting, cross-tile stitching at $\text{IoU} > 0.35$). Per-`(cytotype, class)` minimum diameter (`class_min_diam.csv`, retaining $>99\%$ of isolated reference microspores) and confidence (`class_conf_threshold.csv`) thresholds yielded 968,195 calibrated grains across 502 slides (967,968 on the 491 slides with $\ge 100$ grains; 100% plant retention), and 825,310 isolated non-edge single grains (`solidity >= 0.88`, `aspect_ratio <= 1.35`, $D_{2\text{D}} = 2\sqrt{A_{2\text{D}}/\pi}$) for morphometry.
+4. **Two-Stage Stereological 3D Unfolding & Closed Surface-Mesh Reconstruction (`reconstruct_3d_cytotypes.py`):** Following the *Pollen Latitude* 3D pipeline (`reconstruct_3d_species.py`), 2D projection bias was corrected in two stages per cytotype:
+   - *Stage 1 (Stereological axis & settling unfolding):* Using slide-normalized log-diameter $u = \ln(D_{2\text{D}} / D_{\text{slide,med}})$ and half-log aspect ratio $\delta = \frac{1}{2}\ln(a'/b')$ across hydrated viable grains (261,933 `nat_2x`, 120,703 `ory_2x`, 167,442 `nat_4x`, 230,278 `neo_4x`), four nested 3D ellipsoid projection families (`sphere`, `prolate`, `oblate`, `triaxial`) with Boltzmann slide-settling parameter $\tau \in [0, 3.5]$, biological log-size SD $\sigma_g$, and contour noise $\sigma_e$ were fitted over $M = 600$ Fibonacci hemisphere orientations by minimizing 24-angle 2D Sliced Wasserstein Distance (requiring $\ge 8\%$ relative SWD gain over simpler models; 32 slide-block bootstraps for SEs). This yields the dimensionless stereological volume factor $k_{\text{ell,3D}} = (p\,q)/d_{\text{sim,med}}^3$ (`0.9487 ± 0.0015` in `ory_2x`, `0.9553 ± 0.0012` in `nat_2x`, `0.9948 ± 0.0008` in `nat_4x`, `0.9917 ± 0.0002` in `neo_4x`).
+   - *Stage 2 (Fourier-aligned genus-0 3D mesh):* Up to 160 polar ($\le Q_{25}$ aspect ratio, aligned on 3-fold tricolpate Fourier phase) and 160 equatorial ($\ge Q_{75}$ aspect ratio) whole-grain contours per cytotype were sampled from S3 `_det.json` masks to construct closed triangulated Wavefront `.obj` meshes (`pollen_3d_meshes.zip`), yielding exact divergence-theorem lobation factor $\phi_{\text{mesh}}$ (`0.9984–1.0034`), 3D grain volume $V_{3\text{D,med}} = \frac{\pi}{6} D_{2\text{D,med}}^3 k_{\text{ell,3D}} \phi_{\text{mesh}}$, orientation-deconvolved mean grain volume $V_{3\text{D,mean}}$, and 3D volume-equivalent diameter $D_{3\text{D}} = (6 V_{3\text{D,med}}/\pi)^{1/3}$.
+5. **Two-Reviewer Blinded Web Validation & Archiving:** Two independent reviewers (`jakub` = 100/100, `eliska` = 100/100; 46 shared double-blind overlap tiles; 0 image-issue rejections) audited 154 unseen tiles in `viability-review-stenc.dyn.cloud.e-infra.cz` (`r3_final_20261123_1702`, inter-rater $r = 0.999$ for count and $r = 0.947$ for viability, median $|\Delta| = 0.00\text{ pp}$, mean $|\Delta| = 1.77\text{ pp}$; plus 96 tail grains in `extremes_r3_20261124_1307`). S3 archiving (`s3://peg-bucket/Ostatni/Pollen_viability/`) and software stack: Python 3.12, Ultralytics 8.4, PyTorch, OpenCV, SciPy; R 4.4 (`lme4`, `lmerTest`, `emmeans`, `multcomp`, `MuMIn`, `ggplot2`, `patchwork`), Quarto 1.8.
 
-2. **Gametophyte Fertility & Production:**
-   * Whole-genome duplication does **not** cause an immediate collapse in pollen production ($p = 0.352$) or pollen viability ($p = 0.134$). Neo-tetraploids produce abundant, highly fertile pollen ($>93\%$ viable), indicating that polyploid establishment in this system is not blocked by male gametophytic sterility.
+### References
 
-3. **Quality Control Verification:**
-   * Low-count slides ($< 100$ grains) represent physical pipetting and aliquot delivery failures on individual slides, as proven by the dense, healthy sister slides from identical plants ($600$–$3,100+$ grains). Removing these 10 slides removes liquid-handling noise while preserving 100% of biological lineages.
-
----
-*Report generated by Pollination Ecology Group (PEG) automated analysis pipeline.*
+- **Alexander, M. P.** (1969). Differential staining of aborted and nonaborted pollen. *Stain Technology*, 44(3), 117–122.
+- **Bates, D., Mächler, M., Bolker, B., & Walker, S.** (2015). Fitting linear mixed-effects models using lme4. *Journal of Statistical Software*, 67(1), 1–48.
+- **Bradski, G.** (2000). The OpenCV Library. *Dr. Dobb's Journal of Software Tools*.
+- **Erdtman, G.** (1952). *Pollen Morphology and Plant Taxonomy: Angiosperms*. Almqvist & Wiksell, Stockholm.
+- **Jocher, G., Chaurasia, A., & Qiu, J.** (2023). Ultralytics YOLO (version 8.4) [software]. https://github.com/ultralytics/ultralytics
+- **Kirillov, A., Mintun, E., Ravi, N., et al.** (2023). Segment Anything. *Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV)*, 4015–4026.
+- **Nakagawa, S., & Schielzeth, H.** (2013). A general and simple method for obtaining $R^2$ from generalized linear mixed-effects models. *Methods in Ecology and Evolution*, 4(2), 133–142.
+- **Pech-Pacheco, J. L., Cristóbal, G., Chamorro-Martínez, J., & Fernández-Valdivia, J.** (2000). Diatom autofocusing in brightfield microscopy: a comparative study. *Proceedings of the 15th International Conference on Pattern Recognition (ICPR)*, vol. 3, 314–317.
+- **Piepho, H. P.** (2004). An algorithm for a letter-based representation of all-pairwise comparisons. *Journal of Computational and Graphical Statistics*, 13(2), 456–466.

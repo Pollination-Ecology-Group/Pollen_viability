@@ -4,9 +4,21 @@ metadata:
   name: pollen-detect-job
   namespace: stenc-ns
 spec:
-  backoffLimit: 1
+  completions: 6
+  parallelism: 6
+  completionMode: Indexed
+  backoffLimit: 3
   template:
     spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: kubernetes.io/hostname
+                    operator: NotIn
+                    values:
+                      - kub-b5.priv.cerit-sc.cz
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000
@@ -15,74 +27,85 @@ spec:
         seccompProfile:
           type: RuntimeDefault
       containers:
-      - name: pollen-detector
-        image: ultralytics/ultralytics:latest
-        workingDir: /tmp
-        command:
-          - /bin/bash
-          - -c
-          - |
-            pip install --user boto3 Pillow --quiet
-            cp /scripts/run_detections_s3.py /tmp/run_detections_s3.py
-            python /tmp/run_detections_s3.py
-        securityContext:
-          allowPrivilegeEscalation: false
-          capabilities:
-            drop: ["ALL"]
-        env:
-          - name: S3_ENDPOINT
-            value: "https://s3.cl4.du.cesnet.cz"
-          - name: S3_BUCKET
-            value: "peg-bucket"
-          - name: TILE_PREFIX
-            value: "Ostatni/Pollen_viability/tiles_640/"
-          - name: S3_MODEL_KEY
-            value: "Ostatni/Pollen_viability/trained_models/pollen_train_20261023_0756/weights/best.pt"
-          - name: MODEL_PATH
-            value: "/tmp/best.pt"
-          - name: BATCH_SIZE
-            value: "32"
-          - name: FETCH_WORKERS
-            value: "16"
-          - name: CONF
-            value: "0.55"
-          - name: IOU
-            value: "0.45"
-          - name: MAX_DIM
-            value: "130"
-          - name: FORCE_REDETECT
-            value: "1"
-          - name: AWS_ACCESS_KEY_ID
-            valueFrom:
-              secretKeyRef:
-                name: s3-creds
-                key: AWS_ACCESS_KEY_ID
-          - name: AWS_SECRET_ACCESS_KEY
-            valueFrom:
-              secretKeyRef:
-                name: s3-creds
-                key: AWS_SECRET_ACCESS_KEY
-        resources:
-          requests:
-            memory: "16Gi"
-            cpu: "4"
-            nvidia.com/gpu: "1"
-          limits:
-            memory: "32Gi"
-            cpu: "8"
-            nvidia.com/gpu: "1"
-        volumeMounts:
-        - name: script-volume
-          mountPath: /scripts
-        - name: dshm
-          mountPath: /dev/shm
+        - name: pollen-detector
+          image: ultralytics/ultralytics:latest
+          imagePullPolicy: IfNotPresent
+          workingDir: /tmp
+          command:
+            - /bin/bash
+            - -c
+            - |
+              set -e
+              export HOME=/tmp
+              export PATH=$PATH:$HOME/.local/bin
+              mkdir -p /tmp/yolo_config /tmp/matplotlib
+              pip install --user boto3 Pillow --quiet
+              cp /scripts/run_detections_s3.py /tmp/run_detections_s3.py
+              python3 /tmp/run_detections_s3.py
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          env:
+            - name: S3_ENDPOINT
+              value: "https://s3.cl4.du.cesnet.cz"
+            - name: S3_BUCKET
+              value: "peg-bucket"
+            - name: TILE_PREFIX
+              value: "Ostatni/Pollen_viability/tiles_640/"
+            - name: S3_MODEL_KEY
+              value: "Ostatni/Pollen_viability/trained_models/pollen_train_20261122_1041/weights/last.pt"
+            - name: MODEL_PATH
+              value: "/tmp/best.pt"
+            - name: BATCH_SIZE
+              value: "32"
+            - name: FETCH_WORKERS
+              value: "16"
+            - name: CONF
+              value: "0.50"
+            - name: IOU
+              value: "0.45"
+            - name: MAX_DIM
+              value: "130"
+            - name: NUM_SHARDS
+              value: "6"
+            - name: FORCE_REDETECT
+              value: "1"
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: s3-creds
+                  key: AWS_ACCESS_KEY_ID
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: s3-creds
+                  key: AWS_SECRET_ACCESS_KEY
+          resources:
+            requests:
+              memory: "8Gi"
+              cpu: "2"
+              nvidia.com/gpu: "1"
+            limits:
+              memory: "20Gi"
+              cpu: "6"
+              nvidia.com/gpu: "1"
+          volumeMounts:
+            - name: script-volume
+              mountPath: /scripts
+            - name: dshm
+              mountPath: /dev/shm
+            - name: tmp-volume
+              mountPath: /tmp
       volumes:
-      - name: script-volume
-        configMap:
-          name: detect-script
-      - name: dshm
-        emptyDir:
-          medium: Memory
-          sizeLimit: 8Gi
+        - name: script-volume
+          configMap:
+            name: detect-script
+        - name: dshm
+          emptyDir:
+            medium: Memory
+            sizeLimit: 8Gi
+        - name: tmp-volume
+          emptyDir:
+            sizeLimit: 20Gi
       restartPolicy: Never
-

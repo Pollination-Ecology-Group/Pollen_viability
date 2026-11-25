@@ -1,0 +1,6 @@
+run,cytotype,clean_tiles,blurred_filtered,raw_viable_prec_pct,cal_viable_prec_pct,cal_viable_rec_pct,cal_viable_tp_fp,raw_non_viable_prec_pct,cal_non_viable_prec_pct,cal_non_viable_rec_pct,cal_non_viable_tp_fp
+r2_additive_qc,nat_2x,35,3,99.41,99.64,100.0,273/274 (FP=1),97.73,97.22,89.74,35/36 (FP=1)
+r2_additive_qc,ory_2x,29,6,99.38,100.0,100.0,266/266 (FP=0),68.75,100.0,88.89,8/8 (FP=0)
+r2_additive_qc,nat_4x,22,3,96.69,99.26,100.0,134/135 (FP=1),91.67,100.0,94.44,17/17 (FP=0)
+r2_additive_qc,neo_4x,24,2,98.21,99.28,100.0,276/278 (FP=2),100.0,100.0,66.67,2/2 (FP=0)
+r2_additive_qc,ALL,110,14,98.64,99.58,100.0,949/953 (FP=4),90.8,98.41,89.86,62/63 (FP=1)

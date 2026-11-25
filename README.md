@@ -192,16 +192,23 @@ kubectl apply -f k8s/pollen-detect-email-watcher.yaml
 kubectl logs -l job-name=pollen-detect-job -n stenc-ns -f
 ```
 
-### 4. Interactive Quality Control (QC) & Validation Web Apps
-To achieve publishable scientific rigor, human quality control and morphometry audits are conducted through lightweight web apps hosted directly on the CERIT-SC Kubernetes cluster:
+### 4. Interactive Quality Control (QC) & Ground-Truth Labeling Web Apps
+To achieve publishable scientific rigor and support active learning retraining, human quality control and ground-truth polygon segmentation are strictly separated into two specialized web applications hosted directly on the CERIT-SC Kubernetes cluster:
 
-| Application | Live Cluster URL | Description | Authorized Users |
+| Application | Live Cluster URL | Description | Scope |
 | :--- | :--- | :--- | :---: |
-| 🌸 **Pollen Viability QC** | [viability-review-stenc.dyn.cloud.e-infra.cz](https://viability-review-stenc.dyn.cloud.e-infra.cz) | Blinded slide tile review (**191 tiles** across 72 slides, 30% inter-rater overlap). Class-agnostic NMS deduplication, missed grain recovery, Roboflow active learning relabel queue (<kbd>R</kbd>), and real-time viability bias quantification. | `jakub`, `eliska` |
-| 🌿 **Stomata Precision Review** | [stomata-review-stenc.dyn.cloud.e-infra.cz](https://stomata-review-stenc.dyn.cloud.e-infra.cz) | Companion vegetative morphometry tool. Audits guard cell and pore calipers, companion stomata detection, and border truncation flags to cross-validate gigas effects. | Open / Lab access |
+| 🌸 **Pollen Viability QC** | [viability-review-stenc.dyn.cloud.e-infra.cz](https://viability-review-stenc.dyn.cloud.e-infra.cz) | **Statistical Validation:** Blinded whole-slide tile review (**191 tiles** across 72 slides, 30% inter-rater overlap). Class corrections, false positive filtering, missed grain recovery, relabel flagging (<kbd>R</kbd>), and real-time viability bias quantification across ploidies. | Blinded QC |
+| 🏷️ **Pollen Viability Labeler** | [viability-label-stenc.dyn.cloud.e-infra.cz](https://viability-label-stenc.dyn.cloud.e-infra.cz) | **Ground-Truth & Retraining:** Interactive SAM magic wand, polygon contour editing (vertex dragging, edge `+` splitting, manual draw <kbd>P</kbd>), active learning priority queue (QC-flagged tiles first), pre-loaded model predictions for quick confirmation/editing, and one-click YOLO segmentation export. | Model Retraining |
+| 🌿 **Stomata Precision Review** | [stomata-review-stenc.dyn.cloud.e-infra.cz](https://stomata-review-stenc.dyn.cloud.e-infra.cz) | Companion vegetative morphometry tool. Audits guard cell and pore calipers, companion stomata detection, and border truncation flags to cross-validate gigas effects. | Vegetative Audit |
 
-* **Publication Validation Set (`final_20261026_1614`):** 191 tiles stratified across all 4 cytotypes (`ory_2x`: 52, `nat_2x`: 51, `nat_4x`: 44, `neo_4x`: 44), comprising 144 random density tiles and 47 targeted outlier tiles. 57 tiles are evaluated in duplicate by both reviewers to measure inter-rater reliability.
-* **Active Learning Export:** Flagged edge cases can be streamed directly as `.zip` or exported as `.csv` from the Results dashboard for one-click ingestion into Roboflow.
+* **Separation of Concerns:** 
+  - `review_app/` focuses purely on **rapid, blinded evaluation of model performance** without polygon vertex editing. Reviewers mark wrong classes, false positives, or flag difficult tiles (<kbd>R</kbd>).
+  - `src/label_app/` provides **pixel-accurate polygon annotation** using Ultralytics SAM (Segment Anything Model) with precomputed feature caching, enabling instant multi-point segmentation and boundary refinement for YOLO instance segmentation retraining.
+* **Retraining Pipeline:**
+  1. **Stage Flagged Tiles:** `python src/prepare_relabel_tiles.py` pulls QC-flagged tiles (`relabel: true`, `poor` verdict) into the labeling queue.
+  2. **Annotate with SAM:** Annotators refine polygons and resolve clumping or staining ambiguity in `label_app`.
+  3. **Export Dataset:** `python src/export_relabel_dataset.py --output-dir datasets/yolo_retrain` converts annotations into YOLO format (`images/`, `labels/`, `data.yaml`).
+  4. **Retrain Model:** `bash deploy_training.sh` launches GPU cluster training on CESNET.
 
 ---
 

@@ -1,0 +1,2140 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pollen Viability Labeling · SAM & Polygon Ground Truth</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0f172a;
+    --panel: #1e293b;
+    --panel-alt: #334155;
+    --ink: #f8fafc;
+    --ink-secondary: #cbd5e1;
+    --muted: #94a3b8;
+    --muted-light: #64748b;
+    --line: #334155;
+    --line-strong: #475569;
+
+    --accent: #38bdf8;
+    --accent-hover: #0284c7;
+    --accent-light: rgba(56, 189, 248, 0.15);
+    --accent-border: rgba(56, 189, 248, 0.4);
+
+    --viable: #10b981;
+    --viable-bg: rgba(16, 185, 129, 0.15);
+    --viable-border: #059669;
+
+    --nonviable: #ef4444;
+    --nonviable-bg: rgba(239, 68, 68, 0.15);
+    --nonviable-border: #dc2626;
+
+    --intermediate: #f59e0b;
+    --intermediate-bg: rgba(245, 158, 11, 0.15);
+    --intermediate-border: #d97706;
+
+    --debris: #64748b;
+    --debris-bg: rgba(100, 116, 139, 0.15);
+    --debris-border: #475569;
+
+    --pending: #eab308;
+    --draft: #06b6d4;
+
+    --shadow-sm: 0 1px 3px rgba(0,0,0,0.3);
+    --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.4);
+    --radius-sm: 6px;
+    --radius-md: 8px;
+    --radius-lg: 12px;
+  }
+
+  * { box-sizing: border-box; }
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #475569; border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: #64748b; }
+
+  body {
+    margin: 0;
+    font: 13.5px/1.4 'Inter', system-ui, -apple-system, sans-serif;
+    color: var(--ink);
+    background: var(--bg);
+    display: flex;
+    height: 100vh;
+    overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ---------- Sidebar ---------- */
+  #side {
+    width: 320px;
+    height: 100vh;
+    min-height: 0;
+    overflow: hidden;
+    border-right: 1px solid var(--line);
+    background: var(--panel);
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+  }
+  #side header {
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--line);
+    background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%);
+  }
+  .app-brand {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+  .brand-icon {
+    width: 28px;
+    height: 28px;
+    background: linear-gradient(135deg, #10b981 0%, #0284c7 100%);
+    color: white;
+    border-radius: var(--radius-sm);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 15px;
+    box-shadow: 0 2px 6px rgba(16, 185, 129, 0.3);
+  }
+  #side h1 {
+    font-size: 15px;
+    font-weight: 700;
+    margin: 0;
+    color: var(--ink);
+    letter-spacing: -0.01em;
+  }
+  .brand-badge {
+    margin-left: auto;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 2px 6px;
+    background: var(--accent-light);
+    color: var(--accent);
+    border: 1px solid var(--accent-border);
+    border-radius: 10px;
+  }
+
+  /* Progress Card in Sidebar */
+  .sidebar-prog {
+    background: #0f172a;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-md);
+    padding: 10px 12px;
+    margin-bottom: 10px;
+  }
+  .prog-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 12px;
+    margin-bottom: 6px;
+  }
+  .prog-label { color: var(--ink-secondary); font-weight: 500; }
+  .prog-pct {
+    font-weight: 700;
+    color: var(--accent);
+    background: var(--panel);
+    padding: 1px 6px;
+    border-radius: 4px;
+    border: 1px solid var(--line);
+  }
+  #bar {
+    height: 6px;
+    background: #334155;
+    border-radius: 3px;
+    overflow: hidden;
+  }
+  #bar div {
+    height: 100%;
+    background: linear-gradient(90deg, #10b981 0%, #38bdf8 100%);
+    transition: width 0.3s ease;
+  }
+
+  /* Tile Filter & Controls */
+  .sidebar-filters {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+    margin-bottom: 8px;
+  }
+  select, input[type="text"] {
+    background: #0f172a;
+    border: 1px solid var(--line);
+    color: var(--ink);
+    font: inherit;
+    font-size: 12px;
+    padding: 6px 8px;
+    border-radius: var(--radius-sm);
+    outline: none;
+    width: 100%;
+  }
+  select:focus, input[type="text"]:focus {
+    border-color: var(--accent);
+  }
+  .search-wrap {
+    position: relative;
+    margin-bottom: 4px;
+  }
+  .search-wrap input {
+    padding-left: 24px;
+  }
+  .search-icon {
+    position: absolute;
+    left: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--muted);
+    font-size: 11px;
+  }
+
+  /* Tile List */
+  #list {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 8px 8px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .tile {
+    padding: 8px 10px;
+    border-radius: var(--radius-sm);
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .tile:hover {
+    background: rgba(255, 255, 255, 0.04);
+    border-color: var(--line);
+  }
+  .tile.cur {
+    background: rgba(56, 189, 248, 0.12);
+    border-color: var(--accent);
+    box-shadow: 0 0 10px rgba(56, 189, 248, 0.15);
+  }
+  .tile-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+  }
+  .sp-tag {
+    font-weight: 700;
+    color: #f1f5f9;
+    background: #0f172a;
+    padding: 1px 6px;
+    border-radius: 4px;
+    border: 1px solid var(--line);
+  }
+  .slide-tag {
+    color: var(--muted);
+    font-size: 11px;
+  }
+  .tile-ok {
+    margin-left: auto;
+    color: var(--viable);
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .tile-unlabeled {
+    margin-left: auto;
+    color: var(--muted);
+    font-size: 11px;
+  }
+  .tile-flagged {
+    margin-left: auto;
+    color: #f0abfc;
+    font-size: 11px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+  }
+  .tile-xy {
+    font-size: 11px;
+    color: var(--muted-light);
+    font-family: ui-monospace, monospace;
+  }
+
+  /* Overview Image in Sidebar Bottom */
+  .sidebar-foot {
+    border-top: 1px solid var(--line);
+    padding: 10px;
+    background: #0f172a;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .sidebar-foot img {
+    width: 100%;
+    height: 70px;
+    object-fit: cover;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--line);
+  }
+
+  /* ---------- Center Main Area ---------- */
+  #main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    height: 100vh;
+  }
+  #topbar {
+    height: 52px;
+    padding: 0 18px;
+    border-bottom: 1px solid var(--line);
+    background: var(--panel);
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-shrink: 0;
+  }
+  #title {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--ink);
+  }
+  #species {
+    font-size: 12px;
+    color: var(--accent);
+    background: var(--accent-light);
+    border: 1px solid var(--accent-border);
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-weight: 600;
+  }
+  .top-btn {
+    background: #0f172a;
+    border: 1px solid var(--line);
+    color: var(--ink);
+    border-radius: var(--radius-sm);
+    padding: 5px 10px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: all 0.15s ease;
+  }
+  .top-btn:hover {
+    border-color: var(--accent);
+    color: #fff;
+  }
+  .top-btn.primary {
+    background: linear-gradient(135deg, #0284c7 0%, #2563eb 100%);
+    border-color: transparent;
+    color: white;
+  }
+  .top-btn.primary:hover {
+    box-shadow: 0 0 12px rgba(56, 189, 248, 0.4);
+  }
+  .top-btn kbd {
+    font-size: 10px;
+    background: rgba(255, 255, 255, 0.1);
+    padding: 1px 4px;
+    border-radius: 3px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+  }
+
+  /* Tool & Class Selector Bar */
+  #toolbar {
+    padding: 8px 18px;
+    background: #0f172a;
+    border-bottom: 1px solid var(--line);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    flex-shrink: 0;
+  }
+  .cls-chip {
+    padding: 4px 10px;
+    border-radius: 6px;
+    border: 1px solid var(--line);
+    background: var(--panel);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: all 0.15s ease;
+  }
+  .cls-chip:hover {
+    transform: translateY(-1px);
+  }
+  .cls-chip.active {
+    box-shadow: 0 0 10px currentColor;
+    border-color: currentColor;
+  }
+  .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+  }
+
+  /* Stage & Canvas */
+  #stage {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+    background: radial-gradient(1200px 600px at 50% 50%, #1e293b 0%, #090d16 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  canvas {
+    border-radius: var(--radius-sm);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
+    cursor: crosshair;
+  }
+
+  /* Bottom Status & Key Hints */
+  #bottombar {
+    height: 38px;
+    padding: 0 18px;
+    border-top: 1px solid var(--line);
+    background: var(--panel);
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    font-size: 11.5px;
+    color: var(--muted);
+    flex-shrink: 0;
+  }
+  #msg {
+    font-weight: 500;
+  }
+  .hints {
+    margin-left: auto;
+    display: flex;
+    gap: 12px;
+  }
+
+  /* ---------- Right Gallery Panel ---------- */
+  #gallery {
+    width: 260px;
+    height: 100vh;
+    min-height: 0;
+    overflow: hidden;
+    border-left: 1px solid var(--line);
+    background: var(--panel);
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+  }
+  #gallery header {
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--line);
+    font-size: 13px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+  }
+  #recentGrid {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 10px 10px 28px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-auto-rows: max-content;
+    align-content: start;
+    gap: 8px;
+  }
+  .recent-card {
+    position: relative;
+    aspect-ratio: 1;
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    cursor: pointer;
+    border: 2px solid var(--line);
+    background: #0f172a;
+    transition: all 0.15s ease;
+  }
+  .recent-card:hover {
+    border-color: var(--accent);
+    transform: translateY(-1px);
+  }
+  .recent-card img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+  .recent-card svg {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    pointer-events: none;
+  }
+  .recent-card svg polygon {
+    fill: transparent;
+    stroke-width: 4px;
+  }
+  .recent-card .cap {
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    font-size: 9.5px;
+    padding: 6px 4px 2px;
+    background: linear-gradient(transparent, rgba(0,0,0,0.85));
+    display: flex;
+    justify-content: space-between;
+    font-weight: 600;
+  }
+
+  /* Modals */
+  .modal-overlay {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(4px);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+  }
+  .modal-box {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-lg);
+    width: 720px;
+    max-width: 90vw;
+    max-height: 85vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8);
+  }
+  .modal-head {
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--line);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .modal-body {
+    padding: 20px;
+    overflow-y: auto;
+    flex: 1;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+  }
+  th, td {
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--line);
+    text-align: left;
+  }
+  th { color: var(--muted); font-weight: 600; }
+
+  /* Display & Opacity Controls */
+  .recent-card img, .sidebar-foot img {
+    filter: var(--img-filter, none);
+  }
+  .disp-inline {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: #0b1324;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm);
+    padding: 3px 8px;
+    font-size: 11px;
+    color: var(--muted-light);
+  }
+  .disp-inline input[type="range"], .disp-row input[type="range"] {
+    accent-color: var(--accent);
+    cursor: pointer;
+  }
+  .disp-inline input[type="range"] {
+    width: 68px;
+    height: 14px;
+  }
+  #dispPopover {
+    margin: 0;
+    inset: auto;
+    position: fixed;
+    top: 96px;
+    right: 280px;
+    width: 286px;
+    background: var(--panel);
+    color: var(--ink);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-lg);
+    padding: 14px 16px;
+    box-shadow: 0 18px 48px rgba(0, 0, 0, 0.75);
+    z-index: 120;
+  }
+  #dispPopover::backdrop {
+    background: transparent;
+  }
+  .disp-title {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 12.5px;
+    font-weight: 700;
+    margin-bottom: 10px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--line);
+  }
+  .disp-row {
+    display: grid;
+    grid-template-columns: 98px 1fr 44px;
+    align-items: center;
+    gap: 8px;
+    font-size: 11.5px;
+    margin-bottom: 8px;
+    color: var(--muted-light);
+  }
+  .disp-row output {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    font-family: ui-monospace, monospace;
+    font-size: 11px;
+    color: var(--ink);
+  }
+  .disp-toggles {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-top: 10px;
+    padding-top: 8px;
+    border-top: 1px solid var(--line);
+    font-size: 11.5px;
+    color: var(--muted-light);
+  }
+</style>
+</head>
+<body>
+
+<!-- Left Sidebar: Tile Queue & Prioritization -->
+<aside id="side">
+  <header>
+    <div class="app-brand">
+      <div class="brand-icon">🌸</div>
+      <h1>Pollen Viability Labeler</h1>
+      <span class="brand-badge">SAM &amp; Poly</span>
+    </div>
+
+    <div class="sidebar-prog">
+      <div class="prog-row">
+        <span class="prog-label" id="progCount">0 / 0 tiles</span>
+        <span class="prog-pct" id="progPct">0%</span>
+      </div>
+      <div id="bar"><div></div></div>
+    </div>
+
+    <div class="sidebar-filters">
+      <select id="listFilter">
+        <option value="retrain_todo">🎯 Retrain Queue (Leak-Free)</option>
+        <option value="todo">All Todo</option>
+        <option value="flagged">🏷️ Flagged / Active</option>
+        <option value="done">Done only</option>
+        <option value="all">All tiles</option>
+      </select>
+      <select id="listSort">
+        <option value="improvement">🎯 Model Improvement (Active Learning)</option>
+        <option value="qc_flags">🏷️ QC Flags &amp; Errors First</option>
+        <option value="deficit">Deficit first</option>
+        <option value="cytotype">Cytotype Balance</option>
+        <option value="slide">Slide Order</option>
+      </select>
+    </div>
+
+    <div class="search-wrap">
+      <span class="search-icon">🔍</span>
+      <input type="text" id="tileSearch" placeholder="Filter slide, cytotype...">
+    </div>
+  </header>
+
+  <div id="list"></div>
+
+  <div class="sidebar-foot">
+    <div style="font-size:11px; color:var(--muted); font-weight:600;">SLIDE OVERVIEW</div>
+    <img id="ov" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'/%3E" alt="Slide overview">
+  </div>
+</aside>
+
+<!-- Center Workspace: Canvas & Interactive Annotation -->
+<main id="main">
+  <div id="topbar">
+    <div style="display:flex; align-items:center; gap:8px;">
+      <button class="top-btn" onclick="step(-1)" title="Previous tile (←)">←</button>
+      <button class="top-btn" onclick="step(1)" title="Next tile (→)">→</button>
+      <span id="title">—</span>
+      <span id="species">—</span>
+      <div id="grainTally" style="display:flex; align-items:center; gap:8px; margin-left:12px; font-size:12px; font-weight:600;"></div>
+    </div>
+
+    <div style="display:flex; align-items:center; gap:8px; margin-left:auto;">
+      <button class="top-btn" onclick="openInQC()" style="color:#f472b6; border-color:rgba(244,114,182,0.4);" title="Open this specific tile in Blinded Quality Control Review">🌸 View in QC ↗</button>
+      <button class="top-btn" id="btnDash" onclick="openDashboard()" title="View training set cytotype progress">📊 Progress</button>
+      <a href="/api/export_yolo" download style="text-decoration:none;">
+        <button class="top-btn" style="color:#38bdf8; border-color:rgba(56,189,248,0.4);" title="Export all polygon labels to YOLO segmentation format (.zip)">📦 Export YOLO</button>
+      </a>
+      <button class="top-btn" id="btnBackQueue" onclick="goBackToWork()" style="display:none; color:#34d399; border-color:rgba(52,211,153,0.45);" title="Return to the unlabeled tile you were working on">↩ Back to Queue</button>
+      <button class="top-btn" id="btnSkip" onclick="skipTile()" title="Skip tile without saving or mark unclear [K]">Skip ⏭ <kbd>K</kbd></button>
+      <button class="top-btn primary" id="btnSave" onclick="save()" title="Save all polygon annotations on this tile and move to next (Ctrl+Enter)">Save &amp; Next <kbd>Ctrl+⏎</kbd></button>
+    </div>
+  </div>
+
+  <div id="toolbar">
+    <button class="top-btn primary" id="btnWand" onclick="setTool('wand')" title="SAM Magic Wand Tool (click grain to segment, right-click to subtract background) [W]">🪄 SAM Wand <kbd>W</kbd></button>
+    <button class="top-btn" id="btnSelect" onclick="setTool('select')" title="Select & Edit: click grain to select, drag points to reshape (Alt+drag smooth falloff, [ ] softness) [S]">🎯 Select &amp; Edit <kbd>S</kbd></button>
+    <button class="top-btn" id="btnDraw" onclick="setTool('draw')" title="Draw smooth Catmull-Rom polygon & auto-snap to grain edge [P]">✏️ Draw Poly <kbd>P</kbd></button>
+    <button class="top-btn" id="btnSnap" onclick="snapSelected()" title="Snap selected outline (or active draft) tightly to SAM grain edge [E]">🧲 Snap Edge <kbd>E</kbd></button>
+    <button class="top-btn" id="btnSnapAll" onclick="snapAll()" title="Snap ALL outlines on this tile to SAM grain edges [Shift+E]">✨ Snap All</button>
+    <button class="top-btn" id="btnSmooth" onclick="smoothSelected(false)" title="Round/smoothen selected outline keeping exact area (Shift+O = smooth all) [O]">⭕ Smooth <kbd>O</kbd></button>
+    <button class="top-btn" id="btnUndo" onclick="undo()" title="Undo last change [Z / Ctrl+Z]">↩ Undo <kbd>Z</kbd></button>
+    <button class="top-btn" id="btnDel" onclick="deleteSelected()" title="Delete selected grain / vertex / discard draft [Del / X]">🗑️ Delete <kbd>Del</kbd></button>
+    <button class="top-btn" id="btnResetPred" onclick="resetPredictions()" title="Reset polygons back to model predictions">🔄 Reset</button>
+
+    <div style="height:18px; width:1px; background:var(--line); margin:0 4px;"></div>
+
+    <span style="font-size:11px; color:var(--muted); font-weight:600; text-transform:uppercase;">Class:</span>
+    <div class="cls-chip active" data-cls="viable" onclick="setCls('viable')" style="color:var(--viable)">
+      <span class="dot" style="background:var(--viable)"></span>Viable <kbd>1</kbd>
+    </div>
+    <div class="cls-chip" data-cls="non_viable" onclick="setCls('non_viable')" style="color:var(--nonviable)">
+      <span class="dot" style="background:var(--nonviable)"></span>Non-viable <kbd>2</kbd>
+    </div>
+    <div class="cls-chip" data-cls="intermediate" onclick="setCls('intermediate')" style="color:var(--intermediate)">
+      <span class="dot" style="background:var(--intermediate)"></span>Intermediate <kbd>3</kbd>
+    </div>
+    <div class="cls-chip" data-cls="debris" onclick="setCls('debris')" style="color:var(--debris)">
+      <span class="dot" style="background:var(--debris)"></span>Debris <kbd>4</kbd>
+    </div>
+
+    <div style="margin-left:auto; display:flex; align-items:center; gap:7px;">
+      <div class="disp-inline" title="Mask Fill Opacity (0% = outline-only so stain color is untinted; click label to toggle 0%)">
+        <span id="lblFillQuick" onclick="toggleZeroFill()" style="cursor:pointer; user-select:none; font-weight:600;">Fill</span>
+        <input type="range" id="rngFillQuick" min="0" max="80" step="2" value="14" aria-label="Mask fill opacity">
+        <span id="outFillQuick" style="min-width:26px; text-align:right; font-family:ui-monospace,monospace;">14%</span>
+      </div>
+      <button class="top-btn" id="btnToggleMasks" onclick="toggleMasks()" title="Show/hide all outlines [M] (or hold H to peek)">👁 <kbd>M</kbd></button>
+      <button class="top-btn" id="btnDisp" popovertarget="dispPopover" onclick="positionDispPopover()" title="Adjust opacity, line thickness, brightness, contrast, saturation & scale bar">🎨 Display ▾</button>
+      <button class="top-btn" id="btnZoomReset" onclick="resetZoom()" title="Reset zoom [0]" style="min-width:48px;">100%</button>
+    </div>
+  </div>
+
+  <!-- Display & Microscope Image Adjustments Popover -->
+  <div id="dispPopover" popover="auto">
+    <div class="disp-title">
+      <span>🎨 Overlay &amp; Image Display</span>
+      <button class="top-btn" onclick="resetDisplayPrefs()" style="padding:2px 7px; font-size:11px;">↺ Reset</button>
+    </div>
+    <label class="disp-row">
+      <span>Fill opacity</span>
+      <input type="range" id="ctlFill" min="0" max="80" step="2" value="14">
+      <output id="valFill">14%</output>
+    </label>
+    <label class="disp-row">
+      <span>Line opacity</span>
+      <input type="range" id="ctlStrokeAlpha" min="15" max="100" step="5" value="95">
+      <output id="valStrokeAlpha">95%</output>
+    </label>
+    <label class="disp-row">
+      <span>Line width</span>
+      <input type="range" id="ctlStrokeW" min="0.8" max="4.5" step="0.2" value="1.8">
+      <output id="valStrokeW">1.8px</output>
+    </label>
+    <label class="disp-row">
+      <span>Vertex size</span>
+      <input type="range" id="ctlVertexR" min="0" max="7" step="0.5" value="4">
+      <output id="valVertexR">4.0px</output>
+    </label>
+    <div style="height:1px; background:var(--line); margin:8px 0;"></div>
+    <label class="disp-row">
+      <span>☀ Brightness</span>
+      <input type="range" id="ctlBright" min="50" max="180" step="2" value="100">
+      <output id="valBright">100%</output>
+    </label>
+    <label class="disp-row">
+      <span>◐ Contrast</span>
+      <input type="range" id="ctlContrast" min="50" max="200" step="2" value="100">
+      <output id="valContrast">100%</output>
+    </label>
+    <label class="disp-row">
+      <span>🌈 Saturation</span>
+      <input type="range" id="ctlSat" min="30" max="220" step="5" value="100">
+      <output id="valSat">100%</output>
+    </label>
+    <div class="disp-toggles">
+      <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
+        <input type="checkbox" id="chkScaleBar" checked style="accent-color:var(--accent);">
+        <span>Show µm scale &amp; ploidy ring</span>
+      </label>
+    </div>
+  </div>
+
+  <div id="stage">
+    <canvas id="cv"></canvas>
+  </div>
+
+  <div id="bottombar">
+    <span id="msg">Ready</span>
+    <div class="hints">
+      <span>🖱️ <b>Wand:</b> click grain · right-click subtract</span>
+      <span>🧲 <b>Edge &amp; Smooth:</b> <kbd>E</kbd> snap edge (<kbd>⇧E</kbd> all) · <kbd>O</kbd> smooth (<kbd>⇧O</kbd> all)</span>
+      <span>🖱️ <b>Points:</b> drag · Alt+drag (<kbd>[</kbd><kbd>]</kbd>) · hover edge (+)</span>
+      <span>🖱️ <b>Zoom/Pan:</b> Wheel · Space+drag</span>
+    </div>
+  </div>
+</main>
+
+<!-- Right Sidebar: Recently Saved Previews -->
+<aside id="gallery">
+  <header>
+    <span>Recently Labeled</span>
+    <span id="recentCount" style="color:var(--muted); font-size:11px;">0</span>
+  </header>
+  <div id="recentGrid"></div>
+</aside>
+
+<!-- Dashboard Modal -->
+<div class="modal-overlay" id="dashModal" onclick="if(event.target===this) closeDashboard()">
+  <div class="modal-box">
+    <div class="modal-head">
+      <h3 style="margin:0; font-size:15px;">Dataset &amp; Retraining Progress</h3>
+      <button class="top-btn" onclick="closeDashboard()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="dashContent"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const COL = {
+  viable: '#10b981',
+  non_viable: '#ef4444',
+  intermediate: '#f59e0b',
+  debris: '#64748b',
+  pending: '#eab308',
+  draft: '#06b6d4'
+};
+const $ = id => document.getElementById(id);
+const api = async (url, body) => {
+  const res = await fetch(url, body ? {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)} : {});
+  if (!res.ok) {
+    const txt = await res.text().catch(() => '');
+    throw new Error(`HTTP ${res.status}: ${txt.slice(0, 120)}`);
+  }
+  return await res.json();
+};
+const msg = (t, err) => { $('msg').textContent = t; $('msg').style.color = err ? '#ef4444' : 'var(--muted)'; };
+
+const cv = $('cv'), ctx = cv.getContext('2d');
+let tiles = [], cur = null, img = new Image(), objs = [], sel = -1, draft = null;
+let dirty = false, t0 = 0, scale = 1, baseScale = 1;
+let drag = null, soft = 0, drawMode = false, drawPts = [], mousePt = null;
+let pendingWands = [], nextWandId = 1;
+let hoverVertex = null, hoverEdge = null;
+let undoStack = [];
+let recent = [];
+let hide = false;
+let showMasks = true;
+
+// Persisted Overlay & Microscope Display Preferences
+const DEFAULT_DISP = { fill: 14, strokeAlpha: 95, strokeW: 1.8, vertexR: 4.0, bright: 100, contrast: 100, sat: 100, scaleBar: true, prevFill: 14 };
+let disp = { ...DEFAULT_DISP };
+try {
+  const savedDisp = JSON.parse(localStorage.getItem('viability_display_prefs') || 'null');
+  if (savedDisp && typeof savedDisp === 'object') disp = { ...DEFAULT_DISP, ...savedDisp };
+} catch (e) {}
+
+function imgFilterCss() {
+  if (disp.bright === 100 && disp.contrast === 100 && disp.sat === 100) return 'none';
+  return `brightness(${disp.bright}%) contrast(${disp.contrast}%) saturate(${disp.sat}%)`;
+}
+
+function hexToRgba(hex, alpha) {
+  const h = (hex || '#ffffff').replace('#', '');
+  const v = h.length === 3 ? h.split('').map(c => c + c).join('') : h;
+  const r = parseInt(v.slice(0, 2), 16) || 255;
+  const g = parseInt(v.slice(2, 4), 16) || 255;
+  const b = parseInt(v.slice(4, 6), 16) || 255;
+  return `rgba(${r},${g},${b},${Math.max(0, Math.min(1, alpha)).toFixed(3)})`;
+}
+
+function syncDispUI(persist = false) {
+  document.documentElement.style.setProperty('--img-filter', imgFilterCss());
+  const setVal = (id, v) => { const el = $(id); if (el) el.value = v; };
+  const setTxt = (id, t) => { const el = $(id); if (el) el.textContent = t; };
+  setVal('rngFillQuick', disp.fill); setTxt('outFillQuick', disp.fill + '%');
+  setVal('ctlFill', disp.fill);      setTxt('valFill', disp.fill + '%');
+  setVal('ctlStrokeAlpha', disp.strokeAlpha); setTxt('valStrokeAlpha', disp.strokeAlpha + '%');
+  setVal('ctlStrokeW', disp.strokeW);         setTxt('valStrokeW', Number(disp.strokeW).toFixed(1) + 'px');
+  setVal('ctlVertexR', disp.vertexR);         setTxt('valVertexR', Number(disp.vertexR).toFixed(1) + 'px');
+  setVal('ctlBright', disp.bright);           setTxt('valBright', disp.bright + '%');
+  setVal('ctlContrast', disp.contrast);       setTxt('valContrast', disp.contrast + '%');
+  setVal('ctlSat', disp.sat);                 setTxt('valSat', disp.sat + '%');
+  if ($('chkScaleBar')) $('chkScaleBar').checked = !!disp.scaleBar;
+  if ($('btnToggleMasks')) $('btnToggleMasks').classList.toggle('primary', !showMasks);
+  if (persist) {
+    try { localStorage.setItem('viability_display_prefs', JSON.stringify(disp)); } catch (e) {}
+  }
+  draw();
+}
+
+function toggleZeroFill() {
+  if (disp.fill > 0) { disp.prevFill = disp.fill; disp.fill = 0; }
+  else { disp.fill = disp.prevFill || 18; }
+  syncDispUI(true);
+}
+
+function toggleMasks() {
+  showMasks = !showMasks;
+  if ($('btnToggleMasks')) $('btnToggleMasks').classList.toggle('primary', !showMasks);
+  draw();
+  msg(showMasks ? '👁 Outlines visible' : '👁 Outlines hidden (press M to restore)');
+}
+
+function resetDisplayPrefs() {
+  disp = { ...DEFAULT_DISP };
+  showMasks = true;
+  syncDispUI(true);
+  msg('↺ Display & opacity settings reset to defaults');
+}
+
+function positionDispPopover() {
+  const btn = $('btnDisp'), pop = $('dispPopover');
+  if (!btn || !pop) return;
+  const r = btn.getBoundingClientRect();
+  pop.style.top = Math.round(r.bottom + 6) + 'px';
+  pop.style.right = Math.max(12, Math.round(window.innerWidth - r.right)) + 'px';
+}
+
+// Pan & Zoom
+let view = { zoom: 1, ox: 0, oy: 0 };
+let isPanning = false, spaceDown = false, panStart = { x: 0, y: 0, ox: 0, oy: 0 };
+
+function clampPan() {
+  if (view.zoom <= 1.01) { view.zoom = 1; view.ox = 0; view.oy = 0; return; }
+  const totalW = 640 * scale, totalH = 640 * scale;
+  view.ox = Math.min(60, Math.max(cv.width - totalW - 60, view.ox));
+  view.oy = Math.min(60, Math.max(cv.height - totalH - 60, view.oy));
+}
+
+function updateZoomHud() {
+  const btn = $('btnZoomReset');
+  if (btn) btn.textContent = Math.round(view.zoom * 100) + '%';
+}
+
+function zoomAt(factor, mx, my) {
+  const oldZoom = view.zoom;
+  const newZoom = Math.min(10.0, Math.max(1.0, oldZoom * factor));
+  if (Math.abs(newZoom - oldZoom) < 0.001) return;
+  view.ox = mx - (mx - view.ox) * (newZoom / oldZoom);
+  view.oy = my - (my - view.oy) * (newZoom / oldZoom);
+  view.zoom = newZoom;
+  scale = baseScale * view.zoom;
+  if (view.zoom <= 1.01) { view.zoom = 1; view.ox = 0; view.oy = 0; scale = baseScale; }
+  else clampPan();
+  draw();
+  updateZoomHud();
+}
+
+function resetZoom() {
+  view.zoom = 1; view.ox = 0; view.oy = 0; scale = baseScale;
+  draw(); updateZoomHud();
+}
+
+function fit() {
+  const s = $('stage'); if (!s) return;
+  const avail = Math.min(s.clientHeight - 40, s.clientWidth - 40);
+  if (avail <= 0) return;
+  cv.width = cv.height = Math.max(260, avail);
+  baseScale = cv.width / 640;
+  scale = baseScale * view.zoom;
+  clampPan(); draw(); updateZoomHud();
+}
+window.addEventListener('resize', fit);
+
+/* ---------- Tile List & Navigation ---------- */
+async function loadList(refresh) {
+  tiles = await api('/api/tiles' + (refresh ? '?refresh=1' : ''));
+  sortTiles();
+  renderList();
+  renderProgress();
+}
+
+function sortTiles() {
+  const s = $('listSort').value, f = $('listFilter').value;
+  tiles.sort((a, b) => {
+    if (f !== 'done' && a.labeled !== b.labeled) return a.labeled ? 1 : -1;
+    if (s === 'improvement') return (a.priority_rank ?? 9999) - (b.priority_rank ?? 9999);
+    if (s === 'qc_flags') {
+      if (a.flagged !== b.flagged) return a.flagged ? -1 : 1;
+      return (a.priority_rank ?? 9999) - (b.priority_rank ?? 9999);
+    }
+    if (s === 'deficit') return (a.sp_done ?? 0) - (b.sp_done ?? 0);
+    if (s === 'cytotype') return (a.cytotype || '').localeCompare(b.cytotype || '');
+    if (s === 'slide') return (a.scan || '').localeCompare(b.scan || '');
+    return (a.priority_rank ?? 9999) - (b.priority_rank ?? 9999);
+  });
+}
+
+function shown(t) {
+  const f = $('listFilter').value, q = ($('tileSearch').value || '').trim().toLowerCase();
+  if (f === 'retrain_todo' && (t.labeled || t.in_qc_holdout)) return false;
+  if (f === 'todo' && t.labeled) return false;
+  if (f === 'done' && !t.labeled) return false;
+  if (f === 'flagged' && !t.flagged) return false;
+  return !q || `${t.cytotype || ''} ${t.scan || ''} ${t.id || ''}`.toLowerCase().includes(q);
+}
+
+function renderProgress() {
+  const total = tiles.length, done = tiles.filter(t => t.labeled).length;
+  const pct = total ? Math.round(100 * done / total) : 0;
+  $('progCount').textContent = `${done} / ${total} tiles`;
+  $('progPct').textContent = `${pct}%`;
+  $('bar').firstElementChild.style.width = pct + '%';
+}
+
+function renderList() {
+  let html = '';
+  tiles.forEach((t, i) => {
+    if (!shown(t) && (!cur || t.id !== cur.id)) return;
+    const isCur = cur && t.id === cur.id;
+    const flagTag = t.flagged ? '<span class="tile-flagged">🏷️ QC Flag</span>' : '';
+    const reasonTag = (!t.flagged && t.improvement_reasons && t.improvement_reasons.length)
+      ? `<span class="tile-reason" style="font-size:10px; color:#38bdf8; background:rgba(56,189,248,0.12); padding:1px 5px; border-radius:4px;">${t.improvement_reasons[0]}</span>`
+      : '';
+    const statusTag = t.labeled ? '<span class="tile-ok">✓ done</span>' : `<span class="tile-unlabeled">#${t.priority_rank || i + 1}</span>`;
+    html += `<div class="tile ${isCur ? 'cur' : ''}" onclick="openTile(${i})">
+      <div class="tile-header">
+        <span class="sp-tag">${t.cytotype || 'slide'}</span>
+        <span class="slide-tag">${t.scan || ''}</span>
+        ${flagTag || reasonTag || statusTag}
+      </div>
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-top:2px;">
+        <span class="tile-xy">${t.id.split('/').pop()}</span>
+        ${t.improvement_score ? `<span style="font-size:10px; color:var(--muted);">${(t.improvement_score / 1000).toFixed(1)}k pts</span>` : ''}
+      </div>
+    </div>`;
+  });
+  $('list').innerHTML = html || '<div style="padding:16px; text-align:center; color:var(--muted)">No tiles match</div>';
+}
+
+function step(dir, force=false) {
+  const from = cur ? cur.index : -1;
+  for (let i = from + dir; i >= 0 && i < tiles.length; i += dir) if (shown(tiles[i])) return openTile(i, force);
+  // Wrap around if at the end
+  if (dir > 0) {
+    for (let i = 0; i < from; i++) if (shown(tiles[i])) return openTile(i, force);
+  } else {
+    for (let i = tiles.length - 1; i > from; i--) if (shown(tiles[i])) return openTile(i, force);
+  }
+  msg(dir > 0 ? 'Last tile in list' : 'First tile in list');
+}
+
+function skipTile() {
+  dirty = false;
+  draft = null;
+  step(1, true);
+}
+
+function updateGrainTally() {
+  const tally = { viable: 0, non_viable: 0, intermediate: 0, debris: 0 };
+  objs.forEach(o => { if (tally[o.cls] !== undefined) tally[o.cls]++; });
+  const total = objs.length;
+  const el = $('grainTally');
+  if (!el) return;
+  el.innerHTML = `
+    <span style="color:var(--viable); padding:2px 7px; background:rgba(16,185,129,0.12); border-radius:6px;">🟢 ${tally.viable}</span>
+    <span style="color:var(--nonviable); padding:2px 7px; background:rgba(239,68,68,0.12); border-radius:6px;">🔴 ${tally.non_viable}</span>
+    <span style="color:var(--intermediate); padding:2px 7px; background:rgba(245,158,11,0.12); border-radius:6px;">🟡 ${tally.intermediate}</span>
+    <span style="color:var(--muted); font-size:11px;">(${total} grains)</span>
+  `;
+}
+
+function resetPredictions() {
+  if (!cur) return;
+  const list = cur.prelabels || [];
+  if (!list.length) {
+    alert('No model predictions found for this tile.');
+    return;
+  }
+  if (!confirm(`Reset this tile to the ${list.length} initial model predictions?`)) return;
+  undoStack.push(JSON.parse(JSON.stringify(objs)));
+  objs = list.map(m => ({
+    polygon: m.polygon, cls: m.cls || 'viable', status: 'set',
+    source: m.sources ? m.sources.join('+') : 'model',
+    score: m.score, eq_diam_um: m.eq_diam_um
+  }));
+  dirty = true;
+  sel = -1;
+  draw();
+  msg(`🔄 Reset to ${objs.length} initial model predictions`);
+}
+
+function openInQC() {
+  if (!cur) return;
+  const isLocal = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+  const base = isLocal ? 'http://127.0.0.1:8080' : 'https://viability-review-stenc.dyn.cloud.e-infra.cz';
+  const tileParam = cur.item_id || cur.id;
+  window.open(`${base}/?tile=${encodeURIComponent(tileParam)}`, '_blank');
+}
+
+async function openTile(i, force=false) {
+  if (!force && dirty && !confirm('Unsaved polygon annotations on this tile. Leave anyway?')) return false;
+  const t = tiles[i]; if (!t) return false;
+  const d = await api('/api/tile/' + t.id);
+  cur = {...d, index: i}; sel = -1; draft = null; pendingWands = [];
+  hoverVertex = null; hoverEdge = null; drag = null; dirty = false;
+  drawMode = false; drawPts = []; mousePt = null; undoStack = []; t0 = Date.now();
+  resetZoom();
+
+  if (d.label) {
+    objs = d.label.objects.map(o => ({...o, status: 'set'}));
+    msg(`Saved by ${d.label.labeler} (${d.label.saved_at.slice(0, 10)}) · ${objs.length} grains`);
+  } else {
+    objs = (d.prelabels || []).map(m => ({
+      polygon: m.polygon, cls: m.cls || 'viable', status: 'set',
+      source: m.sources ? m.sources.join('+') : 'model',
+      score: m.score, eq_diam_um: m.eq_diam_um
+    }));
+    msg(`🤖 Loaded ${objs.length} model predictions · Confirm or edit`);
+  }
+
+  const baseTitle = t.id.split('/').pop();
+  const impBadge = d.improvement_score ? ` · ${(d.improvement_score / 1000).toFixed(1)}k pts` : '';
+  $('title').textContent = `${baseTitle} (#${t.priority_rank || i + 1}${impBadge})`;
+  $('species').textContent = d.cytotype ? d.cytotype.toUpperCase() : 'POLLEN';
+  $('ov').src = '/api/overview/' + t.id.split('/').slice(0, -1).join('/');
+  img = new Image(); img.onload = draw; img.src = '/api/image/' + t.id;
+
+  if (tiles[i + 1]) api('/api/prefetch/' + tiles[i + 1].id, {});
+
+  renderList();
+  renderProgress();
+  renderRecent();
+  updateBackBtn();
+  return true;
+}
+
+/* ---------- Drawing & Canvas Engine ---------- */
+function path(poly) {
+  ctx.beginPath();
+  poly.forEach(([x, y], j) => j ? ctx.lineTo(x * scale, y * scale) : ctx.moveTo(x * scale, y * scale));
+  ctx.closePath();
+}
+
+const TYPICAL_UM = { nat_2x: 20.1, ory_2x: 20.3, nat_4x: 22.1, neo_4x: 24.5 };
+
+function drawScaleBar() {
+  if (!disp.scaleBar || !cur || !cur.um_per_px) return;
+  const px = um => (um / cur.um_per_px) * scale;
+  let bar = 50;
+  while (px(bar) > cv.width * 0.28 && bar > 5) bar /= 2;
+  const typ = TYPICAL_UM[cur.cytotype] || 0;
+  const d = typ ? px(typ) : 0;
+  const h = Math.max(26, d + 10);
+  const x0 = 10, y0 = cv.height - h - 8;
+  ctx.save();
+  ctx.font = '600 11.5px Inter, system-ui, sans-serif';
+  const text = (t, x, y) => {
+    ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,0.8)'; ctx.strokeText(t, x, y);
+    ctx.fillStyle = '#f8fafc'; ctx.fillText(t, x, y);
+  };
+  ctx.lineWidth = 4.5; ctx.strokeStyle = 'rgba(0,0,0,0.65)';
+  ctx.beginPath(); ctx.moveTo(x0 + 6, y0 + h / 2); ctx.lineTo(x0 + 6 + px(bar), y0 + h / 2); ctx.stroke();
+  ctx.lineWidth = 2.5; ctx.strokeStyle = '#ffffff'; ctx.stroke();
+  ctx.textBaseline = 'middle';
+  text(`${bar} µm`, x0 + 12 + px(bar), y0 + h / 2);
+  if (typ) {
+    const cx = x0 + 54 + px(bar) + d / 2;
+    ctx.lineWidth = 1.8; ctx.strokeStyle = '#38bdf8';
+    ctx.beginPath(); ctx.arc(cx, y0 + h / 2, d / 2, 0, Math.PI * 2); ctx.stroke();
+    text(`${cur.cytotype} ≈ ${typ} µm`, cx + d / 2 + 6, y0 + h / 2);
+  }
+  ctx.restore();
+}
+
+function draw() {
+  ctx.clearRect(0, 0, cv.width, cv.height);
+  ctx.save();
+  ctx.translate(view.ox, view.oy);
+
+  if (img.complete && img.naturalWidth) {
+    ctx.filter = imgFilterCss();
+    ctx.drawImage(img, 0, 0, 640 * scale, 640 * scale);
+    ctx.filter = 'none';
+  }
+
+  if (hide || !showMasks) {
+    updateGrainTally();
+    ctx.restore();
+    drawScaleBar();
+    return;
+  }
+
+  const fillAlpha = disp.fill / 100.0;
+  const lineAlpha = disp.strokeAlpha / 100.0;
+  const baseW = Number(disp.strokeW) || 1.8;
+
+  // Draw Polygons
+  objs.forEach((o, i) => {
+    if (draft && draft.replacingIdx === i) return; // Do not draw old polygon under active SAM draft
+    const c = COL[o.cls] || '#ffffff';
+    const isSel = i === sel;
+    path(o.polygon);
+    if (fillAlpha > 0 || isSel) {
+      const aFill = isSel ? Math.min(0.75, Math.max(0.12, fillAlpha * 1.6)) : fillAlpha;
+      if (aFill > 0) {
+        ctx.fillStyle = hexToRgba(c, aFill);
+        ctx.fill();
+      }
+    }
+    ctx.lineWidth = isSel ? Math.max(baseW + 1.2, baseW * 1.6) : baseW;
+    ctx.strokeStyle = hexToRgba(c, isSel ? 1.0 : lineAlpha);
+    ctx.stroke();
+  });
+
+  // Selected polygon vertices & edge split handles
+  const vRad = Number(disp.vertexR);
+  if (sel >= 0 && objs[sel] && !drawMode && vRad > 0) {
+    const poly = objs[sel].polygon;
+    poly.forEach(([x, y], j) => {
+      const isHov = hoverVertex && hoverVertex.objIdx === sel && hoverVertex.vertexIdx === j;
+      ctx.beginPath();
+      ctx.arc(x * scale, y * scale, isHov ? vRad + 2.5 : vRad, 0, Math.PI * 2);
+      ctx.fillStyle = isHov ? '#06b6d4' : '#ffffff';
+      ctx.fill();
+      ctx.strokeStyle = isHov ? '#ffffff' : '#0f172a';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    });
+
+    if (hoverEdge && hoverEdge.objIdx === sel) {
+      const [qx, qy] = hoverEdge.pt;
+      ctx.beginPath();
+      ctx.arc(qx * scale, qy * scale, Math.max(4.5, vRad + 1.5), 0, Math.PI * 2);
+      ctx.fillStyle = '#06b6d4';
+      ctx.fill();
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 1.6;
+      ctx.stroke();
+    }
+  }
+
+  // Draw Mode preview
+  if (drawMode && drawPts.length) {
+    ctx.beginPath();
+    drawPts.forEach(([x, y], j) => j ? ctx.lineTo(x * scale, y * scale) : ctx.moveTo(x * scale, y * scale));
+    if (mousePt) ctx.lineTo(mousePt[0] * scale, mousePt[1] * scale);
+    ctx.strokeStyle = COL.draft;
+    ctx.lineWidth = 2.2;
+    ctx.stroke();
+
+    drawPts.forEach(([x, y], j) => {
+      ctx.beginPath();
+      ctx.arc(x * scale, y * scale, j === 0 ? 6 : 4, 0, Math.PI * 2);
+      ctx.fillStyle = j === 0 ? '#10b981' : '#ffffff';
+      ctx.fill();
+      ctx.strokeStyle = COL.draft;
+      ctx.stroke();
+    });
+  }
+
+  // SAM Draft Preview
+  if (draft) {
+    if (draft.mask) {
+      path(draft.mask.polygon);
+      ctx.fillStyle = COL.draft + '44';
+      ctx.fill();
+      ctx.lineWidth = 2.4;
+      ctx.strokeStyle = COL.draft;
+      ctx.stroke();
+    }
+    draft.points.forEach(([x, y], j) => {
+      ctx.beginPath();
+      ctx.arc(x * scale, y * scale, 5, 0, Math.PI * 2);
+      ctx.fillStyle = draft.labels[j] ? '#10b981' : '#ef4444';
+      ctx.fill();
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    });
+  }
+
+  // Pending SAM clicks visual feedback
+  if (pendingWands.length > 0) {
+    pendingWands.forEach(w => {
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(w.pt[0] * scale, w.pt[1] * scale, 5.5, 0, Math.PI * 2);
+      ctx.fillStyle = w.positive ? '#10b981' : '#ef4444';
+      ctx.fill();
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 1.6;
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.arc(w.pt[0] * scale, w.pt[1] * scale, 11, 0, Math.PI * 2);
+      ctx.strokeStyle = w.positive ? '#10b981' : '#ef4444';
+      ctx.lineWidth = 2.0;
+      ctx.setLineDash([3, 3]);
+      ctx.stroke();
+      ctx.restore();
+    });
+  }
+
+  updateGrainTally();
+  ctx.restore();
+  drawScaleBar();
+}
+
+/* ---------- Geometry & Interactivity Helpers ---------- */
+const evPt = e => {
+  const r = cv.getBoundingClientRect();
+  const mx = (e.clientX - r.left) * (cv.width / r.width);
+  const my = (e.clientY - r.top) * (cv.height / r.height);
+  return [(mx - view.ox) / scale, (my - view.oy) / scale];
+};
+const dist2 = (a, b) => (a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2;
+
+function inside([x, y], poly) {
+  let c = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const [xi, yi] = poly[i], [xj, yj] = poly[j];
+    if ((yi > y) !== (yj > y) && x < (xj - xi) * (y - yi) / (yj - yi) + xi) c = !c;
+  }
+  return c;
+}
+
+function nearPolygon(pt, poly, maxDistPx) {
+  if (inside(pt, poly)) return true;
+  const d2Max = maxDistPx * maxDistPx;
+  for (let i = 0; i < poly.length; i++) {
+    const a = poly[i], b = poly[(i + 1) % poly.length];
+    const l = dist2(a, b) || 1;
+    const t = Math.max(0, Math.min(1, ((pt[0] - a[0]) * (b[0] - a[0]) + (pt[1] - a[1]) * (b[1] - a[1])) / l));
+    const q = [a[0] + t * (b[0] - a[0]), a[1] + t * (b[1] - a[1])];
+    if (dist2(q, pt) <= d2Max) return true;
+  }
+  return false;
+}
+
+const area = p => Math.abs(p.reduce((s, [x, y], i) => { const [x2, y2] = p[(i + 1) % p.length]; return s + x * y2 - x2 * y; }, 0) / 2);
+
+function findVertex(pt) {
+  const tol = (10 / scale) ** 2;
+  if (sel >= 0 && objs[sel]) {
+    let best = -1, bd = tol;
+    objs[sel].polygon.forEach((v, j) => {
+      const d = dist2(v, pt);
+      if (d < bd) { bd = d; best = j; }
+    });
+    if (best >= 0) return { objIdx: sel, vertexIdx: best, pt: objs[sel].polygon[best] };
+  }
+  return null;
+}
+
+function findEdge(pt) {
+  const tol = (9 / scale) ** 2;
+  if (sel >= 0 && objs[sel]) {
+    const p = objs[sel].polygon;
+    let best = null, bd = tol;
+    for (let i = 0; i < p.length; i++) {
+      const a = p[i], b = p[(i + 1) % p.length], l = dist2(a, b) || 1;
+      const t = Math.max(0.05, Math.min(0.95, ((pt[0] - a[0]) * (b[0] - a[0]) + (pt[1] - a[1]) * (b[1] - a[1])) / l));
+      const q = [a[0] + t * (b[0] - a[0]), a[1] + t * (b[1] - a[1])], d = dist2(q, pt);
+      if (d < bd) { bd = d; best = { objIdx: sel, edgeIdx: i, pt: q }; }
+    }
+    if (best) return best;
+  }
+  return null;
+}
+
+function snap() {
+  undoStack.push(JSON.stringify(objs));
+  if (undoStack.length > 50) undoStack.shift();
+}
+
+function undo() {
+  if (drawMode && drawPts.length) { drawPts.pop(); draw(); return; }
+  if (draft) { draft = null; draw(); msg('Draft discarded'); return; }
+  if (!undoStack.length) { msg('Nothing to undo'); return; }
+  objs = JSON.parse(undoStack.pop());
+  sel = -1; dirty = true; draw();
+  msg('Undone');
+}
+
+/* ---------- Tool Modes & SAM Magic Wand ---------- */
+let tool = 'wand';
+let activeCls = 'viable';
+
+function setTool(t) {
+  if (t === 'draw') {
+    tool = 'draw';
+    drawMode = true;
+    drawPts = [];
+    mousePt = null;
+  } else {
+    tool = t;
+    drawMode = false;
+    drawPts = [];
+    mousePt = null;
+  }
+  const bw = $('btnWand'), bs = $('btnSelect'), bd = $('btnDraw');
+  if (bw) bw.classList.toggle('primary', tool === 'wand');
+  if (bs) bs.classList.toggle('primary', tool === 'select');
+  if (bd) bd.classList.toggle('primary', tool === 'draw');
+  cv.style.cursor = tool === 'wand' ? 'crosshair' : (tool === 'draw' ? 'crosshair' : 'default');
+  draw();
+  msg(tool === 'wand' ? '🪄 SAM Wand: Click any grain to segment · Right-click to exclude area · Click next grain or ⏎ to keep' :
+     (tool === 'select' ? '🎯 Select & Edit: Click grain to select · Drag points to reshape · Double-click to SAM' :
+                          '✏️ Draw: Click points around grain · Click start or ⏎ to close'));
+}
+
+async function wand(pt, positive = true, targetObjIdx = null) {
+  if (!cur) return;
+
+  // 1. If we are refining an active draft:
+  const isRefine = draft && (
+    !positive || // right-click is always refinement (negative prompt)
+    (draft.mask && nearPolygon(pt, draft.mask.polygon, 35 / scale)) ||
+    (draft.points && draft.points.some(p => dist2(p, pt) * (scale ** 2) < 2500)) // within 50 screen pixels
+  );
+
+  if (isRefine) {
+    draft.points.push([Math.round(pt[0]), Math.round(pt[1])]);
+    draft.labels.push(positive ? 1 : 0);
+    const wandId = nextWandId++;
+    pendingWands.push({ id: wandId, pt: pt, positive: positive, timestamp: Date.now() });
+    draw();
+    msg(positive ? '🪄 SAM adding positive point…' : '🪄 SAM subtracting negative point…');
+
+    let r = null;
+    try {
+      r = await api('/api/sam/' + cur.id, { points: draft.points, labels: draft.labels });
+    } catch (e) {
+      console.error(e);
+      msg('⚠️ SAM error: ' + (e.message || e), true);
+    }
+    pendingWands = pendingWands.filter(w => w.id !== wandId);
+    if (!draft) return;
+    if (r && r.mask) {
+      draft.mask = r.mask;
+      draw();
+      msg(`Refined ⌀ ${r.mask.eq_diam_um} µm (${r.ms} ms) · Press 1/2/3/4 or ⏎ to keep`);
+    } else {
+      draw();
+      msg('⚠️ SAM could not segment with this refinement', true);
+    }
+    return;
+  }
+
+  // 2. If an existing draft was active, auto-commit it before starting the new grain
+  if (draft && draft.mask) {
+    commitDraft(draft.cls || activeCls);
+  }
+
+  // 3. Determine if clicked inside an existing grain to re-segment it
+  let replacingIdx = targetObjIdx;
+  let grainCls = activeCls;
+  if (replacingIdx === null) {
+    const hits = objs.map((o, i) => [i, o]).filter(([, o]) => inside(pt, o.polygon)).sort((a, b) => area(a[1].polygon) - area(b[1].polygon));
+    if (hits.length) {
+      replacingIdx = hits[0][0];
+      grainCls = hits[0][1].cls || activeCls;
+    }
+  } else if (objs[replacingIdx]) {
+    grainCls = objs[replacingIdx].cls || activeCls;
+  }
+
+  const wandId = nextWandId++;
+  const tileId = cur.id;
+  pendingWands.push({ id: wandId, pt: pt, positive: positive, timestamp: Date.now() });
+  draw();
+  msg('🪄 SAM thinking…');
+
+  let r = null;
+  try {
+    r = await api('/api/sam/' + tileId, {
+      points: [[Math.round(pt[0]), Math.round(pt[1])]],
+      labels: [positive ? 1 : 0]
+    });
+  } catch (err) {
+    console.error('SAM error:', err);
+    msg('⚠️ SAM server error: ' + (err.message || err), true);
+  }
+
+  pendingWands = pendingWands.filter(w => w.id !== wandId);
+  if (!cur || cur.id !== tileId) return;
+
+  if (!r || !r.mask) {
+    msg('⚠️ SAM found no grain here. Try clicking closer to the center.', true);
+    draw();
+    return;
+  }
+
+  // If user rapidly clicked multiple grains, commit immediately
+  if (pendingWands.length > 0) {
+    snap();
+    const newObj = {
+      polygon: r.mask.polygon,
+      cls: grainCls,
+      status: 'set',
+      source: 'wand',
+      score: r.mask.score,
+      eq_diam_um: r.mask.eq_diam_um
+    };
+    if (replacingIdx !== null && replacingIdx < objs.length) {
+      objs[replacingIdx] = newObj;
+      sel = replacingIdx;
+    } else {
+      objs.push(newObj);
+      sel = objs.length - 1;
+    }
+    dirty = true;
+    draw();
+    msg(`Added ${grainCls} ⌀ ${r.mask.eq_diam_um} µm (${r.ms} ms)`);
+  } else {
+    // Set as active draft for refinement
+    draft = {
+      points: [[Math.round(pt[0]), Math.round(pt[1])]],
+      labels: [positive ? 1 : 0],
+      mask: r.mask,
+      replacingIdx: replacingIdx,
+      cls: grainCls
+    };
+    if (replacingIdx !== null) sel = replacingIdx;
+    draw();
+    msg(`Draft ⌀ ${r.mask.eq_diam_um} µm (${r.ms} ms) · Right-click to exclude area · Click next grain or ⏎ to keep`);
+  }
+}
+
+function commitDraft(cls) {
+  if (!draft || !draft.mask) return;
+  snap();
+  const c = cls || draft.cls || activeCls;
+  const newObj = {
+    polygon: draft.mask.polygon,
+    cls: c,
+    status: 'set',
+    source: 'wand',
+    score: draft.mask.score,
+    eq_diam_um: draft.mask.eq_diam_um
+  };
+  if (draft.replacingIdx !== null && draft.replacingIdx !== undefined && draft.replacingIdx < objs.length) {
+    objs[draft.replacingIdx] = newObj;
+    sel = draft.replacingIdx;
+  } else {
+    objs.push(newObj);
+    sel = objs.length - 1;
+  }
+  draft = null;
+  dirty = true;
+  draw();
+  msg(`Saved ${c} ⌀ ${newObj.eq_diam_um} µm`);
+}
+
+let lastMousePt = [320, 320];
+
+/* Smooth outlines (ported from Pollen_latitude): centripetal Catmull-Rom curve through clicked points
+   and area-preserving Chaikin corner-cutting (removes stair-steps & squarishness without changing grain size). */
+function splineThrough(pts, perSpan = 8) {
+  const n = pts.length, out = [];
+  if (n < 3) return pts.slice();
+  const d = (a, b) => Math.max(Math.sqrt(Math.hypot(b[0] - a[0], b[1] - a[1])), 1e-3);
+  for (let i = 0; i < n; i++) {
+    const p0 = pts[(i - 1 + n) % n], p1 = pts[i], p2 = pts[(i + 1) % n], p3 = pts[(i + 2) % n];
+    const t1 = d(p0, p1), t2 = t1 + d(p1, p2), t3 = t2 + d(p2, p3);
+    for (let s = 0; s < perSpan; s++) {
+      const t = t1 + (t2 - t1) * s / perSpan;
+      const L = (a, b, ta, tb) => [0, 1].map(k => ((tb - t) * a[k] + (t - ta) * b[k]) / (tb - ta));
+      const A1 = L(p0, p1, 0, t1), A2 = L(p1, p2, t1, t2), A3 = L(p2, p3, t2, t3);
+      const B1 = L(A1, A2, 0, t2), B2 = L(A2, A3, t1, t3);
+      out.push(L(B1, B2, t1, t2));
+    }
+  }
+  return out.map(([x, y]) => [Math.min(640, Math.max(0, Math.round(x * 10) / 10)), Math.min(640, Math.max(0, Math.round(y * 10) / 10))]);
+}
+
+function roundOutline(poly, iters = 2) {
+  if (!poly || poly.length < 3) return poly;
+  const a0 = area(poly);
+  const onBorder = pt => pt[0] <= 1.5 || pt[1] <= 1.5 || pt[0] >= 638.5 || pt[1] >= 638.5;
+  let p = poly;
+  for (let k = 0; k < iters; k++) {
+    const q = [];
+    p.forEach((a, i) => {
+      const b = p[(i + 1) % p.length];
+      if (onBorder(a) && onBorder(b)) q.push(a.slice(), b.slice());
+      else q.push([0.75 * a[0] + 0.25 * b[0], 0.75 * a[1] + 0.25 * b[1]], [0.25 * a[0] + 0.75 * b[0], 0.25 * a[1] + 0.75 * b[1]]);
+    });
+    p = q;
+  }
+  const cx = p.reduce((s, v) => s + v[0], 0) / p.length, cy = p.reduce((s, v) => s + v[1], 0) / p.length;
+  const f = Math.sqrt(a0 / Math.max(area(p), 1e-6));
+  const res = [];
+  p.forEach(v => {
+    const w = onBorder(v) ? v.slice() : [Math.min(640, Math.max(0, cx + (v[0] - cx) * f)), Math.min(640, Math.max(0, cy + (v[1] - cy) * f))];
+    if (!res.length || Math.hypot(w[0] - res[res.length - 1][0], w[1] - res[res.length - 1][1]) >= 1.5) res.push(w);
+  });
+  return (res.length >= 3 ? res : p).map(([x, y]) => [Math.round(x * 10) / 10, Math.round(y * 10) / 10]);
+}
+
+function markEdited(o, tag = 'edited') {
+  o.eq_diam_um = +(2 * Math.sqrt(Math.max(1, area(o.polygon)) / Math.PI) * (cur?.um_per_px || 0.8772)).toFixed(1);
+  if (tag && !(o.source || '').includes(tag)) o.source = (o.source || 'model') + '+' + tag;
+  dirty = true;
+}
+
+function resolveTargetIdx() {
+  if (sel >= 0 && objs[sel]) return sel;
+  const hits = objs.map((o, i) => [i, o]).filter(([, o]) => inside(lastMousePt, o.polygon)).sort((a, b) => area(a[1].polygon) - area(b[1].polygon));
+  if (hits.length) { sel = hits[0][0]; return sel; }
+  return -1;
+}
+
+function smoothSelected(allOnTile = false) {
+  if (!cur) return;
+  if (allOnTile) {
+    if (!objs.length) { msg('No outlines on this tile to smooth'); return; }
+    snap();
+    objs.forEach(o => { o.polygon = roundOutline(o.polygon, 2); markEdited(o, 'smooth'); });
+    draw();
+    msg(`⭕ Smoothed all ${objs.length} outlines (area preserved) · Z to undo`);
+    return;
+  }
+  if (draft && draft.mask) {
+    draft.mask.polygon = roundOutline(draft.mask.polygon, 2);
+    draft.mask.eq_diam_um = +(2 * Math.sqrt(Math.max(1, area(draft.mask.polygon)) / Math.PI) * (cur.um_per_px || 0.8772)).toFixed(1);
+    draw();
+    msg(`⭕ Smoothed draft ⌀ ${draft.mask.eq_diam_um} µm`);
+    return;
+  }
+  const idx = resolveTargetIdx();
+  if (idx < 0) { msg('Hover over or click a grain first (or press Shift+O to smooth all outlines)'); return; }
+  snap();
+  objs[idx].polygon = roundOutline(objs[idx].polygon, 2);
+  markEdited(objs[idx], 'smooth');
+  draw();
+  msg(`⭕ Smoothed outline ⌀ ${objs[idx].eq_diam_um} µm (same area) · Z to undo`);
+}
+
+async function snapPolygon(poly) {
+  const r = await api('/api/snap/' + cur.id, { polygon: poly }).catch(() => null);
+  return r && r.mask ? r.mask : null;
+}
+
+async function snapDraft() {
+  const d = draft;
+  if (!d || !d.mask) return;
+  const m = await snapPolygon(d.mask.polygon);
+  if (draft !== d) return;
+  if (m) {
+    d.drawn = d.mask;
+    d.mask = Object.assign({}, d.mask, { polygon: m.polygon, eq_diam_um: m.eq_diam_um });
+    d.snapped = true;
+    draw();
+    msg(`🧲 Snapped to grain edge ⌀ ${m.eq_diam_um} µm · E = back to drawn outline · 1/2/3/⏎ to keep`);
+  } else {
+    msg(`Kept smoothed outline ⌀ ${d.mask.eq_diam_um} µm (no sharper SAM edge) · 1/2/3/⏎ to keep`);
+  }
+}
+
+async function snapSelected() {
+  if (!cur) return;
+  if (draft && draft.mask) {
+    if (draft.snapped && draft.drawn) {
+      const s = draft.mask; draft.mask = draft.drawn; draft.drawn = s; draft.snapped = false;
+      draw(); msg('Restored drawn outline (E = snap to grain edge again)');
+    } else if (draft.drawn) {
+      const s = draft.mask; draft.mask = draft.drawn; draft.drawn = s; draft.snapped = true;
+      draw(); msg('🧲 Snapped to grain edge');
+    } else {
+      await snapDraft();
+    }
+    return;
+  }
+  const idx = resolveTargetIdx();
+  if (idx < 0 || !objs[idx]) { msg('Hover over or click a grain first (or Shift+E / ✨ Snap All for whole tile)'); return; }
+  const o = objs[idx], before = o.polygon;
+  msg('🧲 Snapping outline to SAM grain edge…');
+  const m = await snapPolygon(before);
+  if (objs[idx] !== o || o.polygon !== before) return;
+  if (!m) { msg('No sharper SAM edge found – smoothing outline instead'); smoothSelected(false); return; }
+  snap();
+  o.polygon = m.polygon;
+  markEdited(o, 'snap');
+  draw();
+  msg(`🧲 Snapped to grain edge ⌀ ${o.eq_diam_um} µm · Z to undo`);
+}
+
+async function snapAll() {
+  if (!cur || !objs.length) { msg('No outlines on this tile to snap'); return; }
+  const tileId = cur.id;
+  msg(`✨ Snapping all ${objs.length} outlines to SAM grain edges…`);
+  try {
+    const r = await api('/api/snap_all/' + tileId, { polygons: objs.map(o => o.polygon) });
+    if (!cur || cur.id !== tileId || !r.masks || r.masks.length !== objs.length) return;
+    snap();
+    r.masks.forEach((m, i) => {
+      objs[i].polygon = m.polygon;
+      objs[i].eq_diam_um = m.eq_diam_um;
+      markEdited(objs[i], 'snap');
+    });
+    draw();
+    msg(`✨ Snapped ${r.n_snapped}/${r.total} grains to exact SAM edges (${r.ms} ms) · Z to undo`);
+  } catch (e) {
+    msg('⚠️ Snap All error: ' + (e.message || e), true);
+  }
+}
+
+function toggleDraw() {
+  setTool(tool === 'draw' ? 'wand' : 'draw');
+}
+
+function finishDraw() {
+  if (drawPts.length < 3) { msg('Need at least 3 points', true); return; }
+  const poly = splineThrough(drawPts.map(([x, y]) => [Math.round(x), Math.round(y)]));
+  const d_um = +(2 * Math.sqrt(Math.max(1, area(poly)) / Math.PI) * (cur.um_per_px || 0.8772)).toFixed(1);
+  setTool('wand');
+  draft = {
+    points: [], labels: [], manual: true, cls: activeCls || 'viable',
+    mask: { polygon: poly, score: null, eq_diam_um: d_um }
+  };
+  draw();
+  msg(`Drawn smooth outline ⌀ ${d_um} µm · snapping to grain edge…`);
+  snapDraft();
+}
+
+function setCls(c) {
+  activeCls = c;
+  document.querySelectorAll('.cls-chip').forEach(ch => {
+    ch.classList.toggle('active', ch.dataset.cls === c);
+  });
+  if (draft && draft.mask) {
+    commitDraft(c);
+    return;
+  }
+  if (sel >= 0 && objs[sel]) {
+    snap();
+    objs[sel].cls = c;
+    dirty = true;
+    draw();
+    msg(`Changed to ${c}`);
+  }
+}
+
+function deleteSelected() {
+  if (draft) { draft = null; draw(); msg('Draft discarded'); return; }
+  if (hoverVertex) {
+    const poly = objs[hoverVertex.objIdx].polygon;
+    if (poly.length <= 3) { msg('Polygon must have at least 3 points', true); return; }
+    snap();
+    poly.splice(hoverVertex.vertexIdx, 1);
+    hoverVertex = null;
+    dirty = true;
+    draw();
+    msg('Vertex removed');
+    return;
+  }
+  if (sel >= 0) {
+    snap();
+    objs.splice(sel, 1);
+    sel = -1;
+    dirty = true;
+    draw();
+    msg('Grain removed');
+  }
+}
+
+/* ---------- Canvas Event Listeners ---------- */
+cv.addEventListener('mousemove', e => {
+  if (!cur) return;
+  if (isPanning) {
+    const r = cv.getBoundingClientRect();
+    view.ox = panStart.ox + (e.clientX - panStart.x) * (cv.width / r.width);
+    view.oy = panStart.oy + (e.clientY - panStart.y) * (cv.height / r.height);
+    clampPan(); draw(); return;
+  }
+  const pt = evPt(e);
+  lastMousePt = pt;
+
+  if (drag) {
+    const o = objs[drag.i];
+    const dx = pt[0] - drag.start[0], dy = pt[1] - drag.start[1];
+    if (e.altKey && soft > 0) {
+      const n = drag.orig.length;
+      o.polygon = drag.orig.map(([x, y], j) => {
+        const k = Math.min(Math.abs(j - drag.idx), n - Math.abs(j - drag.idx));
+        const w = k <= 3 * soft ? Math.exp(-(k * k) / (2 * soft * soft)) : 0;
+        return [Math.min(640, Math.max(0, x + w * dx)), Math.min(640, Math.max(0, y + w * dy))];
+      });
+    } else {
+      o.polygon[drag.idx] = [Math.min(640, Math.max(0, drag.origPt[0] + dx)), Math.min(640, Math.max(0, drag.origPt[1] + dy))];
+    }
+    dirty = true; draw(); return;
+  }
+
+  if (drawMode) {
+    mousePt = [Math.min(640, Math.max(0, pt[0])), Math.min(640, Math.max(0, pt[1]))];
+    draw(); return;
+  }
+
+  hoverVertex = findVertex(pt);
+  hoverEdge = !hoverVertex ? findEdge(pt) : null;
+  cv.style.cursor = hoverVertex ? 'grab' : (hoverEdge ? 'copy' : 'crosshair');
+  draw();
+});
+
+cv.addEventListener('mousedown', e => {
+  if (!cur) return;
+  if (e.button === 1 || (e.button === 0 && spaceDown)) {
+    isPanning = true;
+    panStart = { x: e.clientX, y: e.clientY, ox: view.ox, oy: view.oy };
+    cv.style.cursor = 'grabbing';
+    e.preventDefault(); return;
+  }
+  const pt = evPt(e);
+  lastMousePt = pt;
+
+  if (drawMode) {
+    if (e.button === 0) {
+      if (drawPts.length >= 3 && Math.hypot(pt[0] - drawPts[0][0], pt[1] - drawPts[0][1]) * scale < 14) {
+        finishDraw(); return;
+      }
+      drawPts.push([Math.round(pt[0]), Math.round(pt[1])]);
+      draw();
+    } else if (e.button === 2 && drawPts.length) {
+      drawPts.pop(); draw();
+    }
+    return;
+  }
+
+  // Right-click: SAM negative prompt, remove vertex, or cancel selection
+  if (e.button === 2) {
+    const vHit = findVertex(pt);
+    if (vHit) {
+      const poly = objs[vHit.objIdx].polygon;
+      if (poly.length <= 3) { msg('Polygon must have at least 3 points', true); return; }
+      snap();
+      poly.splice(vHit.vertexIdx, 1);
+      hoverVertex = null;
+      dirty = true;
+      draw();
+      msg(`Vertex removed · ${poly.length} points remaining`);
+      return;
+    }
+    if (draft) {
+      wand(pt, false);
+      return;
+    }
+    if (sel >= 0) {
+      sel = -1;
+      draw();
+      return;
+    }
+    return;
+  }
+
+  // Left-click
+  if (e.button === 0) {
+    // If a polygon is currently selected, allow direct vertex dragging or edge point splitting
+    if (sel >= 0 && objs[sel]) {
+      const vHit = findVertex(pt);
+      if (vHit && vHit.objIdx === sel) {
+        snap();
+        drag = {
+          i: sel, idx: vHit.vertexIdx, start: pt,
+          origPt: objs[sel].polygon[vHit.vertexIdx].slice(),
+          orig: objs[sel].polygon.map(p => p.slice())
+        };
+        draw(); return;
+      }
+
+      const eHit = findEdge(pt);
+      if (eHit && eHit.objIdx === sel) {
+        snap();
+        const newPt = [Math.round(eHit.pt[0]), Math.round(eHit.pt[1])];
+        objs[sel].polygon.splice(eHit.edgeIdx + 1, 0, newPt);
+        drag = {
+          i: sel, idx: eHit.edgeIdx + 1, start: pt,
+          origPt: newPt.slice(),
+          orig: objs[sel].polygon.map(p => p.slice())
+        };
+        hoverVertex = { objIdx: sel, vertexIdx: eHit.edgeIdx + 1, pt: newPt };
+        hoverEdge = null;
+        dirty = true; draw(); return;
+      }
+    }
+
+    // In Select Mode: clicking selects / inspects grain
+    if (tool === 'select') {
+      const hits = objs.map((o, i) => [i, o]).filter(([, o]) => inside(pt, o.polygon)).sort((a, b) => area(a[1].polygon) - area(b[1].polygon));
+      if (hits.length) {
+        sel = hits[0][0]; draw();
+        msg(`Selected ${objs[sel].cls} (⌀ ${objs[sel].eq_diam_um || '?'} µm) · Drag vertices to reshape`);
+        return;
+      }
+      sel = -1; draw(); return;
+    }
+
+    // Default: SAM Wand Mode (tool === 'wand')
+    // Clicking ANY grain segments/re-segments it. Clicking empty space adds a new grain!
+    wand(pt, true);
+  }
+});
+
+cv.addEventListener('dblclick', e => {
+  const pt = evPt(e);
+  lastMousePt = pt;
+  wand(pt, true);
+});
+
+window.addEventListener('mouseup', () => {
+  if (isPanning) isPanning = false;
+  if (drag) { drag = null; draw(); }
+});
+
+cv.addEventListener('wheel', e => {
+  e.preventDefault();
+  const r = cv.getBoundingClientRect();
+  const mx = (e.clientX - r.left) * (cv.width / r.width);
+  const my = (e.clientY - r.top) * (cv.height / r.height);
+  zoomAt(e.deltaY < 0 ? 1.15 : 1 / 1.15, mx, my);
+}, { passive: false });
+
+cv.addEventListener('contextmenu', e => e.preventDefault());
+
+/* ---------- Keyboard Bindings ---------- */
+document.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT') return;
+  if (e.key === 'Escape') {
+    if (drawMode) { toggleDraw(); return; }
+    draft = null; sel = -1; draw(); msg(''); return;
+  }
+  if (e.code === 'Space' && !e.repeat) {
+    if (draft && draft.mask) { commitDraft(draft.cls || activeCls); return; }
+    spaceDown = true; return;
+  }
+
+  const k = e.key.toLowerCase();
+  if (k === '1') setCls('viable');
+  else if (k === '2') setCls('non_viable');
+  else if (k === '3') setCls('intermediate');
+  else if (k === '4') setCls('debris');
+  else if (k === 'w') setTool('wand');
+  else if (k === 's') setTool('select');
+  else if (k === 'p') toggleDraw();
+  else if (k === 'o') { e.preventDefault(); smoothSelected(e.shiftKey); }
+  else if (k === 'e') { e.preventDefault(); if (e.shiftKey) snapAll(); else snapSelected(); }
+  else if (e.key === '[') { soft = Math.max(0, soft - 1); msg(`Alt+drag falloff softness: ${soft}`); }
+  else if (e.key === ']') { soft = Math.min(8, soft + 1); msg(`Alt+drag falloff softness: ${soft}`); }
+  else if (e.key === 'Tab') {
+    e.preventDefault();
+    if (objs.length) { sel = (sel + (e.shiftKey ? objs.length - 1 : 1)) % objs.length; draw(); }
+  }
+  else if (k === 'm') { e.preventDefault(); toggleMasks(); }
+  else if (k === 'h') { hide = true; draw(); }
+  else if (k === 'z') { e.preventDefault(); undo(); }
+  else if (k === 'x' || k === 'delete' || k === 'backspace') deleteSelected();
+  else if (k === 'enter') {
+    e.preventDefault();
+    if (e.ctrlKey || e.metaKey) {
+      save();
+    } else if (drawMode) {
+      finishDraw();
+    } else if (draft && draft.mask) {
+      commitDraft(draft.cls || activeCls);
+    } else if (sel >= 0 && objs[sel]) {
+      const doneCls = objs[sel].cls;
+      const doneDiam = objs[sel].eq_diam_um || '?';
+      sel = -1; drag = null; hoverVertex = null; hoverEdge = null;
+      draw();
+      msg(`✓ Confirmed ${doneCls} outline (⌀ ${doneDiam} µm) · Click Save & Next (or Ctrl+⏎) when tile is finished`);
+    } else {
+      msg('ℹ️ Enter confirms the current grain only · Click Save & Next (or press Ctrl+⏎) to save tile & advance');
+    }
+  }
+  else if (k === 'k') skipTile();
+  else if (k === 'arrowright') step(1);
+  else if (k === 'arrowleft') step(-1);
+  else if (k === '+' || k === '=') zoomAt(1.2, cv.width/2, cv.height/2);
+  else if (k === '-') zoomAt(1/1.2, cv.width/2, cv.height/2);
+  else if (k === '0') resetZoom();
+});
+
+document.addEventListener('keyup', e => {
+  if (e.code === 'Space') spaceDown = false;
+  if (e.key && e.key.toLowerCase() === 'h') { hide = false; draw(); }
+});
+
+let returnTo = null;
+
+function updateBackBtn() {
+  const b = $('btnBackQueue');
+  if (b) b.style.display = (returnTo && (!cur || cur.id !== returnTo)) ? 'inline-flex' : 'none';
+}
+
+function goBackToWork() {
+  if (!returnTo) return;
+  const target = returnTo;
+  returnTo = null;
+  updateBackBtn();
+  const idx = tiles.findIndex(t => t.id === target);
+  if (idx >= 0) openTile(idx);
+}
+
+/* ---------- Saving & Previews ---------- */
+async function save() {
+  if (!cur) return;
+  if (drawMode && drawPts.length >= 3) {
+    finishDraw();
+  }
+  if (draft && draft.mask) {
+    commitDraft(draft.cls || activeCls);
+  }
+  const body = {
+    objects: objs.map(({status, ...o}) => o),
+    seconds_spent: Math.round((Date.now() - t0) / 1000)
+  };
+  const r = await api('/api/label/' + cur.id, body);
+  if (r.ok) {
+    if (tiles[cur.index]) tiles[cur.index].labeled = true;
+    dirty = false;
+    msg(`✓ Saved ${r.n} grains to S3`);
+    renderProgress();
+    renderList();
+    await loadRecent();
+    if (returnTo && returnTo !== cur.id) {
+      goBackToWork();
+    } else {
+      returnTo = null;
+      updateBackBtn();
+      step(1, true);
+    }
+  } else {
+    msg('Save failed', true);
+  }
+}
+
+async function loadRecent() {
+  try {
+    recent = await api('/api/labels');
+    $('recentCount').textContent = recent.length;
+    renderRecent();
+  } catch (e) {}
+}
+
+function renderRecent() {
+  $('recentGrid').innerHTML = recent.map((r, rIdx) => {
+    const isCur = cur && cur.id === r.id;
+    const polys = r.objects.map(o => `<polygon points="${o.polygon.map(p => p.join(',')).join(' ')}" stroke="${COL[o.cls] || '#fff'}"/>`).join('');
+    const safeId = r.id.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+    const borderStyle = isCur ? 'border-color:var(--accent); box-shadow:0 0 10px rgba(56,189,248,0.35);' : '';
+    return `<div class="recent-card" style="${borderStyle}" onclick="openRecent('${safeId}')" title="#${rIdx + 1} · ${r.id}">
+      <img src="/api/image/${r.id}" alt="" loading="lazy">
+      <svg viewBox="0 0 640 640" preserveAspectRatio="none">${polys}</svg>
+      <div class="cap"><span>${r.cytotype || 'slide'}</span><span>${r.objects.length} grains</span></div>
+    </div>`;
+  }).join('') || '<div style="color:var(--muted); font-size:11px; grid-column:1/-1;">No saved labels</div>';
+}
+
+async function openRecent(id) {
+  if (cur && cur.id === id) return;
+  const back = returnTo || (cur && tiles[cur.index] && !tiles[cur.index].labeled ? cur.id : null);
+  let idx = tiles.findIndex(t => t.id === id);
+  if (idx < 0) {
+    await loadList(true);
+    idx = tiles.findIndex(t => t.id === id);
+  }
+  if (idx >= 0) {
+    const ok = await openTile(idx);
+    if (ok) {
+      returnTo = back;
+      updateBackBtn();
+      renderRecent();
+      if (returnTo) msg(`${$('msg').textContent} · Saving or clicking ↩ Back returns to your queue tile`);
+    }
+  } else {
+    msg('⚠️ Could not locate tile in queue: ' + id, true);
+  }
+}
+
+function openDashboard() {
+  const byCyto = {};
+  tiles.forEach(t => {
+    const c = t.cytotype || 'other';
+    if (!byCyto[c]) byCyto[c] = { total: 0, done: 0 };
+    byCyto[c].total++;
+    if (t.labeled) byCyto[c].done++;
+  });
+  let html = '<table><thead><tr><th>Cytotype</th><th>Completed</th><th>Progress</th></tr></thead><tbody>';
+  Object.entries(byCyto).forEach(([c, s]) => {
+    const pct = s.total ? Math.round(100 * s.done / s.total) : 0;
+    html += `<tr><td><b>${c}</b></td><td>${s.done} / ${s.total}</td><td>${pct}%</td></tr>`;
+  });
+  html += '</tbody></table>';
+  $('dashContent').innerHTML = html;
+  $('dashModal').style.display = 'flex';
+}
+
+function closeDashboard() {
+  $('dashModal').style.display = 'none';
+}
+
+// Search & filter bindings
+$('listFilter').onchange = () => { sortTiles(); renderList(); };
+$('listSort').onchange = () => { sortTiles(); renderList(); };
+$('tileSearch').oninput = renderList;
+
+// Display & opacity slider bindings
+$('rngFillQuick').oninput = e => { disp.fill = +e.target.value; if (disp.fill > 0) disp.prevFill = disp.fill; syncDispUI(true); };
+$('ctlFill').oninput = e => { disp.fill = +e.target.value; if (disp.fill > 0) disp.prevFill = disp.fill; syncDispUI(true); };
+$('ctlStrokeAlpha').oninput = e => { disp.strokeAlpha = +e.target.value; syncDispUI(true); };
+$('ctlStrokeW').oninput = e => { disp.strokeW = +e.target.value; syncDispUI(true); };
+$('ctlVertexR').oninput = e => { disp.vertexR = +e.target.value; syncDispUI(true); };
+$('ctlBright').oninput = e => { disp.bright = +e.target.value; syncDispUI(true); };
+$('ctlContrast').oninput = e => { disp.contrast = +e.target.value; syncDispUI(true); };
+$('ctlSat').oninput = e => { disp.sat = +e.target.value; syncDispUI(true); };
+$('chkScaleBar').onchange = e => { disp.scaleBar = !!e.target.checked; syncDispUI(true); };
+syncDispUI(false);
+
+// Startup
+(async () => {
+  fit();
+  await loadList();
+  loadRecent();
+  const urlParams = new URLSearchParams(location.search);
+  const reqTile = urlParams.get('tile');
+  let startIdx = -1;
+  if (reqTile) {
+    startIdx = tiles.findIndex(t => t.id === reqTile || t.item_id === reqTile || t.id.includes(reqTile));
+  }
+  if (startIdx < 0) {
+    startIdx = tiles.findIndex(t => !t.labeled);
+  }
+  if (tiles.length) openTile(startIdx >= 0 ? startIdx : 0);
+})();
+</script>
+</body>
+</html>

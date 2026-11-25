@@ -27,3 +27,5 @@ output/size_analysis/
 
 # QC review app passwords (never commit)
 review_app/.credentials
+
+/.luarc.json

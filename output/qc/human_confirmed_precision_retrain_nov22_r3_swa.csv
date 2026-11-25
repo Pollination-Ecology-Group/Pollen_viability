@@ -1,0 +1,6 @@
+run,cytotype,clean_tiles,blurred_filtered,raw_viable_prec_pct,cal_viable_prec_pct,cal_viable_rec_pct,cal_viable_tp_fp,raw_non_viable_prec_pct,cal_non_viable_prec_pct,cal_non_viable_rec_pct,cal_non_viable_tp_fp
+retrain_nov22_r3_swa,nat_2x,35,3,99.41,98.23,96.53,278/283 (FP=5),97.73,97.14,79.07,34/35 (FP=1)
+retrain_nov22_r3_swa,ory_2x,29,6,99.38,97.11,98.9,269/277 (FP=8),68.75,85.71,54.55,6/7 (FP=1)
+retrain_nov22_r3_swa,nat_4x,22,3,96.69,98.54,99.26,135/137 (FP=2),91.67,66.67,10.0,2/3 (FP=1)
+retrain_nov22_r3_swa,neo_4x,24,2,98.21,99.26,96.43,270/272 (FP=2),100.0,100.0,50.0,2/2 (FP=0)
+retrain_nov22_r3_swa,ALL,110,14,98.64,98.25,97.54,952/969 (FP=17),90.8,93.62,56.41,44/47 (FP=3)

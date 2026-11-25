@@ -1,81 +1,117 @@
+#!/usr/bin/env python3
+"""
+train_model.py — Leak-free, NaN-proof YOLO11m-seg training pipeline for Pollen Viability.
 
-import os
-# Force YOLO to use a writable config directory
-os.environ['YOLO_CONFIG_DIR'] = '/app/yolo_config'
-os.environ['MPLCONFIGDIR'] = '/tmp/matplotlib'
+Key safeguards & improvements over the Oct 23 training script:
+  1. NaN-Proof Optimization (`amp=False` / TF32 + `AdamW` + `cos_lr=True` + `copy_paste=0.0`):
+     Eliminates the Epoch-25 FP16/AMP overflow that poisoned Ultralytics EMA weights in
+     `pollen_train_20261023_0756` (where 276/300 validation epochs became NaN).
+  2. Strict Blind-QC Benchmark Isolation:
+     Loads `Ostatni/Pollen_viability/Review/manifest.json` (191 blind QC tiles across 72 slides)
+     and excludes every benchmark tile (as well as `*qc_additive*.zip` / `qc__*` circle-mask exports)
+     from both `train` and `val`, preserving a 100% leak-free human ground-truth test benchmark.
+  3. Polygon Sanitization & Sutherland-Hodgman Crop Clipping:
+     Drops degenerate (< 4 px or < 8 px^2) polygon slivers before training.
+  4. Rare-Class & Ploidy-Scale (`Gigas`) Balancing in `train` Only:
+     Deterministic 85/15 class-stratified split (`seed=42`), natural slide-background blending for
+     `smudges_raw` (in `train` only, never `val`), plus 1.0x oversampling and 1.26x / 1.36x
+     crop-zoomed copies of `non_viable` and `intermediate` tiles to bridge the 2x -> 4x size gap.
+"""
 
-import sys
-import boto3
-import shutil
+import argparse
+import csv
 import glob
+import json
+import math
+import os
 import random
+import re
+import shutil
+import smtplib
+import ssl
+import sys
+import urllib.request
+from collections import Counter
+from datetime import datetime
+from email.message import EmailMessage
+
+# Configure writable Ultralytics & Matplotlib dirs before importing ultralytics
+if os.environ.get("KUBERNETES_SERVICE_HOST") or not os.access(os.path.expanduser("~"), os.W_OK):
+    os.environ.setdefault("YOLO_CONFIG_DIR", "/tmp/yolo_config")
+    os.environ.setdefault("MPLCONFIGDIR", "/tmp/matplotlib")
+
+import boto3
 import cv2
 import numpy as np
-import argparse
+import yaml
 from botocore.client import Config
 from ultralytics import YOLO, settings
-from datetime import datetime
-import smtplib
-from email.message import EmailMessage
-import urllib.request
-import ssl
 
-# Update global settings to prevent "Permission denied" in /ultralytics/runs
-# This fixes the AMP check crash
-settings.update({
-    'runs_dir': '/app/runs',
-    'datasets_dir': '/app/datasets',
-    'weights_dir': '/app/weights'
-})
+if os.environ.get("KUBERNETES_SERVICE_HOST"):
+    settings.update({
+        "runs_dir": "/tmp/runs",
+        "datasets_dir": "/tmp/datasets",
+        "weights_dir": "/tmp/weights",
+    })
 
 try:
     from dotenv import load_dotenv
     load_dotenv()
 except ImportError:
-    if os.path.exists('.env'):
-        with open('.env') as _f:
+    if os.path.exists(".env"):
+        with open(".env") as _f:
             for _line in _f:
                 _line = _line.strip()
-                if _line and not _line.startswith('#') and '=' in _line:
-                    _k, _v = _line.split('=', 1)
+                if _line and not _line.startswith("#") and "=" in _line:
+                    _k, _v = _line.split("=", 1)
                     os.environ.setdefault(_k.strip(), _v.strip())
 
 # --- CONFIGURATION FROM ENV ---
-S3_ENDPOINT = os.environ.get('S3_ENDPOINT', 'https://s3.cl4.du.cesnet.cz')
-S3_BUCKET = os.environ.get('S3_BUCKET', 'peg-bucket')
-AWS_ACCESS_KEY_ID = os.environ.get('AWS_ACCESS_KEY_ID')
-AWS_SECRET_ACCESS_KEY = os.environ.get('AWS_SECRET_ACCESS_KEY')
-GMAIL_APP_PASSWORD = os.environ.get('GMAIL_APP_PASSWORD')
+S3_ENDPOINT = os.environ.get("S3_ENDPOINT", "https://s3.cl4.du.cesnet.cz")
+S3_BUCKET = os.environ.get("S3_BUCKET", "peg-bucket")
+AWS_ACCESS_KEY_ID = os.environ.get("AWS_ACCESS_KEY_ID")
+AWS_SECRET_ACCESS_KEY = os.environ.get("AWS_SECRET_ACCESS_KEY")
+GMAIL_APP_PASSWORD = os.environ.get("GMAIL_APP_PASSWORD")
 RECEIVER_EMAIL = "jakubstenc@gmail.com"
 
-# Paths — dataset is built from CZI-derived sources only (no legacy Roboflow S4x data)
-LOCAL_ROOT    = 'Pollen_viability'
-DATASET_ROOT  = os.path.join(LOCAL_ROOT, 'datasets/pollen_czi')
-STAGING_AREA  = os.path.join(LOCAL_ROOT, 'staged_area')
-SMUDGES_RAW   = os.path.join(LOCAL_ROOT, 'smudges_raw')
-HARD_NEGATIVES = os.path.join(LOCAL_ROOT, 'hard_negatives')
-HARD_POSITIVES = os.path.join(LOCAL_ROOT, 'hard_positives')
-TRAIN_DIR     = os.path.join(DATASET_ROOT, 'train')
-VAL_DIR       = os.path.join(DATASET_ROOT, 'val')
-VIS_DIR       = 'visualizations'
+LOCAL_ROOT = "Pollen_viability"
+DATASET_ROOT = os.path.join(LOCAL_ROOT, "datasets/pollen_czi")
+STAGING_AREA = os.path.join(LOCAL_ROOT, "staged_area")
+SMUDGES_RAW = os.path.join(LOCAL_ROOT, "smudges_raw")
+HARD_NEGATIVES = os.path.join(LOCAL_ROOT, "hard_negatives")
+HARD_POSITIVES = os.path.join(LOCAL_ROOT, "hard_positives")
+RELABEL_CACHE = os.path.join(LOCAL_ROOT, "relabel_studio")
+TRAIN_DIR = os.path.join(DATASET_ROOT, "train")
+VAL_DIR = os.path.join(DATASET_ROOT, "val")
+VIS_DIR = "visualizations"
+
+CANONICAL_CLASSES = ["viable", "non_viable", "intermediate"]
+CLASS_NAME_TO_ID = {"viable": 0, "non_viable": 1, "non-viable": 1, "intermediate": 2}
+IMG_SIZE = 640
+
 
 def setup_s3():
     if not all([S3_BUCKET, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY]):
         raise ValueError("❌ S3 Environment variables missing! Cannot sync data.")
-    return boto3.resource('s3',
+    return boto3.resource(
+        "s3",
         endpoint_url=S3_ENDPOINT,
         aws_access_key_id=AWS_ACCESS_KEY_ID,
         aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
-        config=Config(signature_version='s3v4', s3={'payload_signing_enabled': False})
+        config=Config(signature_version="s3v4", s3={"payload_signing_enabled": False}),
     )
 
-def download_s3_prefix(s3, prefix, local_dir):
+
+def download_s3_prefix(s3, prefix: str, local_dir: str, skip_substring: str = None):
     bucket = s3.Bucket(S3_BUCKET)
-    print(f"⬇️ Downloading {prefix} → {local_dir}")
+    print(f"⬇️ Syncing s3://{S3_BUCKET}/{prefix} → {local_dir}")
+    os.makedirs(local_dir, exist_ok=True)
     count = 0
     for obj in bucket.objects.filter(Prefix=prefix):
-        # Skip S3 directory markers (keys ending with '/')
-        if obj.key.endswith('/'):
+        if obj.key.endswith("/"):
+            continue
+        if skip_substring and skip_substring in obj.key:
+            print(f"   🔒 Skipping leaked/excluded archive on S3: {os.path.basename(obj.key)}")
             continue
         rel_path = os.path.relpath(obj.key, prefix)
         if rel_path == "." or rel_path.startswith("_"):
@@ -86,73 +122,609 @@ def download_s3_prefix(s3, prefix, local_dir):
             bucket.download_file(obj.key, dest_path)
             count += 1
             if count % 100 == 0:
-                print(f"   Downloaded {count}...", end='\r')
-    print(f"✅ Downloaded {count} new files.")
+                print(f"   Downloaded {count}...", end="\r")
+    print(f"✅ Synced {count} new files into {local_dir}.")
+
+
+def strip_tile_base(filename: str) -> str:
+    """Normalize any staged, Roboflow, QC, or active-learning filename to its canonical tile stem."""
+    base = os.path.splitext(os.path.basename(filename))[0]
+    base = re.sub(r"\.rf\.[a-f0-9]+$", "", base)
+    base = re.sub(r"_jpg$|_png$", "", base)
+    if "__" in base:
+        base = base.split("__")[-1]
+    for pfx in ("hard_pos_", "hard_neg_", "curated_neg_", "syn_neg_"):
+        if base.startswith(pfx):
+            base = base[len(pfx):]
+    base = re.sub(r"_(nvdup\d+|4xzoom\d+)$", "", base)
+    return base
+
+
+def load_qc_holdout_bases(s3=None) -> set:
+    """Return the set of normalized tile basenames in the blind QC review benchmark."""
+    holdout = set()
+    if s3 is not None:
+        try:
+            raw = s3.meta.client.get_object(
+                Bucket=S3_BUCKET, Key="Ostatni/Pollen_viability/Review/manifest.json"
+            )["Body"].read()
+            manifest = json.loads(raw)
+            for it in manifest.get("items", []):
+                tk = it.get("tile_key", "")
+                if tk:
+                    holdout.add(strip_tile_base(tk))
+            print(f"🔒 Loaded {len(holdout)} blind QC benchmark tiles from S3 Review/manifest.json to hold out.")
+            return holdout
+        except Exception as e:
+            print(f"⚠️ Could not fetch S3 Review/manifest.json ({e}); checking local fallback...")
+
+    for mf in sorted(glob.glob("output/review/manifest_final_*.json")):
+        try:
+            manifest = json.loads(open(mf).read())
+            for it in manifest.get("items", []):
+                tk = it.get("tile_key", "")
+                if tk:
+                    holdout.add(strip_tile_base(tk))
+        except Exception:
+            pass
+    print(f"🔒 Loaded {len(holdout)} blind QC benchmark tiles from local manifest fallback.")
+    return holdout
+
 
 def scaffold_dataset():
-    """Create the empty train/val directory structure from scratch."""
+    """Create a fresh empty train/val directory structure."""
+    if os.path.exists(DATASET_ROOT):
+        shutil.rmtree(DATASET_ROOT)
     for split_dir in [TRAIN_DIR, VAL_DIR]:
-        os.makedirs(os.path.join(split_dir, 'images'), exist_ok=True)
-        os.makedirs(os.path.join(split_dir, 'labels'), exist_ok=True)
-    print(f"📁 Dataset scaffold created at {DATASET_ROOT}")
+        os.makedirs(os.path.join(split_dir, "images"), exist_ok=True)
+        os.makedirs(os.path.join(split_dir, "labels"), exist_ok=True)
+    print(f"📁 Clean dataset scaffold created at {DATASET_ROOT}")
 
 
-def merge_hard_positives(exclude_bases: set = None):
-    """Copy hard_positives image+label pairs into train/val.
+def polygon_area_px2(pts_norm: list, img_size: int = IMG_SIZE) -> float:
+    """Shoelace polygon area in square pixels from [(x_norm, y_norm), ...]."""
+    n = len(pts_norm)
+    if n < 3:
+        return 0.0
+    area2 = 0.0
+    for i in range(n):
+        x1, y1 = pts_norm[i][0] * img_size, pts_norm[i][1] * img_size
+        x2, y2 = pts_norm[(i + 1) % n][0] * img_size, pts_norm[(i + 1) % n][1] * img_size
+        area2 += x1 * y2 - x2 * y1
+    return 0.5 * abs(area2)
 
-    exclude_bases: set of tile basenames (no extension, no RF hash) already
-    added via staged ZIPs.  Tiles in this set are skipped to avoid duplicates.
+
+def sanitize_polygons(raw_polys: list, min_dim_px: float = 4.0, min_area_px2: float = 8.0) -> list:
     """
-    if not os.path.exists(HARD_POSITIVES):
-        print("⚠️  hard_positives/ not found — no primary annotated data!")
-        return
-    exclude_bases = exclude_bases or set()
-    pos_imgs = [f for f in os.listdir(HARD_POSITIVES)
-                if f.lower().endswith(('.jpg', '.png'))]
-    merged = skipped = 0
-    for fname in pos_imgs:
-        base = os.path.splitext(fname)[0]
-        if base in exclude_bases:
-            skipped += 1
-            continue  # already in dataset from staged ZIP (better annotation)
-        lbl_path = os.path.join(HARD_POSITIVES, base + '.txt')
-        if not os.path.exists(lbl_path):
-            continue  # skip unannotated images
-        is_val     = random.random() < 0.2
-        target_dir = VAL_DIR if is_val else TRAIN_DIR
-        out_name   = f"hard_pos_{fname}"
-        shutil.copy2(os.path.join(HARD_POSITIVES, fname),
-                     os.path.join(target_dir, 'images', out_name))
-        shutil.copy2(lbl_path,
-                     os.path.join(target_dir, 'labels', os.path.splitext(out_name)[0] + '.txt'))
-        merged += 1
-    if skipped:
-        print(f"  ⚠️  Skipped {skipped} hard_positives already covered by staged ZIP.")
-    print(f"✅ Merged {merged} hard_positives pairs (primary annotated data).")
+    Validate and sanitize [(cls_id, [(x_norm, y_norm), ...]), ...].
+    Drops invalid classes, NaN/Inf coords, <3 vertices, or tiny slivers that can destabilize loss.
+    """
+    clean = []
+    for cid, pts in raw_polys:
+        if cid not in (0, 1, 2):
+            continue
+        valid_pts = []
+        bad = False
+        for x, y in pts:
+            if not (math.isfinite(x) and math.isfinite(y)):
+                bad = True
+                break
+            valid_pts.append((min(1.0, max(0.0, float(x))), min(1.0, max(0.0, float(y)))))
+        if bad or len(valid_pts) < 3:
+            continue
+        xs = [p[0] for p in valid_pts]
+        ys = [p[1] for p in valid_pts]
+        w_px = (max(xs) - min(xs)) * IMG_SIZE
+        h_px = (max(ys) - min(ys)) * IMG_SIZE
+        if w_px < min_dim_px or h_px < min_dim_px:
+            continue
+        if polygon_area_px2(valid_pts) < min_area_px2:
+            continue
+        clean.append((cid, valid_pts))
+    return clean
+
+
+def parse_yolo_txt(lbl_path: str, remap: dict = None) -> list:
+    """Parse a YOLO segmentation .txt file into sanitized [(cls_id, [(x, y), ...]), ...]."""
+    remap = remap or {0: 0, 1: 1, 2: 2}
+    raw = []
+    if not os.path.exists(lbl_path):
+        return raw
+    with open(lbl_path) as f:
+        for line in f:
+            parts = line.strip().split()
+            if len(parts) < 7 or (len(parts) - 1) % 2 != 0:
+                continue
+            src_cid = int(parts[0])
+            dst_cid = remap.get(src_cid, src_cid)
+            vals = [float(v) for v in parts[1:]]
+            pts = [(vals[i], vals[i + 1]) for i in range(0, len(vals), 2)]
+            raw.append((dst_cid, pts))
+    return sanitize_polygons(raw)
+
+
+def format_yolo_lines(polys: list) -> str:
+    lines = []
+    for cid, pts in polys:
+        coord_str = " ".join(f"{x:.6f} {y:.6f}" for x, y in pts)
+        lines.append(f"{cid} {coord_str}")
+    return ("\n".join(lines) + "\n") if lines else ""
+
+
+def _build_class_remap(zip_data_yaml_path: str) -> dict:
+    remap = {}
+    try:
+        with open(zip_data_yaml_path) as f:
+            meta = yaml.safe_load(f)
+        src_names = meta.get("names", [])
+        if isinstance(src_names, dict):
+            src_items = [(int(k), str(v).lower().replace("-", "_")) for k, v in src_names.items()]
+        else:
+            src_items = [(i, str(n).lower().replace("-", "_")) for i, n in enumerate(src_names)]
+        for src_id, name in src_items:
+            if name in CLASS_NAME_TO_ID:
+                remap[src_id] = CLASS_NAME_TO_ID[name]
+            else:
+                remap[src_id] = -1  # e.g. 'debris' -> ignored by sanitize_polygons
+        print(f"   🗺️  Class remapping from {os.path.basename(zip_data_yaml_path)}: {remap}")
+    except Exception as e:
+        print(f"   ⚠️  Could not read data.yaml ({e}) — using identity mapping")
+    return remap
+
+
+def clip_polygon_unit_square(pts: list) -> list:
+    """Sutherland-Hodgman polygon clipping against [0.0, 1.0] x [0.0, 1.0]."""
+    def clip_edge(poly, inside_fn, intersect_fn):
+        if not poly:
+            return []
+        out = []
+        prev = poly[-1]
+        prev_in = inside_fn(prev)
+        for curr in poly:
+            curr_in = inside_fn(curr)
+            if curr_in:
+                if not prev_in:
+                    out.append(intersect_fn(prev, curr))
+                out.append(curr)
+            elif prev_in:
+                out.append(intersect_fn(prev, curr))
+            prev, prev_in = curr, curr_in
+        return out
+
+    poly = list(pts)
+    # x >= 0
+    poly = clip_edge(poly, lambda p: p[0] >= 0.0,
+                     lambda a, b: (0.0, a[1] + (b[1] - a[1]) * (0.0 - a[0]) / ((b[0] - a[0]) or 1e-12)))
+    # x <= 1
+    poly = clip_edge(poly, lambda p: p[0] <= 1.0,
+                     lambda a, b: (1.0, a[1] + (b[1] - a[1]) * (1.0 - a[0]) / ((b[0] - a[0]) or 1e-12)))
+    # y >= 0
+    poly = clip_edge(poly, lambda p: p[1] >= 0.0,
+                     lambda a, b: (a[0] + (b[0] - a[0]) * (0.0 - a[1]) / ((b[1] - a[1]) or 1e-12), 0.0))
+    # y <= 1
+    poly = clip_edge(poly, lambda p: p[1] <= 1.0,
+                     lambda a, b: (a[0] + (b[0] - a[0]) * (1.0 - a[1]) / ((b[1] - a[1]) or 1e-12), 1.0))
+    return poly
+
+
+def make_gigas_zoom_tile(img_bgr: np.ndarray, polys: list, zoom: float, rng: random.Random):
+    """
+    Create a zoomed 640x640 crop centered on a rare-class (`non_viable` or `intermediate`) grain,
+    bridging the diploid (14.5 um) -> tetraploid (18-21 um) size scaling gap cleanly.
+    """
+    h, w = img_bgr.shape[:2]
+    crop_w = int(round(w / zoom))
+    crop_h = int(round(h / zoom))
+
+    rare_polys = [pts for cid, pts in polys if cid in (1, 2)]
+    target_pts = rng.choice(rare_polys) if rare_polys else polys[0][1]
+    cx = sum(p[0] for p in target_pts) / len(target_pts) * w + rng.uniform(-28.0, 28.0)
+    cy = sum(p[1] for p in target_pts) / len(target_pts) * h + rng.uniform(-28.0, 28.0)
+
+    x0 = int(max(0, min(w - crop_w, round(cx - crop_w / 2.0))))
+    y0 = int(max(0, min(h - crop_h, round(cy - crop_h / 2.0))))
+
+    crop_img = img_bgr[y0:y0 + crop_h, x0:x0 + crop_w]
+    zoomed_img = cv2.resize(crop_img, (IMG_SIZE, IMG_SIZE), interpolation=cv2.INTER_LINEAR)
+
+    bg_med = tuple(int(v) for v in np.median(zoomed_img.reshape(-1, 3), axis=0))
+    zoomed_polys = []
+    for cid, pts in polys:
+        orig_area = polygon_area_px2(pts) * (zoom ** 2)
+        shifted = [((p[0] * w - x0) / crop_w, (p[1] * h - y0) / crop_h) for p in pts]
+        clipped = clip_polygon_unit_square(shifted)
+        if len(clipped) < 3:
+            continue
+        new_area = polygon_area_px2(clipped)
+        frac = (new_area / orig_area) if orig_area > 0 else 0.0
+        if frac >= 0.25:
+            zoomed_polys.append((cid, clipped))
+        elif frac > 0.0:
+            # Soft-mask tiny <25% border slivers with tile median color so unlabeled partial grains never teach FN
+            sliver_pts = np.array([[int(round(p[0] * IMG_SIZE)), int(round(p[1] * IMG_SIZE))] for p in clipped], dtype=np.int32)
+            cv2.fillPoly(zoomed_img, [sliver_pts], bg_med)
+
+    zoomed_polys = sanitize_polygons(zoomed_polys, min_dim_px=5.0, min_area_px2=12.0)
+    return zoomed_img, zoomed_polys
+
+
+MIN_RELABEL_GRAIN_FOCUS = 35.0
+
+
+def compute_grain_focus_lap(img_bgr: np.ndarray, polys_norm: list) -> float:
+    """Compute median grain-local Laplacian variance (unaffected by sparse empty slide background)."""
+    gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
+    lap_abs = np.abs(cv2.Laplacian(gray, cv2.CV_64F))
+    h, w = gray.shape[:2]
+    g_vars = []
+    for _, pts in polys_norm:
+        xs = [p[0] * w for p in pts]
+        ys = [p[1] * h for p in pts]
+        x1, y1 = max(0, int(min(xs)) - 4), max(0, int(min(ys)) - 4)
+        x2, y2 = min(w, int(max(xs)) + 4), min(h, int(max(ys)) + 4)
+        if x2 - x1 >= 8 and y2 - y1 >= 8:
+            g_vars.append(float(np.var(lap_abs[y1:y2, x1:x2])))
+    return float(np.median(g_vars)) if g_vars else float(np.var(lap_abs))
+
+
+def collect_relabel_studio_records(s3, qc_holdout: set, allow_qc_leakage: bool = False) -> dict:
+    """Fetch sharp human-annotated SAM polygon tiles from S3 Relabel/Labels/ (excluding blind QC & defocused border tiles)."""
+    records = {}
+    if s3 is None:
+        return records
+    s3_client = s3.meta.client
+    lbl_prefix = "Ostatni/Pollen_viability/Relabel/Labels/"
+    tile_prefix = "Ostatni/Pollen_viability/Relabel/Tiles/"
+    raw_prefix = "Ostatni/Pollen_viability/tiles_640/"
+    os.makedirs(RELABEL_CACHE, exist_ok=True)
+
+    skipped_qc = skipped_blur = 0
+    paginator = s3_client.get_paginator("list_objects_v2")
+    for page in paginator.paginate(Bucket=S3_BUCKET, Prefix=lbl_prefix):
+        for o in page.get("Contents", []):
+            lk = o["Key"]
+            if not lk.endswith(".json"):
+                continue
+            rel = lk[len(lbl_prefix):-5]
+            orig_base = strip_tile_base(rel)
+            if not allow_qc_leakage and orig_base in qc_holdout:
+                skipped_qc += 1
+                continue
+            # Exclude legacy outer slide-margin tiles (tile_0_*) whose edge defocus distorts stain color
+            if "_tile_0_" in rel or rel.endswith("_tile_0"):
+                skipped_blur += 1
+                continue
+            try:
+                data = json.loads(s3_client.get_object(Bucket=S3_BUCKET, Key=lk)["Body"].read())
+            except Exception:
+                continue
+            raw_polys = []
+            for obj in data.get("objects", []):
+                cls_name = str(obj.get("cls", "")).lower().replace("-", "_")
+                if cls_name not in CLASS_NAME_TO_ID:
+                    continue
+                poly = obj.get("polygon", [])
+                if len(poly) >= 3:
+                    pts = [(float(pt[0]) / 640.0, float(pt[1]) / 640.0) for pt in poly]
+                    raw_polys.append((CLASS_NAME_TO_ID[cls_name], pts))
+            polys = sanitize_polygons(raw_polys)
+            if not polys:
+                continue
+
+            img_local = os.path.join(RELABEL_CACHE, f"{orig_base}.jpg")
+            if not os.path.exists(img_local):
+                fetched = False
+                for cand_key in (f"{tile_prefix}{rel}.jpg", f"{raw_prefix}{rel}.jpg"):
+                    try:
+                        s3_client.download_file(S3_BUCKET, cand_key, img_local)
+                        fetched = True
+                        break
+                    except Exception:
+                        pass
+                if not fetched:
+                    continue
+
+            img_chk = cv2.imread(img_local)
+            if img_chk is None:
+                continue
+            focus_lap = compute_grain_focus_lap(img_chk, polys)
+            if focus_lap < MIN_RELABEL_GRAIN_FOCUS:
+                skipped_blur += 1
+                continue
+
+            records[orig_base] = {
+                "orig_base": orig_base,
+                "rel_path": rel,
+                "img_path": img_local,
+                "polys": polys,
+                "source": "relabel_studio",
+            }
+    print(
+        f"✅ Collected {len(records)} sharp leak-free Relabel Studio tiles "
+        f"(skipped {skipped_qc} in QC holdout, {skipped_blur} border/defocused grain_lap<{MIN_RELABEL_GRAIN_FOCUS})."
+    )
+    return records
+
+
+def assemble_clean_dataset(s3=None, allow_qc_leakage: bool = False, val_fraction: float = 0.15, seed: int = 42):
+    """
+    Assemble a deduplicated, leak-free, class-balanced YOLO segmentation dataset into TRAIN_DIR / VAL_DIR.
+    """
+    rng = random.Random(seed)
+    qc_holdout = set() if allow_qc_leakage else load_qc_holdout_bases(s3)
+    records_by_base = {}
+
+    # 1. Highest priority: Relabel Studio SAM polygon tiles
+    records_by_base.update(collect_relabel_studio_records(s3, qc_holdout, allow_qc_leakage=allow_qc_leakage))
+
+    # 2. Second priority: Roboflow / clean staged ZIPs (excluding *qc_additive*.zip & blind QC tiles)
+    if os.path.exists(STAGING_AREA):
+        temp_root = os.path.join(LOCAL_ROOT, "temp_merge")
+        for idx_z, zip_path in enumerate(sorted(glob.glob(os.path.join(STAGING_AREA, "*.zip")))):
+            zname = os.path.basename(zip_path)
+            if not allow_qc_leakage and "qc_additive" in zname.lower():
+                print(f"🔒 Skipping {zname} (contains blind QC benchmark tiles / synthetic circle masks).")
+                continue
+            print(f"📦 Unpacking staged archive: {zname}")
+            zdir = os.path.join(temp_root, f"z_{idx_z}")
+            if os.path.exists(zdir):
+                shutil.rmtree(zdir)
+            os.makedirs(zdir, exist_ok=True)
+            shutil.unpack_archive(zip_path, zdir)
+
+            remap = {0: 0, 1: 1, 2: 2}
+            for root, _, files in os.walk(zdir):
+                if "data.yaml" in files:
+                    remap = _build_class_remap(os.path.join(root, "data.yaml"))
+                    break
+
+            added_z = skipped_qc_z = skipped_dup_z = 0
+            for root, _, files in os.walk(zdir):
+                for f in sorted(files):
+                    if not f.lower().endswith((".jpg", ".png")):
+                        continue
+                    if not allow_qc_leakage and f.startswith("qc__"):
+                        skipped_qc_z += 1
+                        continue
+                    orig_base = strip_tile_base(f)
+                    if not allow_qc_leakage and orig_base in qc_holdout:
+                        skipped_qc_z += 1
+                        continue
+                    if orig_base in records_by_base:
+                        skipped_dup_z += 1
+                        continue
+
+                    stem = os.path.splitext(f)[0]
+                    candidates = [
+                        os.path.join(root, stem + ".txt"),
+                        os.path.join(os.path.dirname(root), "labels", stem + ".txt"),
+                        os.path.join(root.replace("/images/", "/labels/").replace("/images", "/labels"), stem + ".txt"),
+                    ]
+                    lbl = next((c for c in candidates if os.path.exists(c)), None)
+                    if not lbl:
+                        continue
+                    polys = parse_yolo_txt(lbl, remap=remap)
+                    if not polys:
+                        continue
+                    records_by_base[orig_base] = {
+                        "orig_base": orig_base,
+                        "img_path": os.path.join(root, f),
+                        "polys": polys,
+                        "source": "staging_area",
+                    }
+                    added_z += 1
+            print(f"   -> Added {added_z} unique tiles (skipped {skipped_qc_z} QC holdout, {skipped_dup_z} duplicates).")
+
+    # 3. Third priority: active_learning/hard_positives
+    if os.path.exists(HARD_POSITIVES):
+        added_hp = skipped_hp = 0
+        for fname in sorted(os.listdir(HARD_POSITIVES)):
+            if not fname.lower().endswith((".jpg", ".png")):
+                continue
+            orig_base = strip_tile_base(fname)
+            if (not allow_qc_leakage and orig_base in qc_holdout) or orig_base in records_by_base:
+                skipped_hp += 1
+                continue
+            lbl_path = os.path.join(HARD_POSITIVES, os.path.splitext(fname)[0] + ".txt")
+            polys = parse_yolo_txt(lbl_path, remap={0: 0, 1: 1, 2: 2})
+            if not polys:
+                continue
+            records_by_base[orig_base] = {
+                "orig_base": orig_base,
+                "img_path": os.path.join(HARD_POSITIVES, fname),
+                "polys": polys,
+                "source": "hard_positives",
+            }
+            added_hp += 1
+        print(f"✅ Added {added_hp} unique hard_positives tiles (skipped {skipped_hp} overlapping/holdout).")
+
+    # 4. Deterministic Class-Stratified 85/15 Train/Val Split of Positive Tiles
+    strata = {"has_intermediate": [], "has_non_viable": [], "viable_only": []}
+    for orig_base in sorted(records_by_base.keys()):
+        rec = records_by_base[orig_base]
+        cset = {cid for cid, _ in rec["polys"]}
+        if 2 in cset:
+            strata["has_intermediate"].append(rec)
+        elif 1 in cset:
+            strata["has_non_viable"].append(rec)
+        else:
+            strata["viable_only"].append(rec)
+
+    train_recs, val_recs = [], []
+    for sname, items in strata.items():
+        rng.shuffle(items)
+        n_val = max(1, int(round(len(items) * val_fraction))) if len(items) >= 4 else 0
+        val_recs.extend(items[:n_val])
+        train_recs.extend(items[n_val:])
+        print(f"   Stratum '{sname:<16}': {len(items):3d} total -> {len(items) - n_val:3d} train / {n_val:3d} val")
+
+    # Write positive tiles + rare-class & tetraploid Gigas zoom oversampling in TRAIN only
+    oversampled_std = oversampled_zoom = 0
+    for split_name, recs, dest_dir in [("train", train_recs, TRAIN_DIR), ("val", val_recs, VAL_DIR)]:
+        img_out_dir = os.path.join(dest_dir, "images")
+        lbl_out_dir = os.path.join(dest_dir, "labels")
+        for rec in recs:
+            prefix = "hard_pos_" if rec["source"] == "hard_positives" else ""
+            out_stem = f"{prefix}{rec['orig_base']}"
+            ext = os.path.splitext(rec["img_path"])[1].lower() or ".jpg"
+            dest_img = os.path.join(img_out_dir, f"{out_stem}{ext}")
+            dest_lbl = os.path.join(lbl_out_dir, f"{out_stem}.txt")
+            shutil.copy2(rec["img_path"], dest_img)
+            with open(dest_lbl, "w") as lf:
+                lf.write(format_yolo_lines(rec["polys"]))
+
+            if split_name == "train":
+                cset = {cid for cid, _ in rec["polys"]}
+                if 1 in cset or 2 in cset:
+                    n_total_p = len(rec["polys"])
+                    n_rare_p = sum(1 for cid, _ in rec["polys"] if cid in (1, 2))
+                    rare_share = n_rare_p / max(1, n_total_p)
+                    is_already_4x = bool(re.search(r"_(n?4x)(_|$)", rec.get("rel_path", rec["orig_base"])))
+
+                    # Balanced native oversampling when rare grains are a meaningful fraction (>=20% or >=3 grains)
+                    if rare_share >= 0.20 or n_rare_p >= 3:
+                        n_dups = 2 if 2 in cset else 1
+                        for d_i in range(1, n_dups + 1):
+                            shutil.copy2(dest_img, os.path.join(img_out_dir, f"{out_stem}_nvdup{d_i}{ext}"))
+                            shutil.copy2(dest_lbl, os.path.join(lbl_out_dir, f"{out_stem}_nvdup{d_i}.txt"))
+                            oversampled_std += 1
+
+                    # Ploidy-aware Gigas zoom: ONLY zoom diploid (2x/s2x/Pinder) rare tiles (1.22x) to bridge 2x->4x;
+                    # never zoom slides already at 4x/n4x (we now have real sharp 4x/n4x rare-class tiles).
+                    if not is_already_4x:
+                        img_bgr = cv2.imread(dest_img)
+                        if img_bgr is not None:
+                            for z_i, zoom_factor in enumerate((1.22,), start=1):
+                                z_img, z_polys = make_gigas_zoom_tile(img_bgr, rec["polys"], zoom_factor, rng)
+                                if z_polys and any(cid in (1, 2) for cid, _ in z_polys):
+                                    z_img_path = os.path.join(img_out_dir, f"{out_stem}_4xzoom{z_i}.jpg")
+                                    z_lbl_path = os.path.join(lbl_out_dir, f"{out_stem}_4xzoom{z_i}.txt")
+                                    cv2.imwrite(z_img_path, z_img, [int(cv2.IMWRITE_JPEG_QUALITY), 95])
+                                    with open(z_lbl_path, "w") as zf:
+                                        zf.write(format_yolo_lines(z_polys))
+                                    oversampled_zoom += 1
+
+    print(f"⚡ Rare-class train augmentation: +{oversampled_std} native copies, +{oversampled_zoom} ploidy-aware rare crops.")
+
+    # Clean up temporary unpacked zip dir
+    shutil.rmtree(os.path.join(LOCAL_ROOT, "temp_merge"), ignore_errors=True)
+
+    # 5. Curated Real Hard Negatives (cap train background share to ~12% so recall isn't suppressed)
+    n_pos_train = len(train_recs) + oversampled_std + oversampled_zoom
+    max_neg_train = max(30, int(round(n_pos_train * 0.08)))
+    max_syn_train = max(25, int(round(n_pos_train * 0.05)))
+    neg_train = neg_val = syn_train = 0
+    if os.path.exists(HARD_NEGATIVES):
+        hard_files = [
+            f for f in sorted(os.listdir(HARD_NEGATIVES))
+            if f.lower().endswith((".jpg", ".png")) and (allow_qc_leakage or strip_tile_base(f) not in qc_holdout)
+        ]
+        rng.shuffle(hard_files)
+        n_neg_val = max(1, min(12, int(round(len(val_recs) * 0.15)))) if hard_files else 0
+        for i, fname in enumerate(hard_files):
+            if i < n_neg_val:
+                target_dir = VAL_DIR
+                neg_val += 1
+            elif neg_train < max_neg_train:
+                target_dir = TRAIN_DIR
+                neg_train += 1
+            else:
+                break
+            out_name = f"curated_neg_{fname}"
+            shutil.copy2(os.path.join(HARD_NEGATIVES, fname), os.path.join(target_dir, "images", out_name))
+            open(os.path.join(target_dir, "labels", os.path.splitext(out_name)[0] + ".txt"), "w").close()
+
+    # 6. Synthetic Smudges -> TRAIN ONLY (capped at max_syn_train to preserve high recall)
+    if os.path.exists(SMUDGES_RAW):
+        np_rng = np.random.default_rng(seed)
+        raw_files = [f for f in sorted(os.listdir(SMUDGES_RAW)) if f.lower().endswith((".jpg", ".png"))]
+        rng.shuffle(raw_files)
+        for fname in raw_files[:max_syn_train]:
+            img = cv2.imread(os.path.join(SMUDGES_RAW, fname))
+            if img is None:
+                continue
+            # Strip black zero-padding present on legacy *_pad_*.png crops before blending
+            non_black = img.max(axis=2) > 20
+            if non_black.any():
+                ys_nb, xs_nb = np.where(non_black)
+                y1_nb, y2_nb = int(ys_nb.min()), int(ys_nb.max()) + 1
+                x1_nb, x2_nb = int(xs_nb.min()), int(xs_nb.max()) + 1
+                if (y2_nb - y1_nb) >= 16 and (x2_nb - x1_nb) >= 16:
+                    img = img[y1_nb:y2_nb, x1_nb:x2_nb]
+
+            h, w = img.shape[:2]
+            scale = min(IMG_SIZE / max(1, h), IMG_SIZE / max(1, w)) * rng.uniform(0.55, 0.85)
+            new_w, new_h = max(16, int(w * scale)), max(16, int(h * scale))
+            resized = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_LINEAR)
+
+            # Estimate brightfield slide background color from non-dark outer rim pixels
+            rim = np.concatenate([
+                resized[:4, :, :].reshape(-1, 3),
+                resized[-4:, :, :].reshape(-1, 3),
+                resized[:, :4, :].reshape(-1, 3),
+                resized[:, -4:, :].reshape(-1, 3),
+            ], axis=0)
+            bright_rim = rim[rim.max(axis=1) > 40]
+            bg_bgr = np.median(bright_rim if len(bright_rim) > 0 else rim, axis=0)
+            noise = np_rng.normal(0.0, 1.5, size=(IMG_SIZE, IMG_SIZE, 3))
+            canvas = np.clip(bg_bgr + noise, 0, 255).astype(np.uint8)
+
+            max_y = max(0, IMG_SIZE - new_h)
+            max_x = max(0, IMG_SIZE - new_w)
+            y_off = rng.randint(0, max_y) if max_y > 0 else 0
+            x_off = rng.randint(0, max_x) if max_x > 0 else 0
+
+            # Smooth 8-px cosine/linear feather mask at patch boundaries
+            feather = min(8, new_h // 4, new_w // 4)
+            if feather >= 2:
+                wy = np.ones(new_h, dtype=np.float32)
+                wx = np.ones(new_w, dtype=np.float32)
+                ramp = np.linspace(0.0, 1.0, feather, dtype=np.float32)
+                wy[:feather], wy[-feather:] = ramp, ramp[::-1]
+                wx[:feather], wx[-feather:] = ramp, ramp[::-1]
+                alpha = (wy[:, None] * wx[None, :])[:, :, None]
+                roi = canvas[y_off:y_off + new_h, x_off:x_off + new_w].astype(np.float32)
+                canvas[y_off:y_off + new_h, x_off:x_off + new_w] = np.clip(
+                    alpha * resized.astype(np.float32) + (1.0 - alpha) * roi, 0, 255
+                ).astype(np.uint8)
+            else:
+                canvas[y_off:y_off + new_h, x_off:x_off + new_w] = resized
+
+            out_name = f"syn_neg_{os.path.splitext(fname)[0]}.jpg"
+            cv2.imwrite(os.path.join(TRAIN_DIR, "images", out_name), canvas, [int(cv2.IMWRITE_JPEG_QUALITY), 93])
+            open(os.path.join(TRAIN_DIR, "labels", f"syn_neg_{os.path.splitext(fname)[0]}.txt"), "w").close()
+            syn_train += 1
+
+    print(f"🧪 Negatives integrated: curated_neg=({neg_train} train / {neg_val} val), syn_neg=({syn_train} train / 0 val).")
 
 
 def print_dataset_summary():
-    """Print a breakdown of how many images each source contributed."""
-    from collections import Counter
-    print("\n" + "═" * 55)
-    print("📊 Dataset Composition Summary")
-    print("═" * 55)
-    for split_name, split_dir in [('train', TRAIN_DIR), ('val', VAL_DIR)]:
-        img_dir = os.path.join(split_dir, 'images')
-        lbl_dir = os.path.join(split_dir, 'labels')
+    """Print detailed breakdown of train/val images and polygon annotations per class."""
+    print("\n" + "═" * 62)
+    print("📊 Dataset Composition Summary (Leak-Free & Sanitized)")
+    print("═" * 62)
+    for split_name, split_dir in [("train", TRAIN_DIR), ("val", VAL_DIR)]:
+        img_dir = os.path.join(split_dir, "images")
+        lbl_dir = os.path.join(split_dir, "labels")
         if not os.path.exists(img_dir):
             continue
         source_counts = Counter()
-        annot_counts  = Counter()  # class counts across all labels
-        total_grains  = 0
+        annot_counts = Counter()
+        total_grains = 0
         for fn in os.listdir(img_dir):
-            if '_nvdup' in fn:                source_counts['oversampled_rare'] += 1
-            elif fn.startswith('hard_pos_'):  source_counts['hard_positives'] += 1
-            elif fn.startswith('hard_neg_') or fn.startswith('curated_neg_'):
-                                              source_counts['hard_negatives'] += 1
-            elif fn.startswith('syn_neg_'):   source_counts['smudges_synthetic'] += 1
-            else:                             source_counts['staging_area'] += 1
-            lbl = os.path.join(lbl_dir, os.path.splitext(fn)[0] + '.txt')
+            if "_4xzoom" in fn:
+                source_counts["gigas_4x_zoom_rare"] += 1
+            elif "_nvdup" in fn:
+                source_counts["oversampled_rare"] += 1
+            elif fn.startswith("hard_pos_"):
+                source_counts["hard_positives"] += 1
+            elif fn.startswith("hard_neg_") or fn.startswith("curated_neg_"):
+                source_counts["hard_negatives"] += 1
+            elif fn.startswith("syn_neg_"):
+                source_counts["smudges_synthetic"] += 1
+            else:
+                source_counts["pinder_or_relabel"] += 1
+            lbl = os.path.join(lbl_dir, os.path.splitext(fn)[0] + ".txt")
             if os.path.exists(lbl):
                 for line in open(lbl).read().strip().splitlines():
                     parts = line.strip().split()
@@ -160,394 +732,133 @@ def print_dataset_summary():
                         annot_counts[int(parts[0])] += 1
                         total_grains += 1
         total_imgs = sum(source_counts.values())
-        print(f"  [{split_name}]  {total_imgs} images  |  {total_grains} grain annotations")
+        print(f"  [{split_name.upper():<5}] {total_imgs:4d} images | {total_grains:5d} polygon annotations")
         for src, n in sorted(source_counts.items(), key=lambda x: -x[1]):
             print(f"    {src:<22}: {n:4d} images")
-        cls_names = {0: 'viable', 1: 'non_viable', 2: 'intermediate'}
-        for cls_id, cnt in sorted(annot_counts.items()):
-            print(f"    class {cls_id} ({cls_names.get(cls_id,'?'):<13}): {cnt:4d} annotations")
-    print("═" * 55 + "\n")
+        cls_names = {0: "viable", 1: "non_viable", 2: "intermediate"}
+        for cls_id in (0, 1, 2):
+            cnt = annot_counts.get(cls_id, 0)
+            pct = 100.0 * cnt / max(1, total_grains)
+            print(f"    class {cls_id} ({cls_names[cls_id]:<13}): {cnt:5d} annotations ({pct:5.1f}%)")
+    print("═" * 62 + "\n")
 
 
-
-# Canonical class ordering that the model and all inference scripts expect.
-CANONICAL_CLASSES = ['viable', 'non_viable', 'intermediate']
-
-def _build_class_remap(zip_data_yaml_path: str) -> dict:
-    """
-    Read a Roboflow-exported data.yaml and return a {src_id → dst_id} mapping
-    so that class IDs are remapped to CANONICAL_CLASSES ordering.
-
-    Roboflow exports alphabetically by default:
-        0=intermediate  1=non_viable  2=viable
-    We want:
-        0=viable        1=non_viable  2=intermediate
-
-    Also handles 'non-viable' (hyphen) as an alias for 'non_viable'.
-    """
-    import yaml
-
-    remap = {}
-    try:
-        with open(zip_data_yaml_path) as f:
-            meta = yaml.safe_load(f)
-        src_names = meta.get('names', [])
-        # Normalise: replace hyphens with underscores, lowercase
-        src_names = [n.lower().replace('-', '_') for n in src_names]
-        canonical_norm = [c.lower().replace('-', '_') for c in CANONICAL_CLASSES]
-        for src_id, name in enumerate(src_names):
-            if name in canonical_norm:
-                dst_id = canonical_norm.index(name)
-                remap[src_id] = dst_id
-            else:
-                print(f"   ⚠️  Unknown class '{name}' in export — keeping as id {src_id}")
-                remap[src_id] = src_id
-        print(f"   🗺️  Class remapping from export: {dict(zip(src_names, [remap[i] for i in range(len(src_names))]))}")
-    except Exception as e:
-        print(f"   ⚠️  Could not read data.yaml ({e}) — using identity mapping")
-    return remap
-
-
-def _remap_label_file(src_path: str, dst_path: str, remap: dict):
-    """Read a YOLO label file, remap class IDs, write to dst_path."""
-    lines_out = []
-    with open(src_path) as f:
-        for line in f:
-            parts = line.strip().split()
-            if not parts:
-                continue
-            src_cls = int(parts[0])
-            dst_cls = remap.get(src_cls, src_cls)
-            lines_out.append(f"{dst_cls} " + " ".join(parts[1:]))
-    with open(dst_path, 'w') as f:
-        f.write("\n".join(lines_out))
-
-
-def _strip_rf_hash(filename: str) -> str:
-    """Remove Roboflow's .rf.HASH suffix to recover the original tile basename.
-    e.g. 'tile_0_16128_jpg.rf.abc123.jpg' -> 'tile_0_16128'
-    """
-    import re
-    base = os.path.splitext(filename)[0]           # strip final .jpg/.png
-    base = re.sub(r'\.rf\.[a-f0-9]+$', '', base)  # strip .rf.HASH
-    base = re.sub(r'_jpg$|_png$', '', base)        # strip _jpg/_png artifact
-    return base
-
-
-def merge_staged_data() -> set:
-    print("🔄 Checking for new data in staging area...")
-    if not os.path.exists(STAGING_AREA):
-        return set()
-
-    zips = glob.glob(os.path.join(STAGING_AREA, "*.zip"))
-    if not zips:
-        print("ℹ️ No new zips found in staging area.")
-        return set()
-
-    staged_bases: set = set()  # stripped original basenames merged from all ZIPs
-    for zip_path in sorted(zips):
-        print(f"\n1️⃣ Processing: {os.path.basename(zip_path)}")
-
-        temp_dir = os.path.join(LOCAL_ROOT, 'temp_merge')
-        if os.path.exists(temp_dir):
-            shutil.rmtree(temp_dir)
-        os.makedirs(temp_dir, exist_ok=True)
-        shutil.unpack_archive(zip_path, temp_dir)
-
-        # ── Build class remapping from the ZIP's data.yaml ────────────────────
-        remap = {}
-        for root, _, files in os.walk(temp_dir):
-            if 'data.yaml' in files:
-                remap = _build_class_remap(os.path.join(root, 'data.yaml'))
-                break
-        if not remap:
-            print("   ⚠️  No data.yaml found in ZIP — using identity class mapping")
-
-        # ── Collect image+label pairs ──────────────────────────────────────────
-        found_pairs = []
-        for root, _, files in os.walk(temp_dir):
-            for f in files:
-                if f.lower().endswith(('.jpg', '.png')):
-                    base = os.path.splitext(f)[0]
-                    # Check same directory first, then sibling labels/ directory
-                    lbl = os.path.join(root, base + '.txt')
-                    if not os.path.exists(lbl):
-                        parent = os.path.dirname(root)
-                        lbl_candidate = os.path.join(parent, 'labels', base + '.txt')
-                        if os.path.exists(lbl_candidate):
-                            lbl = lbl_candidate
-                    if os.path.exists(lbl):
-                        found_pairs.append((os.path.join(root, f), lbl))
-
-        print(f"   Found {len(found_pairs)} image+label pairs.")
-
-        # Verify class counts after remapping
-        cls_counts: dict = {}
-        for _, lbl in found_pairs:
-            for line in open(lbl).read().strip().splitlines():
-                parts = line.strip().split()
-                if parts:
-                    dst = remap.get(int(parts[0]), int(parts[0]))
-                    name = CANONICAL_CLASSES[dst] if dst < len(CANONICAL_CLASSES) else f'cls{dst}'
-                    cls_counts[name] = cls_counts.get(name, 0) + 1
-        print(f"   Annotation counts after remapping: {cls_counts}")
-
-        # ── 80/20 train/val split ──────────────────────────────────────────────
-        random.shuffle(found_pairs)
-        split_idx   = int(len(found_pairs) * 0.2)
-        val_batch   = found_pairs[:split_idx]
-        train_batch = found_pairs[split_idx:]
-
-        oversampled_count = 0
-        for batch, dest_dir in [(train_batch, TRAIN_DIR), (val_batch, VAL_DIR)]:
-            img_dest = os.path.join(dest_dir, 'images')
-            lbl_dest = os.path.join(dest_dir, 'labels')
-            os.makedirs(img_dest, exist_ok=True)
-            os.makedirs(lbl_dest, exist_ok=True)
-            for img_path, lbl_path in batch:
-                fname     = os.path.basename(img_path)
-                out_base  = os.path.splitext(fname)[0]
-                orig_base = _strip_rf_hash(fname)
-                dest_img  = os.path.join(img_dest, fname)
-                dest_lbl  = os.path.join(lbl_dest, out_base + '.txt')
-
-                shutil.copy2(img_path, dest_img)
-                _remap_label_file(lbl_path, dest_lbl, remap)
-                staged_bases.add(orig_base)
-
-                # Oversample rare classes (non_viable=1, intermediate=2) in TRAIN split only
-                if dest_dir == TRAIN_DIR:
-                    has_rare = False
-                    with open(dest_lbl) as lf:
-                        for line in lf:
-                            p = line.strip().split()
-                            if p and int(p[0]) in (1, 2):
-                                has_rare = True
-                                break
-                    if has_rare:
-                        # 4 duplicate copies -> 5x effective representation in train set
-                        ext = os.path.splitext(fname)[1]
-                        for dup_i in range(1, 5):
-                            dup_img_name = f"{out_base}_nvdup{dup_i}{ext}"
-                            dup_lbl_name = f"{out_base}_nvdup{dup_i}.txt"
-                            shutil.copy2(dest_img, os.path.join(img_dest, dup_img_name))
-                            shutil.copy2(dest_lbl, os.path.join(lbl_dest, dup_lbl_name))
-                            oversampled_count += 1
-
-        shutil.rmtree(temp_dir, ignore_errors=True)
-        print(f"✅ Merged {len(found_pairs)} pairs "
-              f"({len(train_batch)} train / {len(val_batch)} val).")
-        if oversampled_count:
-            print(f"   ⚡ Created {oversampled_count} oversampled train tiles for rare classes (non-viable / intermediate).")
-
-    print(f"   Total unique tile basenames from staged ZIPs: {len(staged_bases)}")
-    return staged_bases
-
-
-def process_all_negatives():
-    print("🧪 Processing all Hard Negatives and Smudges...")
-    total_count = 0
-    CANVAS_SIZE = 640
-    BG_COLOR = (200, 200, 200)
-
-    # 1. Process Smudges (Synthetic)
-    if os.path.exists(SMUDGES_RAW):
-        raw_files = [f for f in os.listdir(SMUDGES_RAW) if f.lower().endswith(('.jpg', '.png'))]
-        for fname in raw_files:
-            img_path = os.path.join(SMUDGES_RAW, fname)
-            img = cv2.imread(img_path)
-            if img is None: continue
-            
-            # Resize logic onto canvas
-            h, w = img.shape[:2]
-            scale = min(CANVAS_SIZE/h, CANVAS_SIZE/w) * 0.8
-            new_w, new_h = int(w*scale), int(h*scale)
-            resized = cv2.resize(img, (new_w, new_h))
-            
-            canvas = np.full((CANVAS_SIZE, CANVAS_SIZE, 3), BG_COLOR, dtype=np.uint8)
-            y_off = (CANVAS_SIZE - new_h) // 2
-            x_off = (CANVAS_SIZE - new_w) // 2
-            canvas[y_off:y_off+new_h, x_off:x_off+new_w] = resized
-            
-            is_val = random.random() < 0.2
-            target_dir = VAL_DIR if is_val else TRAIN_DIR
-            out_name = f"syn_neg_{fname}"
-            
-            cv2.imwrite(os.path.join(target_dir, 'images', out_name), canvas)
-            with open(os.path.join(target_dir, 'labels', os.path.splitext(out_name)[0]+'.txt'), 'w') as f: pass
-            total_count += 1
-            
-    # 2. Process Curated Hard Negatives (Direct Copy, empty labels)
-    if os.path.exists(HARD_NEGATIVES):
-        hard_files = [f for f in os.listdir(HARD_NEGATIVES) if f.lower().endswith(('.jpg', '.png'))]
-        for fname in hard_files:
-            img_path = os.path.join(HARD_NEGATIVES, fname)
-            
-            is_val = random.random() < 0.2
-            target_dir = VAL_DIR if is_val else TRAIN_DIR
-            out_name = f"curated_neg_{fname}"
-            
-            shutil.copy2(img_path, os.path.join(target_dir, 'images', out_name))
-            with open(os.path.join(target_dir, 'labels', os.path.splitext(out_name)[0]+'.txt'), 'w') as f: pass
-            total_count += 1
-
-    print(f"✅ Integrated {total_count} total negative samples into dataset.")
-
-def visualize_dataset(num_samples=None):
-    print("🎨 Generating Dataset Visualizations (Ground Truth)...")
+def visualize_dataset(num_samples: int = 24):
+    print(f"🎨 Generating Dataset Visualizations (up to {num_samples} per split)...")
     os.makedirs(VIS_DIR, exist_ok=True)
-    
-    # Define colors
-    COLOR_MAP = {0: (0, 255, 0), 1: (0, 0, 255)} # Green=Viable, Red=Non-Viable
-    
-    for split_name, split_dir in [('train', TRAIN_DIR), ('val', VAL_DIR)]:
+    COLOR_MAP = {0: (0, 220, 0), 1: (0, 0, 255), 2: (0, 180, 255)}
+    rng = random.Random(42)
+
+    for split_name, split_dir in [("train", TRAIN_DIR), ("val", VAL_DIR)]:
         save_dir = os.path.join(VIS_DIR, f"{split_name}_samples")
         os.makedirs(save_dir, exist_ok=True)
-        
-        img_dir = os.path.join(split_dir, 'images')
-        lbl_dir = os.path.join(split_dir, 'labels')
-        
-        if not os.path.exists(img_dir): continue
-        
-        all_imgs = [f for f in os.listdir(img_dir) if f.lower().endswith(('.jpg', '.png'))]
-        if not all_imgs: continue
-        
-        if num_samples:
-             samples = random.sample(all_imgs, min(len(all_imgs), num_samples))
-        else:
-             samples = all_imgs
-        
+        img_dir = os.path.join(split_dir, "images")
+        lbl_dir = os.path.join(split_dir, "labels")
+        if not os.path.exists(img_dir):
+            continue
+        all_imgs = sorted([f for f in os.listdir(img_dir) if f.lower().endswith((".jpg", ".png"))])
+        if not all_imgs:
+            continue
+        samples = rng.sample(all_imgs, min(len(all_imgs), num_samples)) if num_samples else all_imgs
         for img_file in samples:
-            img_path = os.path.join(img_dir, img_file)
-            lbl_path = os.path.join(lbl_dir, os.path.splitext(img_file)[0] + '.txt')
-            
-            img = cv2.imread(img_path)
-            if img is None: continue
+            img = cv2.imread(os.path.join(img_dir, img_file))
+            if img is None:
+                continue
             h, w = img.shape[:2]
-            
+            lbl_path = os.path.join(lbl_dir, os.path.splitext(img_file)[0] + ".txt")
             if os.path.exists(lbl_path):
-                with open(lbl_path, 'r') as f:
+                with open(lbl_path) as f:
                     for line in f:
                         parts = line.strip().split()
-                        if len(parts) >= 5:
-                            # Segmentation model annotations: cls x1 y1 ... xn yn
+                        if len(parts) >= 7:
                             cls = int(parts[0])
-                            
-                            coords = list(map(float, parts[1:]))
-                            points = np.array(coords).reshape(-1, 2)
-                            points[:, 0] *= w
-                            points[:, 1] *= h
-                            pts = points.astype(np.int32).reshape((-1, 1, 2))
-                            
+                            pts = np.array(list(map(float, parts[1:]))).reshape(-1, 2)
+                            pts[:, 0] *= w
+                            pts[:, 1] *= h
+                            pts_i = pts.astype(np.int32).reshape((-1, 1, 2))
                             color = COLOR_MAP.get(cls, (255, 255, 255))
-                            cv2.polylines(img, [pts], True, color, 2)
-                            
-                            tx, ty = pts[0][0]
-                            cv2.putText(img, str(cls), (tx, ty-5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)
-            
+                            cv2.polylines(img, [pts_i], True, color, 2)
+                            tx, ty = pts_i[0][0]
+                            cv2.putText(img, str(cls), (int(tx), max(12, int(ty) - 4)),
+                                        cv2.FONT_HERSHEY_SIMPLEX, 0.45, color, 1)
             cv2.imwrite(os.path.join(save_dir, img_file), img)
-    print("✅ Visualization complete.")
+    print("✅ Ground-truth sample visualization complete.")
 
-def visualize_predictions(model, split='val', num_samples=None):
-    print("🎨 Generating Prediction Visualizations...")
-    # Using validation set as proxy for test if test doesn't exist standardly in this structure
-    target_dir = VAL_DIR # Could verify if test exists
-    img_dir = os.path.join(target_dir, 'images')
-    
-    if not os.path.exists(img_dir): return
 
-    save_dir = os.path.join(VIS_DIR, 'predictions')
+def visualize_predictions(model, num_samples: int = 24):
+    print(f"🎨 Generating Validation Prediction Visualizations (up to {num_samples})...")
+    img_dir = os.path.join(VAL_DIR, "images")
+    if not os.path.exists(img_dir):
+        return
+    save_dir = os.path.join(VIS_DIR, "predictions")
     os.makedirs(save_dir, exist_ok=True)
-
-    all_imgs = [f for f in os.listdir(img_dir) if f.lower().endswith(('.jpg', '.png'))]
-    
-    if num_samples:
-        samples = random.sample(all_imgs, min(len(all_imgs), num_samples))
-    else:
-        samples = all_imgs
-    
+    all_imgs = sorted([f for f in os.listdir(img_dir) if f.lower().endswith((".jpg", ".png"))])
+    rng = random.Random(42)
+    samples = rng.sample(all_imgs, min(len(all_imgs), num_samples)) if num_samples else all_imgs
     for img_file in samples:
-        img_path = os.path.join(img_dir, img_file)
-        # Run inference
-        results = model(img_path, verbose=False)
-        # Plot
-        res_plotted = results[0].plot()
-        cv2.imwrite(os.path.join(save_dir, f"pred_{img_file}"), res_plotted)
-    print("✅ Prediction viz complete.")
+        results = model(os.path.join(img_dir, img_file), conf=0.45, iou=0.45, agnostic_nms=True, verbose=False)
+        cv2.imwrite(os.path.join(save_dir, f"pred_{img_file}"), results[0].plot())
+    print("✅ Prediction visualization complete.")
 
-    print("✅ Upload complete.")
 
-def upload_file_robust(s3_client, local_path, bucket, key):
-    """
-    Robust upload using Presigned URL + urllib PUT to bypass
-    MissingContentLength / SSL issues with CESNET S3.
-    """
+def upload_file_robust(s3_client, local_path: str, bucket: str, key: str):
     try:
-        # 1. Generate Presigned URL
-        url = s3_client.generate_presigned_url('put_object', 
-                                             Params={'Bucket': bucket, 'Key': key}, 
-                                             ExpiresIn=3600)
-        
-        # 2. Get file size
+        url = s3_client.generate_presigned_url(
+            "put_object", Params={"Bucket": bucket, "Key": key}, ExpiresIn=3600
+        )
         size = os.path.getsize(local_path)
-        
-        # 3. Create Request with Explicit Content-Length
-        with open(local_path, 'rb') as data:
-            req = urllib.request.Request(url, data=data, method='PUT')
-            req.add_header('Content-Length', str(size))
-            
-            # 4. Context to ignore SSL
+        with open(local_path, "rb") as data:
+            req = urllib.request.Request(url, data=data, method="PUT")
+            req.add_header("Content-Length", str(size))
             ctx = ssl.create_default_context()
             ctx.check_hostname = False
             ctx.verify_mode = ssl.CERT_NONE
-            
             with urllib.request.urlopen(req, context=ctx) as f:
                 if f.status == 200:
                     print(f"   -> Uploaded {os.path.basename(local_path)} ✅")
                 else:
                     print(f"   -> ⚠️ Upload rejected {os.path.basename(local_path)}: Status {f.status}")
-                    
     except Exception as e:
         print(f"❌ Failed to upload {local_path}: {e}")
-        pass
 
-def upload_results(s3, local_dir, train_name):
+
+def upload_results(s3, local_dir: str, train_name: str, summary_meta: dict = None):
     s3_client = s3.meta.client
-    
-    # 1. Weights & Metrics
     s3_prefix_run = f"Ostatni/Pollen_viability/trained_models/{train_name}"
-    
     print(f"⬆️ Uploading training results from {local_dir} to {s3_prefix_run}...")
     if os.path.exists(local_dir):
         for root, _, files in os.walk(local_dir):
             for file in files:
                 local_path = os.path.join(root, file)
                 rel_path = os.path.relpath(local_path, local_dir)
-                s3_key = f"{s3_prefix_run}/{rel_path}"
-                upload_file_robust(s3_client, local_path, S3_BUCKET, s3_key)
+                upload_file_robust(s3_client, local_path, S3_BUCKET, f"{s3_prefix_run}/{rel_path}")
 
-    # 2. Visualizations
-    s3_prefix_vis = f"Ostatni/Pollen_viability/trained_models/{train_name}/visualizations"
-    print(f"⬆️ Uploading visualizations to {s3_prefix_vis}...")
+    s3_prefix_vis = f"{s3_prefix_run}/visualizations"
     if os.path.exists(VIS_DIR):
         for root, _, files in os.walk(VIS_DIR):
             for file in files:
                 local_path = os.path.join(root, file)
                 rel_path = os.path.relpath(local_path, VIS_DIR)
-                s3_key = f"{s3_prefix_vis}/{rel_path}"
-                upload_file_robust(s3_client, local_path, S3_BUCKET, s3_key)
+                upload_file_robust(s3_client, local_path, S3_BUCKET, f"{s3_prefix_vis}/{rel_path}")
 
-def send_notification(subject, body):
+    if summary_meta:
+        meta_local = "/tmp/latest_clean_run.json"
+        with open(meta_local, "w") as mf:
+            json.dump(summary_meta, mf, indent=2)
+        upload_file_robust(
+            s3_client, meta_local, S3_BUCKET, "Ostatni/Pollen_viability/trained_models/latest_clean_run.json"
+        )
+
+
+def send_notification(subject: str, body: str):
     if not GMAIL_APP_PASSWORD:
         print("⚠️ Skipping email notification: GMAIL_APP_PASSWORD not set.")
         return
-
     msg = EmailMessage()
     msg.set_content(body)
     msg["Subject"] = subject
     msg["From"] = RECEIVER_EMAIL
     msg["To"] = RECEIVER_EMAIL
-
     try:
         print(f"📧 Sending notification to {RECEIVER_EMAIL}...")
         with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
@@ -557,133 +868,181 @@ def send_notification(subject, body):
     except Exception as e:
         print(f"❌ Failed to send notification: {e}")
 
+
+def inspect_results_csv(save_dir: str) -> dict:
+    rcsv_path = os.path.join(save_dir, "results.csv")
+    if not os.path.exists(rcsv_path):
+        return {"nan_epochs": -1, "total_epochs": 0}
+    with open(rcsv_path) as f:
+        rows = list(csv.DictReader([line.strip() for line in f], skipinitialspace=True))
+    nan_epochs = sum(1 for r in rows if "nan" in str(r.get("val/box_loss", "")).lower())
+    return {"nan_epochs": nan_epochs, "total_epochs": len(rows)}
+
+
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--epochs', type=int, default=300)
-    parser.add_argument('--batch', type=int, default=16)
-    parser.add_argument('--dry-run', action='store_true', help="Skip actual training")
+    parser.add_argument("--epochs", type=int, default=200)
+    parser.add_argument("--batch", type=int, default=16)
+    parser.add_argument("--model", type=str, default="yolo11m-seg.pt")
+    parser.add_argument("--lr0", type=float, default=0.0008)
+    parser.add_argument("--dry-run", action="store_true", help="Assemble & verify dataset without training")
+    parser.add_argument("--no-s3-sync", action="store_true", help="Use already downloaded local caches only")
+    parser.add_argument("--allow-qc-leakage", action="store_true",
+                        help="Include blind QC benchmark tiles in training (NOT recommended)")
     args = parser.parse_args()
 
-    s3 = setup_s3()
-    
-    # 1. Scaffold empty dataset structure (CZI-derived sources only)
+    s3 = None if args.no_s3_sync else setup_s3()
     scaffold_dataset()
 
-    # 2. Download all CZI-derived annotation sources from S3
-    if s3:
-        download_s3_prefix(s3, 'Ostatni/Pollen_viability/staged_area',
-                           STAGING_AREA)
-        download_s3_prefix(s3, 'Ostatni/Pollen_viability/smudges_raw',
-                           SMUDGES_RAW)
-        download_s3_prefix(s3, 'Ostatni/Pollen_viability/active_learning/hard_negatives',
-                           HARD_NEGATIVES)
-        download_s3_prefix(s3, 'Ostatni/Pollen_viability/active_learning/hard_positives',
-                           HARD_POSITIVES)
+    if s3 is not None:
+        skip_sub = None if args.allow_qc_leakage else "qc_additive"
+        download_s3_prefix(s3, "Ostatni/Pollen_viability/staged_area", STAGING_AREA, skip_substring=skip_sub)
+        download_s3_prefix(s3, "Ostatni/Pollen_viability/smudges_raw", SMUDGES_RAW)
+        download_s3_prefix(s3, "Ostatni/Pollen_viability/active_learning/hard_negatives", HARD_NEGATIVES)
+        download_s3_prefix(s3, "Ostatni/Pollen_viability/active_learning/hard_positives", HARD_POSITIVES)
 
-    # 3. Assemble dataset (order matters: staged ZIPs first — better annotations)
-    #    a) Roboflow ZIPs from staged_area/ — all 3 classes, class-remapped
-    staged_bases = merge_staged_data()
-    #    b) hard_positives — viable-only tiles NOT already covered by staged ZIP
-    merge_hard_positives(exclude_bases=staged_bases)
-    #    c) Background tiles — hard_negatives + synthetic smudges (empty labels)
-    process_all_negatives()
-
-    # 4. Print composition before training so we know what went in
+    assemble_clean_dataset(s3=s3, allow_qc_leakage=args.allow_qc_leakage, val_fraction=0.15, seed=42)
     print_dataset_summary()
+    visualize_dataset(num_samples=24)
 
-    visualize_dataset(num_samples=None)  # Ground-truth visualisation for all images
+    if args.dry_run:
+        print("⚠️ Dry run mode complete: Dataset verified cleanly; skipping GPU training.")
+        return
 
-    # 3. Train
-    if not args.dry_run:
-        print("🚀 Starting Training...")
-        # Check for GPU
-        device = 0 if torch.cuda.is_available() else 'cpu'
-        print(f"   Device: {device}")
-        
-        model = YOLO('yolo11m-seg.pt')
-        run_name = f"pollen_train_{datetime.now().strftime('%Y%m%d_%H%M')}"
-        
-        # ALWAYS overwrite data.yaml to ensure paths are correct for this container
-        yaml_path = os.path.join(DATASET_ROOT, 'data.yaml')
-        print(f"🔧 Fixing data.yaml at {yaml_path}...")
-        with open(yaml_path, 'w') as f:
-            # We use absolute paths to be safe
-            abs_root = os.path.abspath(DATASET_ROOT)
-            f.write(f"path: {abs_root}\n")
-            f.write("train: train/images\n")
-            f.write("val: val/images\n")
-            # Assuming standard classes for this project
-            f.write("names:\n  0: viable\n  1: non_viable\n  2: intermediate\n")
-
-        try:
-            results = model.train(
-                data=yaml_path,
-                epochs=args.epochs,
-                patience=0, # Disable early stopping to ensure fixed epoch count
-                batch=args.batch,
-                imgsz=640,
-                device=device,
-                task='segment',
-                name=run_name,
-                project=os.path.join(os.getcwd(), 'runs/detect'),
-                agnostic_nms=True,
-                val=True,
-                cls=0.8,              # Cautious increase from default 0.5 to weight classification loss higher
-                copy_paste=0.4,       # In-domain segment copy-paste for polygon masks
-                copy_paste_mode='flip',
-                degrees=180,
-                flipud=0.5,
-                fliplr=0.5,
-                mosaic=1.0,
-                close_mosaic=20
-            )
-            
-            # Capture the actual directory where YOLO saved the results
-            actual_save_dir = results.save_dir
-            print(f"📂 YOLO saved results to: {actual_save_dir}")
-            
-            # 4. Independent Evaluation
-            print("📊 Running Evaluation...")
-            metrics = model.val(split='val')
-            box_map50 = getattr(metrics.box, 'map50', 'N/A')
-            box_map = getattr(metrics.box, 'map', 'N/A')
-            seg_map50 = getattr(metrics.seg, 'map50', 'N/A') if hasattr(metrics, 'seg') and metrics.seg is not None else 'N/A'
-            seg_map = getattr(metrics.seg, 'map', 'N/A') if hasattr(metrics, 'seg') and metrics.seg is not None else 'N/A'
-            print(f"   Box mAP50: {box_map50} | Box mAP50-95: {box_map}")
-            
-            # 4b. Visualize Predictions
-            visualize_predictions(model, split='val', num_samples=None)        
-            # 5. Backup
-            if s3:
-                upload_results(s3, actual_save_dir, run_name)
-                
-                # 6. Notify
-                summary_body = (
-                    f"Hello Jakub,\n\n"
-                    f"Your training run '{run_name}' has finished successfully.\n\n"
-                    f"Validation Metrics:\n"
-                    f"  - Box mAP50:    {box_map50}\n"
-                    f"  - Box mAP50-95: {box_map}\n"
-                    f"  - Seg mAP50:    {seg_map50}\n"
-                    f"  - Seg mAP50-95: {seg_map}\n\n"
-                    f"Weights and evaluation plots uploaded to S3:\n"
-                    f"  peg-bucket/Ostatni/Pollen_viability/trained_models/{run_name}/\n"
-                )
-                send_notification(
-                    subject=f"🚀 Training Complete: {run_name} (Box mAP50: {box_map50:.3f})" if isinstance(box_map50, float) else f"🚀 Training Complete: {run_name}",
-                    body=summary_body
-                )
-        except Exception as e:
-            import traceback
-            tb = traceback.format_exc()
-            send_notification(
-                subject=f"❌ Training Failed: {run_name}",
-                body=f"Hello Jakub,\n\nYour training run '{run_name}' encountered an error:\n\n{tb}"
-            )
-            raise e
+    import torch
+    print("🚀 Starting NaN-Proof FP32/TF32 Training...")
+    device = 0 if torch.cuda.is_available() else "cpu"
+    if torch.cuda.is_available():
+        torch.backends.cuda.matmul.allow_tf32 = True
+        torch.backends.cudnn.allow_tf32 = True
+        print(f"   GPU Device: {torch.cuda.get_device_name(0)} (TF32 enabled, AMP FP16 disabled)")
     else:
-        print("⚠️ Dry run mode: Skipping actual training.")
+        print("   Device: CPU")
+
+    model = YOLO(args.model)
+    run_name = f"pollen_train_{datetime.now().strftime('%Y%m%d_%H%M')}"
+
+    yaml_path = os.path.join(DATASET_ROOT, "data.yaml")
+    abs_root = os.path.abspath(DATASET_ROOT)
+    with open(yaml_path, "w") as f:
+        f.write(f"path: {abs_root}\n")
+        f.write("train: train/images\n")
+        f.write("val: val/images\n")
+        f.write("names:\n  0: viable\n  1: non_viable\n  2: intermediate\n")
+
+    try:
+        results = model.train(
+            data=yaml_path,
+            epochs=args.epochs,
+            patience=0,           # Run full cosine schedule including final close_mosaic refinement
+            batch=args.batch,
+            imgsz=IMG_SIZE,
+            device=device,
+            workers=4,
+            task="segment",
+            name=run_name,
+            project=os.path.join(os.getcwd(), "runs/detect"),
+            amp=False,            # CRITICAL: Prevents Epoch-25 FP16 overflow & EMA NaN poisoning
+            optimizer="AdamW",
+            lr0=args.lr0,
+            lrf=0.01,
+            cos_lr=True,
+            warmup_epochs=5.0,
+            weight_decay=0.0005,
+            agnostic_nms=True,
+            val=True,
+            cls=0.7,
+            box=7.5,
+            dfl=1.5,
+            degrees=180.0,
+            flipud=0.5,
+            fliplr=0.5,
+            scale=0.5,
+            hsv_h=0.015,
+            hsv_s=0.45,
+            hsv_v=0.30,
+            mosaic=1.0,
+            close_mosaic=25,
+            copy_paste=0.0,       # Proven NaN-free; avoids degenerate rotated mask slivers
+            seed=42,
+        )
+
+        actual_save_dir = str(results.save_dir)
+        csv_check = inspect_results_csv(actual_save_dir)
+        print(f"📂 YOLO saved results to: {actual_save_dir} | NaN val epochs: {csv_check['nan_epochs']}/{csv_check['total_epochs']}")
+
+        # Independent Validation on Best Checkpoint
+        best_pt = os.path.join(actual_save_dir, "weights", "best.pt")
+        eval_model = YOLO(best_pt) if os.path.exists(best_pt) else model
+        print("📊 Running Final Validation on best.pt...")
+        metrics = eval_model.val(data=yaml_path, split="val", imgsz=IMG_SIZE, agnostic_nms=True)
+
+        box_p = float(getattr(metrics.box, "mp", 0.0))
+        box_r = float(getattr(metrics.box, "mr", 0.0))
+        box_map50 = float(getattr(metrics.box, "map50", 0.0))
+        box_map = float(getattr(metrics.box, "map", 0.0))
+        seg_map50 = float(getattr(metrics.seg, "map50", 0.0)) if getattr(metrics, "seg", None) else 0.0
+        seg_map = float(getattr(metrics.seg, "map", 0.0)) if getattr(metrics, "seg", None) else 0.0
+
+        per_class = {}
+        if hasattr(metrics.box, "ap50") and metrics.box.ap50 is not None:
+            for idx_c, ap_val in enumerate(metrics.box.ap50):
+                cname = CANONICAL_CLASSES[idx_c] if idx_c < len(CANONICAL_CLASSES) else f"cls_{idx_c}"
+                per_class[cname] = round(float(ap_val), 4)
+
+        print(f"   Box Precision: {box_p:.4f} | Box Recall: {box_r:.4f} | Box mAP50: {box_map50:.4f} | Seg mAP50: {seg_map50:.4f}")
+        print(f"   Per-class Box AP50: {per_class}")
+
+        visualize_predictions(eval_model, num_samples=24)
+
+        summary_meta = {
+            "run_name": run_name,
+            "s3_weights_key": f"Ostatni/Pollen_viability/trained_models/{run_name}/weights/best.pt",
+            "epochs": args.epochs,
+            "nan_epochs": csv_check["nan_epochs"],
+            "box_precision": round(box_p, 4),
+            "box_recall": round(box_r, 4),
+            "box_map50": round(box_map50, 4),
+            "box_map50_95": round(box_map, 4),
+            "seg_map50": round(seg_map50, 4),
+            "seg_map50_95": round(seg_map, 4),
+            "per_class_box_ap50": per_class,
+            "qc_benchmark_held_out": not args.allow_qc_leakage,
+            "completed_at": datetime.utcnow().isoformat() + "Z",
+        }
+
+        if s3 is not None:
+            upload_results(s3, actual_save_dir, run_name, summary_meta=summary_meta)
+            summary_body = (
+                f"Hello Jakub,\n\n"
+                f"Your clean NaN-proof training run '{run_name}' has finished!\n\n"
+                f"Stability:\n"
+                f"  - NaN validation epochs: {csv_check['nan_epochs']} / {csv_check['total_epochs']}\n"
+                f"  - Blind QC benchmark held out: {not args.allow_qc_leakage}\n\n"
+                f"Validation Metrics:\n"
+                f"  - Box Precision: {box_p:.4f}\n"
+                f"  - Box Recall:    {box_r:.4f}\n"
+                f"  - Box mAP50:     {box_map50:.4f}\n"
+                f"  - Box mAP50-95:  {box_map:.4f}\n"
+                f"  - Seg mAP50:     {seg_map50:.4f}\n"
+                f"  - Seg mAP50-95:  {seg_map:.4f}\n"
+                f"  - Per-class AP50: {per_class}\n\n"
+                f"Weights uploaded to S3:\n"
+                f"  peg-bucket/Ostatni/Pollen_viability/trained_models/{run_name}/weights/best.pt\n"
+            )
+            send_notification(
+                subject=f"🚀 Clean Training Complete: {run_name} (mAP50: {box_map50:.3f}, P: {box_p:.3f}, R: {box_r:.3f})",
+                body=summary_body,
+            )
+    except Exception as e:
+        import traceback
+        tb = traceback.format_exc()
+        send_notification(
+            subject=f"❌ Training Failed: {run_name}",
+            body=f"Hello Jakub,\n\nYour training run '{run_name}' encountered an error:\n\n{tb}",
+        )
+        raise e
+
 
 if __name__ == "__main__":
-    import torch # import here to avoid delay
     main()

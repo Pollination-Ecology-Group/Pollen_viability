@@ -4,8 +4,18 @@ metadata:
   name: pollen-train-job
   namespace: stenc-ns
 spec:
+  backoffLimit: 0
   template:
     spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: kubernetes.io/hostname
+                    operator: NotIn
+                    values:
+                      - kub-b5.priv.cerit-sc.cz
       securityContext:
         runAsNonRoot: true
         seccompProfile:
@@ -15,37 +25,68 @@ spec:
         fsGroup: 1000
       containers:
         - name: pollen-trainer
-          image: ttl.sh/pollen-detector-REPLACE_ME:24h
-          imagePullPolicy: Always
-          command: ["python", "train_model.py", "--epochs", "300", "--batch", "16"]
+          image: ultralytics/ultralytics:latest
+          imagePullPolicy: IfNotPresent
+          workingDir: /tmp
+          command:
+            - /bin/bash
+            - -c
+            - |
+              set -e
+              export HOME=/tmp
+              export PATH=$PATH:$HOME/.local/bin
+              echo "📦 Installing boto3 & pyyaml..."
+              pip install --user boto3 pyyaml --quiet
+              mkdir -p /tmp/yolo_config /tmp/runs /tmp/datasets /tmp/weights
+              yolo settings runs_dir='/tmp/runs' datasets_dir='/tmp/datasets' weights_dir='/tmp/weights'
+              cp /scripts/train_model.py /tmp/train_model.py
+              python3 /tmp/train_model.py --epochs 200 --batch 16
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
               drop: ["ALL"]
           resources:
-            limits:
-              nvidia.com/gpu: 1
-              memory: "32Gi" # Training needs more RAM
             requests:
-              nvidia.com/gpu: 1
-              memory: "16Gi"
+              memory: "8Gi"
+              cpu: "2"
+              nvidia.com/gpu: "1"
+            limits:
+              memory: "20Gi"
+              cpu: "6"
+              nvidia.com/gpu: "1"
           env:
             - name: S3_ENDPOINT
               value: "https://s3.cl4.du.cesnet.cz"
             - name: S3_BUCKET
               value: "peg-bucket"
             - name: AWS_ACCESS_KEY_ID
-              value: "1Y920BKC0SAWPNDE8RD6" # Pre-filled from previous context
+              valueFrom:
+                secretKeyRef:
+                  name: s3-creds
+                  key: AWS_ACCESS_KEY_ID
             - name: AWS_SECRET_ACCESS_KEY
-              value: "SnKMQbJ8mRKVboPDymkYFaFTz7VBxysrsWwJRoMD" # Pre-filled
+              valueFrom:
+                secretKeyRef:
+                  name: s3-creds
+                  key: AWS_SECRET_ACCESS_KEY
             - name: GMAIL_APP_PASSWORD
               value: "mbqu rhgz yycc jcfx"
           volumeMounts:
             - mountPath: /dev/shm
               name: dshm
+            - mountPath: /tmp
+              name: tmp-volume
+            - mountPath: /scripts
+              name: script-volume
       volumes:
         - name: dshm
           emptyDir:
             medium: Memory
+            sizeLimit: 8Gi
+        - name: tmp-volume
+          emptyDir:
+            sizeLimit: 40Gi
+        - name: script-volume
+          configMap:
+            name: pollen-train-script
       restartPolicy: Never
-  backoffLimit: 0 # Don't restart training from scratch if it fails

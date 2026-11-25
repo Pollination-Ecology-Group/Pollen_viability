@@ -1,0 +1,81 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: viability-sam-embed-job
+  namespace: stenc-ns
+spec:
+  backoffLimit: 1
+  template:
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: kubernetes.io/hostname
+                    operator: NotIn
+                    values:
+                      - kub-b5.priv.cerit-sc.cz
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: sam-embedder
+          image: ultralytics/ultralytics:latest
+          imagePullPolicy: IfNotPresent
+          workingDir: /tmp
+          command:
+            - /bin/bash
+            - -c
+            - |
+              set -e
+              export HOME=/tmp
+              export PATH=$PATH:$HOME/.local/bin
+              pip install --user boto3 --quiet
+              python3 -c "import os, boto3; boto3.client('s3', endpoint_url=os.environ['S3_ENDPOINT'], aws_access_key_id=os.environ['AWS_ACCESS_KEY_ID'], aws_secret_access_key=os.environ['AWS_SECRET_ACCESS_KEY']).download_file(os.environ['S3_BUCKET'], 'Ostatni/Pollen_viability/trained_models/sam_b.pt', '/tmp/sam_b.pt')" || python3 -c "from ultralytics import SAM; SAM('/tmp/sam_b.pt')"
+              SAM_WEIGHTS=/tmp/sam_b.pt python3 /scripts/precompute_sam_embeddings.py
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: "4"
+              memory: "8Gi"
+              nvidia.com/gpu: "1"
+            limits:
+              cpu: "8"
+              memory: "16Gi"
+              nvidia.com/gpu: "1"
+          env:
+            - name: S3_ENDPOINT
+              value: "https://s3.cl4.du.cesnet.cz"
+            - name: S3_BUCKET
+              value: "peg-bucket"
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: s3-creds
+                  key: AWS_ACCESS_KEY_ID
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: s3-creds
+                  key: AWS_SECRET_ACCESS_KEY
+          volumeMounts:
+            - name: script-volume
+              mountPath: /scripts
+            - name: tmp-volume
+              mountPath: /tmp
+      volumes:
+        - name: script-volume
+          configMap:
+            name: viability-sam-embed-script
+        - name: tmp-volume
+          emptyDir:
+            sizeLimit: "10Gi"
+      restartPolicy: Never

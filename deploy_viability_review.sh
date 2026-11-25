@@ -6,6 +6,14 @@
 # PBKDF2-SHA256 hashes in the secret 'viability-review-users'; the app checks them itself.
 set -euo pipefail
 cd "$(dirname "$0")"
+
+if [ -f "./kubeconfig.yaml" ]; then
+  export KUBECONFIG="$(pwd)/kubeconfig.yaml"
+fi
+KUBECTL_BIN="kubectl"
+if [ -x "./kubectl" ]; then
+  KUBECTL_BIN="./kubectl"
+fi
 NS=stenc-ns
 CRED=review_app/.credentials
 
@@ -29,15 +37,15 @@ for line in open(sys.argv[1]):
         users[u.lower()] = f"pbkdf2${it}${salt.hex()}${hashlib.pbkdf2_hmac('sha256', pw.encode(), salt, it).hex()}"
 print(json.dumps(users))
 PY
-kubectl create secret generic viability-review-users -n $NS --from-file=users.json=/tmp/viability_users.json \
-  --dry-run=client -o yaml | kubectl apply -f -
+$KUBECTL_BIN create secret generic viability-review-users -n $NS --from-file=users.json=/tmp/viability_users.json \
+  --dry-run=client -o yaml | $KUBECTL_BIN apply -f -
 rm -f /tmp/viability_users.json
-kubectl delete secret viability-review-auth -n $NS --ignore-not-found >/dev/null
+$KUBECTL_BIN delete secret viability-review-auth -n $NS --ignore-not-found >/dev/null
 
-kubectl create configmap viability-review-src -n $NS \
+$KUBECTL_BIN create configmap viability-review-src -n $NS \
   --from-file=app.py=review_app/app.py --from-file=index.html=review_app/index.html \
-  --dry-run=client -o yaml | kubectl apply -f -
-kubectl apply -f k8s/viability-review.yaml
-kubectl rollout restart deployment/viability-review -n $NS
-kubectl rollout status deployment/viability-review -n $NS --timeout=180s
+  --dry-run=client -o yaml | $KUBECTL_BIN apply -f -
+$KUBECTL_BIN apply -f k8s/viability-review.yaml
+$KUBECTL_BIN rollout restart deployment/viability-review -n $NS
+$KUBECTL_BIN rollout status deployment/viability-review -n $NS --timeout=180s
 echo "✅ https://viability-review-stenc.dyn.cloud.e-infra.cz"

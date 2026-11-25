@@ -190,7 +190,7 @@ def run(args):
 
             with torch.no_grad():
                 results = model(tile, conf=args.conf, iou=0.5,
-                                verbose=False, device=device)
+                                agnostic_nms=True, retina_masks=True, verbose=False, device=device)
             r = results[0]
             n = len(r.boxes) if r.boxes is not None else 0
 

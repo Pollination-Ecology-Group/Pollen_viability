@@ -8,6 +8,8 @@ metadata:
   labels: {app: viability-review, project: pollen-viability}
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels: {app: viability-review}
   template:
@@ -30,7 +32,7 @@ spec:
         - {name: S3_ENDPOINT, value: "https://s3.cl4.du.cesnet.cz"}
         - {name: S3_BUCKET, value: "peg-bucket"}
         - {name: REVIEW_PREFIX, value: "Ostatni/Pollen_viability/Review"}
-        - {name: CONF, value: "0.55"}
+        - {name: CONF, value: "0.50"}
         - name: REVIEW_USERS_JSON
           valueFrom: {secretKeyRef: {name: viability-review-users, key: users.json}}
         - name: AWS_ACCESS_KEY_ID
@@ -43,7 +45,7 @@ spec:
           periodSeconds: 10
         resources:
           requests: {cpu: 100m, memory: 256Mi}
-          limits: {cpu: "1", memory: 1Gi}
+          limits: {cpu: "500m", memory: 1Gi}
         securityContext:
           allowPrivilegeEscalation: false
           capabilities: {drop: ["ALL"]}

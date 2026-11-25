@@ -53,7 +53,7 @@ TILE_PREFIX    = os.environ.get("TILE_PREFIX",   "Ostatni/Pollen_viability/tiles
 
 # Detection cache is versioned per model so stale detections from an older model
 # are never silently reused after re-running inference.
-DET_CACHE_TAG  = os.environ.get("DET_CACHE_TAG", "model_20261023_0756")
+DET_CACHE_TAG  = os.environ.get("DET_CACHE_TAG", "model_20261122_r3")
 DET_CACHE_DIR  = os.path.join("data", "det_cache", DET_CACHE_TAG)
 
 # Default Zeiss Axio Scan pixel scale for this dataset
@@ -793,8 +793,8 @@ def main():
                         help="Process all slide folders on S3 that have _det.json files")
     parser.add_argument("--local-dir", type=str, default=None,
                         help="Path to local directory or detections.json to analyze")
-    parser.add_argument("--conf", type=float, default=0.55,
-                        help="Confidence threshold for pollen grains (default: 0.55)")
+    parser.add_argument("--conf", type=float, default=0.50,
+                        help="Confidence threshold for pollen grains (default: 0.50)")
     parser.add_argument("--scale", type=float, default=DEFAULT_UM_PER_PX,
                         help="Physical scale in µm/px (default: 0.877242)")
     parser.add_argument("--out-dir", type=str, default="output/size_analysis",

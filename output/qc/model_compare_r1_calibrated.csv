@@ -1,0 +1,5 @@
+run,cytotype,n_slides,old_grains,new_grains,removed_artifacts,old_precision_est,new_precision_est,new_recall_vs_valid,old_viability_pct,new_viability_pct,ref_clean_viability_pct,old_viability_bias_pp,new_viability_bias_pp,decision
+r1_calibrated,nat_2x,155,332466,315516,16950,0.8808,0.8917,0.9608,90.34,91.7,89.64,0.701,2.062,keep baseline
+r1_calibrated,nat_4x,110,227401,209276,18125,0.871,0.8854,0.9356,88.16,90.79,87.16,0.993,3.627,keep baseline
+r1_calibrated,neo_4x,148,300917,280804,20113,0.8396,0.8592,0.9549,95.29,96.53,94.93,0.366,1.606,keep baseline
+r1_calibrated,ory_2x,88,150352,141799,8553,0.8793,0.8918,0.9565,92.94,94.68,92.42,0.519,2.266,keep baseline

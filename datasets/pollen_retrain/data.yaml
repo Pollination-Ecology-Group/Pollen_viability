@@ -1,0 +1,8 @@
+path: /home/meow/Documents/Antigravity/Pollen_viability/datasets/pollen_retrain
+train: images/train
+val: images/val
+nc: 3
+names:
+- viable
+- non_viable
+- intermediate

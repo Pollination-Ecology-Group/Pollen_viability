@@ -1,0 +1,22 @@
+# Config for Pollen Viability Labeling App (SAM, Polygons & Retraining)
+# The app reads tiles and pre-labels, and writes ground-truth polygon labels to S3.
+
+s3:
+  endpoint: https://s3.cl4.du.cesnet.cz
+  bucket: peg-bucket
+  prefix: Ostatni/Pollen_viability/Relabel/
+  tiles: Tiles/
+  prelabels: Prelabels/
+  labels: Labels/
+  review: Review/
+  tiles_raw: Ostatni/Pollen_viability/tiles_640/
+  review_prefix: Ostatni/Pollen_viability/Review/
+
+imaging:
+  um_per_px: 0.87724195   # Zeiss Axio Scan, 5x, Pollen viability
+
+classes:
+  - viable
+  - non_viable
+  - intermediate
+  - debris

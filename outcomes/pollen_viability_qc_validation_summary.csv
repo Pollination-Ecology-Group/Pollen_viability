@@ -1,0 +1,6 @@
+cytotype,blind_tile_reviews,evaluable_grains,raw_precision_pct,raw_recall_pct,raw_class3_acc_pct,polygon_acc_pct,raw_end_to_end_acc_pct,blurred_grains_excluded,observer_uncertain_grains,raw_viability_bias_pp,calibrated_precision_pct,calibrated_recall_pct,calibrated_class3_acc_pct,calibrated_viability_bias_pp
+ory_2x,46,588,97.62,99.48,99.47,97.04,96.58,0,7,-0.238,98.1,99.4,99.8,0.195
+nat_2x,48,812,99.75,99.26,99.5,98.77,98.53,2,2,0.561,99.7,99.1,99.7,0.379
+nat_4x,46,598,94.31,98.43,98.39,96.1,91.36,1,5,3.005,96.5,98.0,98.9,2.871
+neo_4x,49,597,96.15,99.48,98.78,97.56,94.49,1,1,1.291,97.6,99.3,98.6,2.454
+ALL,189,2595,97.19,99.17,99.08,97.5,95.5,4,15,1.135,97.98,98.95,99.25,1.475

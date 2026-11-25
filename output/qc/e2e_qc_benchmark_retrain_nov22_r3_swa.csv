@@ -1,0 +1,6 @@
+run,conf_thr,cytotype,verified_tiles,n_pred,fp,fn,det_precision_pct,det_recall_pct,class_acc_pct,end_to_end_acc_pct,int_fp,int_fn,int_det_prec_pct,int_det_rec_pct,int_e2e_acc_pct,viability_bias_pp
+retrain_nov22_r3_swa,0.5,nat_2x,33,375,10,10,97.33,97.33,98.36,93.25,7,10,97.76,96.84,92.88,-1.456
+retrain_nov22_r3_swa,0.5,ory_2x,26,336,10,2,97.02,99.39,99.08,95.56,4,1,98.57,99.64,97.14,1.631
+retrain_nov22_r3_swa,0.5,nat_4x,20,191,7,11,96.34,94.36,95.11,86.63,2,9,98.64,94.16,87.18,4.177
+retrain_nov22_r3_swa,0.5,neo_4x,24,337,5,6,98.52,98.22,99.4,96.21,3,6,98.94,97.9,96.19,2.766
+retrain_nov22_r3_swa,0.5,ALL,103,1239,32,29,97.42,97.65,98.34,93.61,16,26,98.43,97.48,94.08,1.424
