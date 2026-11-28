@@ -680,36 +680,42 @@ def fetch_slide_detections_from_s3(s3, bucket, slide_folder_prefix, max_workers=
     """Downloads and parses all _det.json files for a given slide folder on S3, caching locally."""
     slide_name = slide_folder_prefix.rstrip('/').split('/')[-1]
     slide_cache = Path(cache_dir or DET_CACHE_DIR) / slide_name
-    slide_cache.mkdir(parents=True, exist_ok=True)
-    
     # Check if cache is already populated
-    cached_files = list(slide_cache.glob("*_det.json"))
-    if cached_files and len(cached_files) > 50:
-        print(f"   ⚡ Using {len(cached_files)} cached detection files from {slide_cache}")
-        results = []
-        for cf in cached_files:
-            try:
-                with open(cf, 'r') as f:
-                    data = json.load(f)
-                ty, tx = parse_tile_offset(cf.name)
-                results.append({
-                    "tile_name": cf.name,
-                    "y_offset": ty,
-                    "x_offset": tx,
-                    "boxes": data.get("boxes", []),
-                    "masks_xyn": data.get("masks_xyn", [])
-                })
-            except Exception:
-                pass
-        return results
+    use_cache = os.environ.get("NO_DET_CACHE", "0") != "1"
+    if use_cache:
+        slide_cache.mkdir(parents=True, exist_ok=True)
+        cached_files = list(slide_cache.glob("*_det.json"))
+        if cached_files and len(cached_files) > 50:
+            print(f"   ⚡ Using {len(cached_files)} cached detection files from {slide_cache}")
+            results = []
+            for cf in cached_files:
+                try:
+                    with open(cf, 'r') as f:
+                        data = json.load(f)
+                    ty, tx = parse_tile_offset(cf.name)
+                    results.append({
+                        "tile_name": cf.name,
+                        "y_offset": ty,
+                        "x_offset": tx,
+                        "boxes": data.get("boxes", []),
+                        "masks_xyn": data.get("masks_xyn", [])
+                    })
+                except Exception:
+                    pass
+            return results
 
     paginator = s3.get_paginator('list_objects_v2')
-    det_keys = []
+    jpg_stems = set()
+    det_cands = []
     for page in paginator.paginate(Bucket=bucket, Prefix=slide_folder_prefix):
         for o in page.get('Contents', []):
-            if o['Key'].endswith('_det.json'):
-                det_keys.append(o['Key'])
-                
+            k = o['Key']
+            if k.lower().endswith('.jpg'):
+                jpg_stems.add(k[:-4])
+            elif k.endswith('_det.json'):
+                det_cands.append(k)
+
+    det_keys = [k for k in det_cands if k[:-9] in jpg_stems] if jpg_stems else det_cands
     if not det_keys:
         return []
         
@@ -717,9 +723,9 @@ def fetch_slide_detections_from_s3(s3, bucket, slide_folder_prefix, max_workers=
         try:
             resp = s3.get_object(Bucket=bucket, Key=k)
             raw = resp['Body'].read()
-            # save to cache
             local_name = os.path.basename(k)
-            (slide_cache / local_name).write_bytes(raw)
+            if use_cache:
+                (slide_cache / local_name).write_bytes(raw)
             data = json.loads(raw.decode('utf-8'))
             ty, tx = parse_tile_offset(k)
             return {
@@ -831,10 +837,14 @@ def main():
     # 2. S3 mode
     s3 = make_s3()
     
-    # Discover slide folders
+    # Discover slide folders (MUST paginate: >1,000 slide prefixes exceed single S3 page!)
     print("📋 Discovering slide folders on S3...")
-    resp = s3.list_objects_v2(Bucket=S3_BUCKET, Prefix=TILE_PREFIX, Delimiter='/')
-    slide_prefixes = [p['Prefix'] for p in resp.get('CommonPrefixes', [])]
+    slide_prefixes = []
+    for page in s3.get_paginator('list_objects_v2').paginate(Bucket=S3_BUCKET, Prefix=TILE_PREFIX, Delimiter='/'):
+        for p in page.get('CommonPrefixes', []):
+            slide_prefixes.append(p['Prefix'])
+    slide_prefixes = sorted(set(slide_prefixes))
+    print(f"   Found {len(slide_prefixes)} slide folders under s3://{S3_BUCKET}/{TILE_PREFIX}")
     
     if args.slide:
         target_prefixes = [p for p in slide_prefixes if args.slide.lower() in p.lower()]

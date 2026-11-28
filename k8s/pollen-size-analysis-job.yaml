@@ -36,7 +36,7 @@ spec:
               cp /meta/plant_metadata_540.csv /tmp/work/metadata/plant_metadata_540.csv
               cd /tmp/work
               echo "🚀 Running pollen_size_analyzer on all slides..."
-              DET_CACHE_TAG=model_20261122_r3 python3 pollen_size_analyzer.py --all --conf 0.50 --workers 16 --upload-s3 --out-dir output/size_analysis
+              NO_DET_CACHE=1 DET_CACHE_TAG=model_20261122_r3 python3 pollen_size_analyzer.py --all --conf 0.50 --workers 12 --upload-s3 --out-dir output/size_analysis
               echo "✅ Size analysis job finished!"
           env:
             - name: S3_ENDPOINT
@@ -57,11 +57,11 @@ spec:
                   key: AWS_SECRET_ACCESS_KEY
           resources:
             requests:
-              cpu: "4"
-              memory: "16Gi"
+              cpu: "2"
+              memory: "4Gi"
             limits:
-              cpu: "8"
-              memory: "32Gi"
+              cpu: "6"
+              memory: "16Gi"
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:

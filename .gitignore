@@ -24,8 +24,15 @@ data/
 output/review/
 output/size_analysis/
 !output/size_analysis/pollen_slide_summaries.csv
+output/qc/grain_focus_flags.csv.gz
 
 # QC review app passwords (never commit)
 review_app/.credentials
+
+# Versioned Deliverable bundles & per-grain archives live on S3 (track CHANGELOG & versions.csv)
+Deliverables/*
+!Deliverables/CHANGELOG.md
+!Deliverables/versions.csv
+!Deliverables/pollen_viability_latest.txt
 
 /.luarc.json

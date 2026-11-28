@@ -572,6 +572,11 @@ def main():
     md_df = pd.read_csv("output/qc/class_min_diam.csv")[["cytotype", "class_name", "min_diam_um"]]
     ct_df = pd.read_csv("output/qc/class_conf_threshold.csv")[["cytotype", "class_name", "conf_threshold"]]
     grains_raw = pd.read_csv("output/size_analysis/pollen_grain_measurements.csv")
+    focus_gz = "output/qc/grain_focus_flags.csv.gz"
+    if os.path.exists(focus_gz):
+        gf = pd.read_csv(focus_gz, usecols=["slide_name", "grain_id", "norm_sharpness"])
+        grains_raw = grains_raw.merge(gf, on=["slide_name", "grain_id"], how="left")
+        grains_raw = grains_raw[grains_raw["norm_sharpness"].fillna(6.0) >= 3.50]
 
     g = grains_raw.merge(md_df, on=["cytotype", "class_name"], how="left").merge(
         ct_df, on=["cytotype", "class_name"], how="left"

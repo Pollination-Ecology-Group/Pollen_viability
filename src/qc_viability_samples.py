@@ -44,6 +44,7 @@ import pandas as pd
 MIN_GRAINS_RELIABLE = 30
 MIN_GRAINS_GOOD = 100
 MIN_SIZE_GRAINS = 30
+MIN_NORM_SHARPNESS = 3.50
 OUTLIER_VIAB_Z = 3.0
 OUTLIER_SIZE_Z = 3.5
 MIN_GROUP_FOR_OUTLIERS = 5
@@ -97,14 +98,22 @@ def apply_class_filters(df_grains: pd.DataFrame, min_diam_path: str = None, conf
 
 
 def per_slide_metrics(g: pd.DataFrame) -> pd.DataFrame:
-    """Recomputes per-slide counts, viability %, clump share, confidence, and size metrics from filtered grains."""
-    counts = g.groupby(["slide_name", "class_name"]).size().unstack(fill_value=0)
+    """Recomputes per-slide counts (all calibrated grains) and focus-filtered viability % & size metrics."""
+    counts_all = g.groupby(["slide_name", "class_name"]).size().unstack(fill_value=0)
     for c in ("viable", "non_viable", "intermediate"):
-        if c not in counts.columns:
-            counts[c] = 0
+        if c not in counts_all.columns:
+            counts_all[c] = 0
+    total_all = counts_all["viable"] + counts_all["non_viable"] + counts_all["intermediate"]
 
-    total = counts["viable"] + counts["non_viable"] + counts["intermediate"]
-    denom_bin = counts["viable"] + counts["non_viable"]
+    # Viability % and grain diameters are evaluated strictly on in-focus grains (norm_sharpness >= MIN_NORM_SHARPNESS)
+    g_sharp = g[g["is_in_focus"]] if "is_in_focus" in g.columns else g
+    counts_sh = g_sharp.groupby(["slide_name", "class_name"]).size().unstack(fill_value=0).reindex(counts_all.index, fill_value=0)
+    for c in ("viable", "non_viable", "intermediate"):
+        if c not in counts_sh.columns:
+            counts_sh[c] = 0
+
+    sharp_total = counts_sh["viable"] + counts_sh["non_viable"] + counts_sh["intermediate"]
+    denom_bin = counts_sh["viable"] + counts_sh["non_viable"]
 
     gen = g.groupby("slide_name").agg(
         conf_median=("conf", "median"),
@@ -112,7 +121,7 @@ def per_slide_metrics(g: pd.DataFrame) -> pd.DataFrame:
         edge_share=("is_outer_edge", "mean"),
     )
 
-    v_size = g[(g["class_name"] == "viable") & (g["valid_for_size"] == 1)].groupby("slide_name")["diameter_um"].agg(
+    v_size = g_sharp[(g_sharp["class_name"] == "viable") & (g_sharp["valid_for_size"] == 1)].groupby("slide_name")["diameter_um"].agg(
         viable_valid_size="size",
         viable_median_diam_um="median",
         viable_mean_diam_um="mean",
@@ -120,23 +129,25 @@ def per_slide_metrics(g: pd.DataFrame) -> pd.DataFrame:
         viable_q75_diam_um=lambda s: s.quantile(0.75),
     )
 
-    nv_size = g[(g["class_name"] == "non_viable") & (g["valid_for_size"] == 1)].groupby("slide_name")["diameter_um"].agg(
+    nv_size = g_sharp[(g_sharp["class_name"] == "non_viable") & (g_sharp["valid_for_size"] == 1)].groupby("slide_name")["diameter_um"].agg(
         non_viable_valid_size="size",
         non_viable_median_diam_um="median",
     )
 
     out = pd.DataFrame({
-        "total_grains": total,
-        "viable_count": counts["viable"],
-        "non_viable_count": counts["non_viable"],
-        "intermediate_count": counts["intermediate"],
-        "viability_pct": np.where(total > 0, 100.0 * counts["viable"] / total, np.nan).round(2),
-        "viab_ratio_binary": np.where(denom_bin > 0, 100.0 * counts["viable"] / denom_bin, np.nan).round(2),
-        "intermediate_share": np.where(total > 0, counts["intermediate"] / total, 0.0).round(4),
+        "total_grains": total_all,
+        "sharp_grains": sharp_total,
+        "viable_count": counts_sh["viable"],
+        "non_viable_count": counts_sh["non_viable"],
+        "intermediate_count": counts_sh["intermediate"],
+        "viability_pct": np.where(sharp_total > 0, 100.0 * counts_sh["viable"] / sharp_total, np.nan).round(2),
+        "viab_ratio_binary": np.where(denom_bin > 0, 100.0 * counts_sh["viable"] / denom_bin, np.nan).round(2),
+        "intermediate_share": np.where(sharp_total > 0, counts_sh["intermediate"] / sharp_total, 0.0).round(4),
     })
     out = out.join(gen, how="left").join(v_size, how="left").join(nv_size, how="left")
     out["viable_valid_size"] = out["viable_valid_size"].fillna(0).astype(int)
     out["non_viable_valid_size"] = out["non_viable_valid_size"].fillna(0).astype(int)
+    out["sharp_grains"] = out["sharp_grains"].fillna(0).astype(int)
     return out
 
 
@@ -314,7 +325,7 @@ def write_final_viability(out_df: pd.DataFrame, det_quality: pd.DataFrame, folde
     cols = [
         "slide_name", "plant_id", "cultivation_number", "population", "accession",
         "cytotype", "ploidy_str", "numeric_ploidy", "cultivation_run", "replicate",
-        "Detection_model", "Count_detected", "n_removed_small", "n_removed_conf",
+        "Detection_model", "Count_detected", "sharp_grains", "n_removed_small", "n_removed_conf", "n_defocused",
         "viable_count", "non_viable_count", "intermediate_count",
         "Det_precision", "Det_recall", "Det_class_accuracy", "Det_viability_bias_pp",
         "Detection_tier", "Viability_method", "Count_final",
@@ -344,6 +355,19 @@ def main():
     grains, min_diam_map, removed_small, conf_map, removed_conf = apply_class_filters(
         grains_raw, args.min_diam, args.conf_threshold
     )
+
+    focus_gz = os.path.join(args.out, "grain_focus_flags.csv.gz")
+    if os.path.exists(focus_gz):
+        gf = pd.read_csv(focus_gz, usecols=["slide_name", "grain_id", "norm_sharpness"])
+        grains = grains.merge(gf, on=["slide_name", "grain_id"], how="left")
+        grains["norm_sharpness"] = grains["norm_sharpness"].fillna(6.0)
+        grains["is_in_focus"] = grains["norm_sharpness"] >= MIN_NORM_SHARPNESS
+        n_defoc = int((~grains["is_in_focus"]).sum())
+        print(f"[focus sharpness filter] norm_sharpness >= {MIN_NORM_SHARPNESS}: {n_defoc:,} / {len(grains):,} defocused grains excluded from viability & size")
+    else:
+        grains["is_in_focus"] = True
+
+    defoc_by_slide = grains[~grains["is_in_focus"]].groupby("slide_name").size()
     slide_stats = per_slide_metrics(grains)
 
     meta_cols = [
@@ -353,11 +377,12 @@ def main():
     base = meta_df[[c for c in meta_cols if c in meta_df.columns]].drop_duplicates("slide_name").set_index("slide_name")
     s = base.join(slide_stats, how="left")
 
-    for col in ("total_grains", "viable_count", "non_viable_count", "intermediate_count", "viable_valid_size", "non_viable_valid_size"):
+    for col in ("total_grains", "sharp_grains", "viable_count", "non_viable_count", "intermediate_count", "viable_valid_size", "non_viable_valid_size"):
         s[col] = s[col].fillna(0).astype(int)
 
     s["n_removed_small"] = s.index.map(removed_small).fillna(0).astype(int)
     s["n_removed_conf"] = s.index.map(removed_conf).fillna(0).astype(int)
+    s["n_defocused"] = s.index.map(defoc_by_slide).fillna(0).astype(int)
     s["Detection_model"] = "model_20261122_r3"
 
     # Binomial standard error of viability % (in percentage points)
@@ -389,9 +414,9 @@ def main():
 
     flags["NO_METADATA"] = s["cytotype"].isna() | (s["cytotype"].astype(str) == "unknown")
     flags["NO_GRAINS"] = s["total_grains"] == 0
-    flags["BLURRED_IMAGE"] = s.index.isin(blurred_slides)
-    flags["VIAB_UNRELIABLE"] = (s["total_grains"] > 0) & (s["total_grains"] < MIN_GRAINS_RELIABLE)
-    flags["VIAB_LOW_PREC"] = (s["total_grains"] >= MIN_GRAINS_RELIABLE) & (s["total_grains"] < MIN_GRAINS_GOOD)
+    flags["BLURRED_IMAGE"] = s.index.isin(blurred_slides) | ((s["total_grains"] >= MIN_GRAINS_GOOD) & (s["sharp_grains"] < MIN_GRAINS_GOOD))
+    flags["VIAB_UNRELIABLE"] = (s["sharp_grains"] > 0) & (s["sharp_grains"] < MIN_GRAINS_RELIABLE)
+    flags["VIAB_LOW_PREC"] = (s["sharp_grains"] >= MIN_GRAINS_RELIABLE) & (s["sharp_grains"] < MIN_GRAINS_GOOD)
     flags["HIGH_INTERMEDIATE"] = (s["total_grains"] >= MIN_GRAINS_RELIABLE) & (s["intermediate_share"] > HIGH_INTERMEDIATE_SHARE)
     flags["SIZE_TOO_FEW"] = (s["total_grains"] > 0) & (s["viable_valid_size"] < MIN_SIZE_GRAINS)
 
